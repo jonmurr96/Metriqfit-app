@@ -19,6 +19,7 @@ import { createClient } from "https://esm.sh/@supabase/supabase-js@2.45.4";
 // Types
 interface RequestBody {
   user_id: string;
+  userId?: string;
   message: string;
   context?: Record<string, unknown>;
 }
@@ -53,6 +54,13 @@ interface GroundingData {
     unit_system: string;
   } | null;
   isElite: boolean;
+  prepCoach: {
+    enabled: boolean;
+    discipline: "bodybuilding" | "powerlifting" | null;
+    phase: "cut" | "bulk" | null;
+    lastStatus: string | null;
+    lastSummary: string | null;
+  };
 }
 
 const corsHeaders = {
@@ -115,6 +123,20 @@ Not yet calculated. User needs to complete onboarding.
       ? `${grounding.recentWeight} kg`
       : `${Math.round(grounding.recentWeight / 0.453592)} lbs`;
     dataSection += `- Recent weight: ${weightDisplay}\n`;
+  }
+
+  if (grounding.prepCoach.enabled) {
+    dataSection += `
+- Prep mode: enabled
+- Prep discipline: ${grounding.prepCoach.discipline || "unspecified"}
+- Prep phase: ${grounding.prepCoach.phase || "unspecified"}
+- Last prep status: ${grounding.prepCoach.lastStatus || "none"}
+- Last prep summary: ${grounding.prepCoach.lastSummary || "none"}
+`;
+  } else {
+    dataSection += `
+- Prep mode: disabled
+`;
   }
 
   return `You are the MetriqFit AI Coach - a friendly, knowledgeable fitness and nutrition assistant. Your name is "Coach".
@@ -180,6 +202,9 @@ async function fetchGroundingData(
     workoutResult,
     weightResult,
     subscriptionResult,
+    onboardingResult,
+    prepCycleResult,
+    prepEventResult,
   ] = await Promise.all([
     // User targets
     supabase
@@ -243,6 +268,32 @@ async function fetchGroundingData(
       .eq("user_id", userId)
       .eq("status", "active")
       .single(),
+
+    // Onboarding answers (goal + prep flags)
+    supabase
+      .from("onboarding_answers")
+      .select("answers")
+      .eq("user_id", userId)
+      .maybeSingle(),
+
+    // Active prep cycle
+    supabase
+      .from("prep_coach_cycles")
+      .select("discipline, phase, is_active")
+      .eq("user_id", userId)
+      .eq("is_active", true)
+      .order("updated_at", { ascending: false })
+      .limit(1)
+      .maybeSingle(),
+
+    // Latest prep adjustment event
+    supabase
+      .from("prep_coach_adjustment_events")
+      .select("status, coach_summary")
+      .eq("user_id", userId)
+      .order("created_at", { ascending: false })
+      .limit(1)
+      .maybeSingle(),
   ]);
 
   // Calculate today's nutrition totals
@@ -285,6 +336,19 @@ async function fetchGroundingData(
   const isElite = subscriptionResult.data?.entitlement === "elite" &&
                   subscriptionResult.data?.status === "active";
 
+  const onboardingAnswers = (onboardingResult.data?.answers || {}) as Record<string, unknown>;
+  const prepEnabled = Boolean(prepCycleResult.data?.is_active) || onboardingAnswers.prep_mode_enabled === true;
+  const prepDiscipline = (
+    prepCycleResult.data?.discipline ||
+    onboardingAnswers.prep_discipline ||
+    null
+  ) as "bodybuilding" | "powerlifting" | null;
+  const prepPhase = (
+    prepCycleResult.data?.phase ||
+    onboardingAnswers.prep_phase ||
+    null
+  ) as "cut" | "bulk" | null;
+
   return {
     targets: targetsResult.data || null,
     todayNutrition,
@@ -293,6 +357,13 @@ async function fetchGroundingData(
     recentWeight: weightResult.data?.[0]?.weight_kg || null,
     profile: profileResult.data || null,
     isElite,
+    prepCoach: {
+      enabled: prepEnabled,
+      discipline: prepDiscipline,
+      phase: prepPhase,
+      lastStatus: prepEventResult.data?.status || null,
+      lastSummary: prepEventResult.data?.coach_summary || null,
+    },
   };
 }
 
@@ -515,15 +586,16 @@ serve(async (req) => {
     return jsonResponse({ error: "Invalid JSON body" }, 400);
   }
 
-  const { user_id, message } = body;
+  const userId = body.user_id || body.userId;
+  const { message } = body;
 
   // Validate input
-  if (!user_id || !message) {
+  if (!userId || !message) {
     return jsonResponse({ error: "user_id and message are required" }, 400);
   }
 
   // Verify user_id matches authenticated user
-  if (user_id !== authData.user.id) {
+  if (userId !== authData.user.id) {
     return jsonResponse({ error: "user_id mismatch" }, 403);
   }
 
@@ -534,10 +606,10 @@ serve(async (req) => {
 
   try {
     // Fetch grounding data
-    const grounding = await fetchGroundingData(supabase, user_id);
+    const grounding = await fetchGroundingData(supabase, userId);
 
     // Check rate limits
-    const rateLimit = await checkAndUpdateRateLimit(supabase, user_id, grounding.isElite);
+    const rateLimit = await checkAndUpdateRateLimit(supabase, userId, grounding.isElite);
     if (!rateLimit.allowed) {
       return jsonResponse({
         error: "Rate limit exceeded",
@@ -551,7 +623,7 @@ serve(async (req) => {
 
     // Build messages for OpenAI
     const systemPrompt = buildSystemPrompt(grounding);
-    const recentMessages = await getRecentMessages(supabase, user_id);
+    const recentMessages = await getRecentMessages(supabase, userId);
 
     const messages: ChatMessage[] = [
       { role: "system", content: systemPrompt },
@@ -568,7 +640,7 @@ serve(async (req) => {
     // Store messages
     const { assistantMsgId } = await storeMessages(
       supabase,
-      user_id,
+      userId,
       message,
       aiResponse.content,
       aiResponse.tokens,
@@ -578,7 +650,7 @@ serve(async (req) => {
     // Return response
     return jsonResponse({
       id: assistantMsgId,
-      user_id,
+      user_id: userId,
       role: "assistant",
       content: cleanedContent,
       attachments: buttons.length > 0 ? buttons : undefined,

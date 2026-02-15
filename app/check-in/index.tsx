@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { StyleSheet, View, Text, Pressable, ScrollView, TextInput, Image } from 'react-native';
+import { StyleSheet, View, Text, Pressable, ScrollView, TextInput, Alert } from 'react-native';
 import { useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { LinearGradient } from 'expo-linear-gradient';
@@ -7,9 +7,14 @@ import { MotiView, AnimatePresence } from 'moti';
 
 import { useTokens } from '../../lib/theme';
 import { TabBarIcon } from '../../components/navigation/TabBarIcon';
-import { PremiumBackground } from '../../components/premium/PremiumBackground';
 import { GlassCard } from '../../components/premium/GlassCard';
-import { RingIconButton } from '../../components/common/RingIconButton';
+import { useAuth } from '../../lib/auth';
+import { useProfile } from '../../hooks/useUser';
+import { useApplyCheckInUpdates, usePreviewCheckIn } from '../../hooks/useCheckIn';
+import { usePrepCoachState, useRunPrepCheckInAdjustment } from '../../hooks/usePrepCoach';
+import { useEntitlementStatus } from '../../hooks/useSubscription';
+import type { CheckInPreviewResult } from '../../services/checkInService';
+import type { PrepCoachAdjustmentResult } from '../../services/prepCoachService';
 
 type Step = 'metrics' | 'wellness' | 'photos' | 'analysis';
 
@@ -17,16 +22,45 @@ export default function CheckInScreen() {
     const { c, s, ty, r, shadow } = useTokens();
     const router = useRouter();
     const insets = useSafeAreaInsets();
+    const { user } = useAuth();
+    const { data: profile } = useProfile();
+    const { data: prepState } = usePrepCoachState();
+    const { data: entitlement } = useEntitlementStatus();
+    const previewCheckInMutation = usePreviewCheckIn();
+    const applyUpdatesMutation = useApplyCheckInUpdates();
+    const runPrepAdjustmentMutation = useRunPrepCheckInAdjustment();
 
     const [currentStep, setCurrentStep] = useState<Step>('metrics');
     const [progress, setProgress] = useState(0.25);
 
-    // Form Data
-    const [weight, setWeight] = useState('188.4');
+    // Determine user's unit system
+    const isImperial = profile?.unit_system === 'imperial';
+    const weightUnit = isImperial ? 'lbs' : 'kg';
+
+    // Form Data — initialize weight from real profile
+    const [weight, setWeight] = useState('');
     const [sleep, setSleep] = useState(7);
     const [stress, setStress] = useState(4);
     const [energy, setEnergy] = useState(8);
     const [isAnalyzing, setIsAnalyzing] = useState(false);
+    const [analysisResult, setAnalysisResult] = useState<CheckInPreviewResult | null>(null);
+    const [prepPreviewResult, setPrepPreviewResult] = useState<PrepCoachAdjustmentResult | null>(null);
+    const [prepAppliedResult, setPrepAppliedResult] = useState<PrepCoachAdjustmentResult | null>(null);
+    const [updatesApplied, setUpdatesApplied] = useState(false);
+
+    const prepModeEnabled = prepState?.enabled === true;
+    const isElite = entitlement?.isElite === true;
+    const isApplyingAnyUpdate = applyUpdatesMutation.isPending || runPrepAdjustmentMutation.isPending;
+
+    // Populate weight from profile when it loads
+    useEffect(() => {
+        if (profile?.current_weight_kg && !weight) {
+            const displayWeight = isImperial
+                ? (profile.current_weight_kg * 2.20462).toFixed(1)
+                : profile.current_weight_kg.toFixed(1);
+            setWeight(displayWeight);
+        }
+    }, [profile, isImperial, weight]);
 
     useEffect(() => {
         switch (currentStep) {
@@ -42,17 +76,107 @@ export default function CheckInScreen() {
         else if (currentStep === 'wellness') setCurrentStep('photos');
         else if (currentStep === 'photos') {
             setCurrentStep('analysis');
-            startAnalysis();
+            startAnalysis().catch(() => undefined);
         } else {
-            router.back();
+            if (!analysisResult) {
+                Alert.alert('No analysis yet', 'Run analysis before applying updates.');
+                return;
+            }
+            if (updatesApplied) {
+                router.back();
+                return;
+            }
+            handleApplyUpdates().catch(() => undefined);
         }
     };
 
-    const startAnalysis = () => {
+    const startAnalysis = async () => {
+        const parsedWeight = parseFloat(weight);
+        if (!user?.id) {
+            Alert.alert('Session required', 'Please sign in again before submitting a check-in.');
+            return;
+        }
+        if (!Number.isFinite(parsedWeight) || parsedWeight <= 0) {
+            Alert.alert('Invalid weight', 'Enter a valid weight before running analysis.');
+            setCurrentStep('metrics');
+            return;
+        }
+
         setIsAnalyzing(true);
-        setTimeout(() => {
+        setPrepPreviewResult(null);
+        try {
+            // Keep a short branded analyzing animation while we persist + compute.
+            await new Promise((resolve) => setTimeout(resolve, 1200));
+            const preview = await previewCheckInMutation.mutateAsync({
+                weightValue: parsedWeight,
+                unitSystem: isImperial ? 'imperial' : 'metric',
+                sleep,
+                stress,
+                energy,
+            });
+            setAnalysisResult(preview);
+            setUpdatesApplied(false);
+            setPrepAppliedResult(null);
+
+            if (prepModeEnabled) {
+                try {
+                    const prepPreview = await runPrepAdjustmentMutation.mutateAsync({
+                        measurementId: preview.measurementId,
+                        dryRun: true,
+                    });
+                    setPrepPreviewResult(prepPreview);
+                } catch (prepError: any) {
+                    setPrepPreviewResult(null);
+                    Alert.alert('Prep preview unavailable', prepError?.message || 'Could not generate prep preview. Standard check-in updates are still available.');
+                }
+            } else {
+                setPrepPreviewResult(null);
+            }
+        } catch (error: any) {
+            Alert.alert('Check-in failed', error?.message || 'Could not save check-in right now.');
+            setCurrentStep('photos');
+        } finally {
             setIsAnalyzing(false);
-        }, 3000);
+        }
+    };
+
+    const handleApplyUpdates = async () => {
+        if (!analysisResult) return;
+        try {
+            let prepApplyResult: PrepCoachAdjustmentResult | null = null;
+            if (prepModeEnabled) {
+                prepApplyResult = await runPrepAdjustmentMutation.mutateAsync({
+                    measurementId: analysisResult.measurementId,
+                    dryRun: false,
+                });
+                setPrepAppliedResult(prepApplyResult);
+            } else {
+                await applyUpdatesMutation.mutateAsync(analysisResult);
+                setPrepAppliedResult(null);
+            }
+
+            setUpdatesApplied(true);
+
+            if (prepModeEnabled) {
+                if (isElite && prepAppliedResult?.applied) {
+                    Alert.alert('Prep adjustments applied', 'Targets, nutrition plan, and workout adaptations have been updated for this prep cycle.', [
+                        { text: 'Done', onPress: () => router.back() },
+                    ]);
+                } else {
+                    Alert.alert(
+                        'Prep recommendations ready',
+                        'Auto-apply is available for Elite users with Prep Mode enabled. Your recommendations are saved in Prep Coach.',
+                        [{ text: 'Done', onPress: () => router.back() }],
+                    );
+                }
+            } else {
+                Alert.alert('Targets updated', 'Your weekly check-in updates are now active.', [
+                    { text: 'Done', onPress: () => router.back() },
+                ]);
+            }
+        } catch (error: any) {
+            Alert.alert('Update failed', error?.message || 'Could not apply new targets. Your check-in was still saved.');
+        }
     };
 
     // --- Components ---
@@ -97,11 +221,16 @@ export default function CheckInScreen() {
     );
 
     const PhotoSlot = ({ label }: { label: string }) => (
-        <Pressable style={{ flex: 1, aspectRatio: 0.75, borderWidth: 1, borderColor: c.border, borderRadius: r.md, borderStyle: 'dashed', alignItems: 'center', justifyContent: 'center', backgroundColor: 'rgba(255,255,255,0.02)' }}>
+        <Pressable
+            onPress={() => Alert.alert('Progress Photos', 'Camera integration coming soon! You\'ll be able to take front, side, and back photos to track your physique over time.')}
+            style={{ flex: 1, aspectRatio: 0.75, borderWidth: 1, borderColor: c.border, borderRadius: r.md, borderStyle: 'dashed', alignItems: 'center', justifyContent: 'center', backgroundColor: 'rgba(255,255,255,0.02)' }}
+        >
             <TabBarIcon name="camera" color={c.textMuted} size={24} />
             <Text style={{ color: c.textMuted, fontSize: 12, marginTop: 8, fontFamily: ty.body.family }}>{label}</Text>
         </Pressable>
     );
+
+    const formatDelta = (value: number, suffix = '') => `${value >= 0 ? '+' : ''}${value}${suffix}`;
 
     return (
         <View style={[styles.container, { backgroundColor: c.bg }]}>
@@ -163,11 +292,17 @@ export default function CheckInScreen() {
                                             paddingBottom: 8
                                         }}
                                     />
-                                    <Text style={{ color: c.textMuted, fontSize: 24, marginBottom: 18, marginLeft: 8, fontFamily: ty.body.family }}>lbs</Text>
+                                    <Text style={{ color: c.textMuted, fontSize: 24, marginBottom: 18, marginLeft: 8, fontFamily: ty.body.family }}>{weightUnit}</Text>
                                 </View>
-                                <Text style={{ color: c.success, marginTop: 16, fontFamily: ty.body.familyMedium }}>
-                                    📉 1.2 lbs down from last week
-                                </Text>
+                                {analysisResult && analysisResult.weightChangeKg !== null ? (
+                                    <Text style={{ color: c.success, marginTop: 16, fontFamily: ty.body.familyMedium }}>
+                                        {analysisResult.weightChangeKg <= 0 ? '📉' : '📈'} {Math.abs(analysisResult.weightChangeKg).toFixed(1)} kg change since last check-in
+                                    </Text>
+                                ) : (
+                                    <Text style={{ color: c.textMuted, marginTop: 16, fontFamily: ty.body.familyMedium }}>
+                                        First tracked check-in. Keep going.
+                                    </Text>
+                                )}
                             </View>
                         </MotiView>
                     )}
@@ -248,32 +383,122 @@ export default function CheckInScreen() {
                                             <TabBarIcon name="checkmark" color={c.success} size={32} />
                                         </View>
                                         <Text style={{ color: c.text, fontFamily: ty.heading.familySemibold, fontSize: 24, textAlign: 'center' }}>
-                                            Program Updated
+                                            Check-In Saved
                                         </Text>
                                         <Text style={{ color: c.textMuted, textAlign: 'center', marginTop: 8, maxWidth: 300 }}>
-                                            Based on your 1.2lb weight loss and high energy levels, we're making a few tweaks.
+                                            Your weekly data is logged. Review suggested target updates below.
                                         </Text>
                                     </View>
 
-                                    <GlassCard intensity="strong" style={{ padding: 0, overflow: 'hidden' }}>
-                                        <View style={{ padding: 16, backgroundColor: 'rgba(34, 211, 238, 0.1)', borderBottomWidth: 1, borderBottomColor: c.border }}>
-                                            <Text style={{ color: c.primary, fontFamily: ty.body.familySemibold }}>ADJUSTMENTS</Text>
-                                        </View>
-                                        <View style={{ padding: 16, gap: 16 }}>
-                                            <View style={{ flexDirection: 'row', justifyContent: 'space-between' }}>
-                                                <Text style={{ color: c.textMuted }}>Daily Calories</Text>
-                                                <Text style={{ color: c.success, fontFamily: ty.mono.family }}>+50 kcal ↗</Text>
+                                    {prepModeEnabled && (
+                                        <GlassCard intensity="strong" style={{ padding: 16, marginBottom: s.lg }}>
+                                            <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
+                                                <Text style={{ color: c.primary, fontFamily: ty.body.familySemibold }}>
+                                                    Prep Adjustment Preview
+                                                </Text>
+                                                <Text style={{ color: c.textMuted, fontFamily: ty.body.family, fontSize: 12 }}>
+                                                    {isElite ? 'Elite' : 'Free'}
+                                                </Text>
                                             </View>
-                                            <View style={{ flexDirection: 'row', justifyContent: 'space-between' }}>
-                                                <Text style={{ color: c.textMuted }}>Protein Target</Text>
-                                                <Text style={{ color: c.text, fontFamily: ty.mono.family }}>180g (No Change)</Text>
+                                            {prepPreviewResult ? (
+                                                <View style={{ marginTop: 10, gap: 6 }}>
+                                                    <Text style={{ color: c.text, fontFamily: ty.body.familyMedium }}>
+                                                        {prepPreviewResult.discipline} • {prepPreviewResult.phase}
+                                                    </Text>
+                                                    <Text style={{ color: c.textMuted, fontFamily: ty.body.family, fontSize: 13 }}>
+                                                        {prepPreviewResult.coachSummary}
+                                                    </Text>
+                                                    <Text style={{ color: c.text, fontFamily: ty.mono.family, fontSize: 12 }}>
+                                                        Calories {formatDelta(prepPreviewResult.targetDelta.calories)} | Protein {formatDelta(prepPreviewResult.targetDelta.protein_g, 'g')} | Carbs {formatDelta(prepPreviewResult.targetDelta.carbs_g, 'g')}
+                                                    </Text>
+                                                    {!isElite && (
+                                                        <Text style={{ color: c.warning, fontFamily: ty.body.familyMedium, fontSize: 12 }}>
+                                                            Recommendation-only on Free. Upgrade to Elite for auto-apply.
+                                                        </Text>
+                                                    )}
+                                                </View>
+                                            ) : (
+                                                <Text style={{ color: c.textMuted, marginTop: 10, fontFamily: ty.body.family }}>
+                                                    Preparing prep adjustment preview...
+                                                </Text>
+                                            )}
+                                        </GlassCard>
+                                    )}
+
+                                    {analysisResult ? (
+                                        <GlassCard intensity="strong" style={{ padding: 0, overflow: 'hidden' }}>
+                                            <View style={{ padding: 16, backgroundColor: `${c.primary}15`, borderBottomWidth: 1, borderBottomColor: c.border }}>
+                                                <Text style={{ color: c.primary, fontFamily: ty.body.familySemibold }}>
+                                                    {analysisResult.recommendation.title}
+                                                </Text>
+                                                <Text style={{ color: c.textMuted, marginTop: 4, fontFamily: ty.body.family }}>
+                                                    {analysisResult.recommendation.message}
+                                                </Text>
                                             </View>
-                                            <View style={{ flexDirection: 'row', justifyContent: 'space-between' }}>
-                                                <Text style={{ color: c.textMuted }}>Next Week Focus</Text>
-                                                <Text style={{ color: c.text, fontFamily: ty.mono.family }}>Hypertrophy</Text>
+                                            <View style={{ padding: 16, gap: 12 }}>
+                                                <View style={{ flexDirection: 'row', justifyContent: 'space-between' }}>
+                                                    <Text style={{ color: c.textMuted, fontFamily: ty.body.family }}>Recovery score</Text>
+                                                    <Text style={{ color: c.primary, fontFamily: ty.body.familySemibold }}>{analysisResult.recoveryScore}/100</Text>
+                                                </View>
+                                                <View style={{ flexDirection: 'row', justifyContent: 'space-between' }}>
+                                                    <Text style={{ color: c.textMuted, fontFamily: ty.body.family }}>Calories</Text>
+                                                    <Text style={{ color: c.text, fontFamily: ty.body.familySemibold }}>
+                                                        {analysisResult.baselineTargets.calories} → {analysisResult.proposedTargets.calories}
+                                                    </Text>
+                                                </View>
+                                                <View style={{ flexDirection: 'row', justifyContent: 'space-between' }}>
+                                                    <Text style={{ color: c.textMuted, fontFamily: ty.body.family }}>Protein</Text>
+                                                    <Text style={{ color: c.text, fontFamily: ty.body.familySemibold }}>
+                                                        {analysisResult.baselineTargets.protein_g}g → {analysisResult.proposedTargets.protein_g}g
+                                                    </Text>
+                                                </View>
+                                                <View style={{ flexDirection: 'row', justifyContent: 'space-between' }}>
+                                                    <Text style={{ color: c.textMuted, fontFamily: ty.body.family }}>Carbs</Text>
+                                                    <Text style={{ color: c.text, fontFamily: ty.body.familySemibold }}>
+                                                        {analysisResult.baselineTargets.carbs_g}g → {analysisResult.proposedTargets.carbs_g}g
+                                                    </Text>
+                                                </View>
+                                                <View style={{ flexDirection: 'row', justifyContent: 'space-between' }}>
+                                                    <Text style={{ color: c.textMuted, fontFamily: ty.body.family }}>Fat</Text>
+                                                    <Text style={{ color: c.text, fontFamily: ty.body.familySemibold }}>
+                                                        {analysisResult.baselineTargets.fat_g}g → {analysisResult.proposedTargets.fat_g}g
+                                                    </Text>
+                                                </View>
+                                                <View style={{ flexDirection: 'row', justifyContent: 'space-between' }}>
+                                                    <Text style={{ color: c.textMuted, fontFamily: ty.body.family }}>Water</Text>
+                                                    <Text style={{ color: c.text, fontFamily: ty.body.familySemibold }}>
+                                                        {analysisResult.baselineTargets.water_ml}ml → {analysisResult.proposedTargets.water_ml}ml
+                                                    </Text>
+                                                </View>
                                             </View>
-                                        </View>
-                                    </GlassCard>
+                                        </GlassCard>
+                                    ) : (
+                                        <GlassCard intensity="strong" style={{ padding: 16 }}>
+                                            <Text style={{ color: c.textMuted, fontFamily: ty.body.family }}>
+                                                Analysis data unavailable. Try running the check-in again.
+                                            </Text>
+                                        </GlassCard>
+                                    )}
+
+                                    {updatesApplied && prepAppliedResult && (
+                                        <GlassCard intensity="strong" style={{ padding: 16, marginTop: s.lg }}>
+                                            <Text style={{ color: c.primary, fontFamily: ty.body.familySemibold }}>
+                                                Prep Coach Update Summary
+                                            </Text>
+                                            <Text style={{ color: c.textMuted, fontFamily: ty.body.family, marginTop: 6 }}>
+                                                {prepAppliedResult.coachSummary}
+                                            </Text>
+                                            <Text style={{ color: c.text, fontFamily: ty.mono.family, marginTop: 8, fontSize: 12 }}>
+                                                Targets: {formatDelta(prepAppliedResult.targetDelta.calories)} kcal, {formatDelta(prepAppliedResult.targetDelta.protein_g, 'g')} protein, {formatDelta(prepAppliedResult.targetDelta.carbs_g, 'g')} carbs, {formatDelta(prepAppliedResult.targetDelta.fat_g, 'g')} fat
+                                            </Text>
+                                            <Text style={{ color: c.textMuted, fontFamily: ty.body.family, marginTop: 8, fontSize: 12 }}>
+                                                Nutrition plan version: {prepAppliedResult.nutritionPlanVersionFrom ?? '-'} → {prepAppliedResult.nutritionPlanVersionTo ?? '-'}
+                                            </Text>
+                                            <Text style={{ color: c.textMuted, fontFamily: ty.body.family, marginTop: 4, fontSize: 12 }}>
+                                                Workout adjustments: {prepAppliedResult.workoutAdjustmentsApplied.length}
+                                            </Text>
+                                        </GlassCard>
+                                    )}
                                 </View>
                             )}
                         </MotiView>
@@ -289,6 +514,7 @@ export default function CheckInScreen() {
                         <Pressable
                             style={{ alignItems: 'center', padding: 12, marginBottom: 8 }}
                             onPress={() => router.back()}
+                            disabled={isApplyingAnyUpdate}
                         >
                             <Text style={{ color: c.textMuted, fontFamily: ty.body.familyMedium }}>
                                 No Thanks, Keep Current Targets
@@ -307,9 +533,20 @@ export default function CheckInScreen() {
                             }
                         ]}
                         onPress={handleNext}
+                        disabled={isApplyingAnyUpdate}
                     >
                         <Text style={{ color: c.bg, fontFamily: ty.heading.familySemibold, fontSize: 16 }}>
-                            {currentStep === 'analysis' ? 'Accept Updates' : currentStep === 'photos' ? 'Analyze Progress' : 'Continue'}
+                            {currentStep === 'analysis'
+                                ? (
+                                    isApplyingAnyUpdate
+                                        ? 'Applying Updates...'
+                                        : (prepModeEnabled
+                                            ? (isElite ? 'Apply Prep Adjustments' : 'Save Prep Recommendation')
+                                            : 'Accept Updates')
+                                )
+                                : currentStep === 'photos'
+                                    ? (previewCheckInMutation.isPending ? 'Analyzing...' : 'Analyze Progress')
+                                    : 'Continue'}
                         </Text>
                         {currentStep !== 'analysis' && <TabBarIcon name="arrow-forward" color={c.bg} size={18} />}
                     </Pressable>

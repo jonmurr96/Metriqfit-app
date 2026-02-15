@@ -12,9 +12,12 @@ import {
   getDailyUsage,
   clearConversationHistory,
   getSuggestedPrompts,
+  getLatestConsistencyRecommendation,
   type ChatMessage,
   type RateLimitStatus,
   type AIUsageDaily,
+  type ConsistencyRecommendation,
+  type PrepPromptContext,
 } from '../services/aiCoachService';
 
 // Query Keys
@@ -24,6 +27,7 @@ export const aiCoachKeys = {
   rateLimit: (userId: string) => [...aiCoachKeys.all, 'rate-limit', userId] as const,
   usage: (userId: string, date: string) => [...aiCoachKeys.all, 'usage', userId, date] as const,
   prompts: () => [...aiCoachKeys.all, 'prompts'] as const,
+  recommendation: (userId: string) => [...aiCoachKeys.all, 'recommendation', userId] as const,
 };
 
 /**
@@ -68,11 +72,34 @@ export function useDailyAIUsage(userId?: string, date?: string) {
 /**
  * Get suggested prompts
  */
-export function useSuggestedPrompts(hasLoggedToday = false, hasActiveWorkout = false) {
+export function useSuggestedPrompts(
+  hasLoggedToday = false,
+  hasActiveWorkout = false,
+  consistencyRecommendation?: ConsistencyRecommendation | null,
+  prepContext?: PrepPromptContext | null,
+) {
   return useQuery({
-    queryKey: aiCoachKeys.prompts(),
-    queryFn: () => getSuggestedPrompts(hasLoggedToday, hasActiveWorkout),
+    queryKey: [
+      ...aiCoachKeys.prompts(),
+      hasLoggedToday,
+      hasActiveWorkout,
+      consistencyRecommendation?.type || 'none',
+      prepContext?.prepModeEnabled ? `prep:${prepContext.prepDiscipline || 'unknown'}:${prepContext.prepPhase || 'unknown'}` : 'prep:none',
+    ],
+    queryFn: () => getSuggestedPrompts(hasLoggedToday, hasActiveWorkout, consistencyRecommendation, prepContext),
     staleTime: Infinity, // Static data
+  });
+}
+
+/**
+ * Get latest consistency recommendation.
+ */
+export function useConsistencyRecommendation(userId?: string) {
+  return useQuery({
+    queryKey: aiCoachKeys.recommendation(userId || ''),
+    queryFn: () => userId ? getLatestConsistencyRecommendation(userId) : Promise.resolve(null),
+    enabled: !!userId,
+    staleTime: 60 * 1000,
   });
 }
 

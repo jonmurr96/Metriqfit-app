@@ -14,9 +14,10 @@ import {
   PlanUpdateCard,
 } from '../../../components/ai-coach';
 import { useAuth } from '../../../lib/auth/AuthProvider';
-import { useAIChat, useRateLimitStatus, useSuggestedPrompts } from '../../../hooks/useAICoach';
-import { useUserDashboard } from '../../../hooks/useUser';
+import { useAIChat, useSuggestedPrompts, useConsistencyRecommendation } from '../../../hooks/useAICoach';
+import { useUserDashboard, useWorkoutsThisWeek } from '../../../hooks/useUser';
 import { useDailyTotals } from '../../../hooks/useNutrition';
+import { usePrepCoachState } from '../../../hooks/usePrepCoach';
 
 export default function AICoachScreen() {
   const { user } = useAuth();
@@ -31,6 +32,8 @@ export default function AICoachScreen() {
     proteinTarget,
     isLoading: targetsLoading
   } = useUserDashboard();
+  const { data: workoutsThisWeekData } = useWorkoutsThisWeek();
+  const { data: prepState } = usePrepCoachState();
   const today = new Date().toISOString().split('T')[0];
   const { data: nutritionSummary } = useDailyTotals(today);
 
@@ -38,7 +41,6 @@ export default function AICoachScreen() {
   const {
     messages,
     rateLimit,
-    isLoadingHistory,
     isSending,
     sendMessage,
     canSendMessage,
@@ -46,10 +48,20 @@ export default function AICoachScreen() {
     sendError,
   } = useAIChat(user?.id);
 
+  const { data: consistencyRecommendation } = useConsistencyRecommendation(user?.id);
+
   // Suggested prompts
   const { data: suggestedPrompts } = useSuggestedPrompts(
     !!nutritionSummary && (nutritionSummary?.calories || 0) > 0,
-    false
+    false,
+    consistencyRecommendation,
+    prepState
+      ? {
+          prepModeEnabled: prepState.enabled,
+          prepPhase: prepState.phase,
+          prepDiscipline: prepState.discipline,
+        }
+      : null,
   );
 
   // Auto-scroll to bottom when new messages arrive
@@ -156,15 +168,86 @@ export default function AICoachScreen() {
             <CoachContextCard
               caloriesRemaining={Math.max(0, caloriesRemaining)}
               proteinRemaining={Math.max(0, proteinRemaining)}
-              workoutsThisWeek={0}
+              workoutsThisWeek={workoutsThisWeekData ?? 0}
               isOnboarded={!targetsLoading && !!targets}
             />
           </View>
 
+          {prepState?.enabled && (
+            <View
+              style={{
+                marginTop: s.md,
+                marginHorizontal: s.lg,
+                padding: s.md,
+                borderRadius: r.md,
+                backgroundColor: c.surface,
+                borderWidth: 1,
+                borderColor: c.border,
+              }}
+            >
+              <Text
+                style={{
+                  color: c.primary,
+                  fontFamily: ty.body.familySemibold,
+                  fontSize: ty.sizes.sm,
+                }}
+              >
+                Prep Context
+              </Text>
+              <Text
+                style={{
+                  color: c.textMuted,
+                  marginTop: s.xs,
+                  fontFamily: ty.body.family,
+                  fontSize: ty.sizes.sm,
+                }}
+              >
+                {prepState.discipline || 'prep'} • {prepState.phase || 'phase'}
+                {prepState.lastAdjustment?.coach_summary ? ` | ${prepState.lastAdjustment.coach_summary}` : ''}
+              </Text>
+            </View>
+          )}
+
+          {consistencyRecommendation?.title && (
+            <View
+              style={{
+                marginTop: s.lg,
+                marginHorizontal: s.lg,
+                padding: s.md,
+                borderRadius: r.md,
+                backgroundColor: c.surface,
+                borderWidth: 1,
+                borderColor: c.border,
+              }}
+            >
+              <Text
+                style={{
+                  color: c.primary,
+                  fontFamily: ty.body.familySemibold,
+                  fontSize: ty.sizes.sm,
+                }}
+              >
+                {consistencyRecommendation.title}
+              </Text>
+              {consistencyRecommendation.message && (
+                <Text
+                  style={{
+                    color: c.textMuted,
+                    marginTop: s.xs,
+                    fontFamily: ty.body.family,
+                    fontSize: ty.sizes.sm,
+                  }}
+                >
+                  {consistencyRecommendation.message}
+                </Text>
+              )}
+            </View>
+          )}
+
           {/* Suggestion Chips */}
           {suggestedPrompts && suggestedPrompts.length > 0 && (
             <View style={{ marginTop: s.xl }}>
-              <SuggestionChips onSelect={handleSuggestionSelect} />
+              <SuggestionChips suggestions={suggestedPrompts} onSelect={handleSuggestionSelect} />
             </View>
           )}
 
@@ -253,7 +336,7 @@ export default function AICoachScreen() {
                           onReject={() => Alert.alert('Rejected', 'Changes discarded.')}
                         />
                       );
-                    } catch (e) {
+                    } catch {
                       return <MessageBubble key={msg.id} message="Error parsing plan update" sender="coach" />;
                     }
                   }
