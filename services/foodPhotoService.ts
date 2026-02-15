@@ -41,12 +41,13 @@ export async function getPhotoScanUsage(userId: string): Promise<PhotoScanUsage>
   // Check user subscription status
   const { data: subscription } = await supabase
     .from('subscriptions')
-    .select('entitlement_tier')
+    .select('plan_type, status, updated_at')
     .eq('user_id', userId)
-    .eq('is_active', true)
-    .single();
+    .in('status', ['active', 'trial', 'grace_period'])
+    .order('updated_at', { ascending: false })
+    .maybeSingle();
 
-  const isElite = subscription?.entitlement_tier === 'elite';
+  const isElite = !!subscription && subscription.plan_type !== 'free';
 
   // Elite users have unlimited scans
   if (isElite) {
@@ -61,12 +62,16 @@ export async function getPhotoScanUsage(userId: string): Promise<PhotoScanUsage>
   // Free users: 3 scans per day
   const today = new Date().toISOString().split('T')[0];
 
-  const { data: usage } = await supabase
+  const { data: usage, error: usageError } = await supabase
     .from('ai_usage_daily')
     .select('food_photo_scans')
     .eq('user_id', userId)
     .eq('usage_date', today)
-    .single();
+    .maybeSingle();
+
+  if (usageError && usageError.code !== 'PGRST116') {
+    throw usageError;
+  }
 
   const scansToday = usage?.food_photo_scans || 0;
   const scansLimit = 3;
@@ -114,7 +119,7 @@ async function incrementPhotoScanUsage(userId: string): Promise<void> {
 async function imageUriToBase64(uri: string): Promise<string> {
   try {
     const base64 = await FileSystem.readAsStringAsync(uri, {
-      encoding: FileSystem.EncodingType.Base64,
+      encoding: 'base64',
     });
     return base64;
   } catch (error) {

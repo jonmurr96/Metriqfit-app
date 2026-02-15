@@ -106,6 +106,9 @@ export interface Database {
           coach_messages: number
           plan_regenerations: number
           food_photo_scans: number
+          recipe_url_imports: number
+          menu_scans: number
+          meal_builder_runs: number
           created_at: string
           updated_at: string
         }
@@ -116,6 +119,9 @@ export interface Database {
           coach_messages?: number
           plan_regenerations?: number
           food_photo_scans?: number
+          recipe_url_imports?: number
+          menu_scans?: number
+          meal_builder_runs?: number
           created_at?: string
           updated_at?: string
         }
@@ -126,6 +132,9 @@ export interface Database {
           coach_messages?: number
           plan_regenerations?: number
           food_photo_scans?: number
+          recipe_url_imports?: number
+          menu_scans?: number
+          meal_builder_runs?: number
           created_at?: string
           updated_at?: string
         }
@@ -417,6 +426,9 @@ export interface Database {
           validation_errors: Json | null
           tokens_used: number | null
           duration_ms: number | null
+          generation_version: number
+          planner_mode: 'deterministic' | 'ai' | 'hybrid'
+          warnings_json: Json | null
           created_at: string
           completed_at: string | null
         }
@@ -430,6 +442,9 @@ export interface Database {
           validation_errors?: Json | null
           tokens_used?: number | null
           duration_ms?: number | null
+          generation_version?: number
+          planner_mode?: 'deterministic' | 'ai' | 'hybrid'
+          warnings_json?: Json | null
           created_at?: string
           completed_at?: string | null
         }
@@ -443,6 +458,9 @@ export interface Database {
           validation_errors?: Json | null
           tokens_used?: number | null
           duration_ms?: number | null
+          generation_version?: number
+          planner_mode?: 'deterministic' | 'ai' | 'hybrid'
+          warnings_json?: Json | null
           created_at?: string
           completed_at?: string | null
         }
@@ -467,6 +485,7 @@ export interface Database {
           current_weight_kg: number | null
           unit_system: 'imperial' | 'metric'
           avatar_url: string | null
+          meal_times: Json | null
           created_at: string
           updated_at: string
         }
@@ -481,6 +500,7 @@ export interface Database {
           current_weight_kg?: number | null
           unit_system?: 'imperial' | 'metric'
           avatar_url?: string | null
+          meal_times?: Json | null
           created_at?: string
           updated_at?: string
         }
@@ -495,6 +515,7 @@ export interface Database {
           current_weight_kg?: number | null
           unit_system?: 'imperial' | 'metric'
           avatar_url?: string | null
+          meal_times?: Json | null
           created_at?: string
           updated_at?: string
         }
@@ -729,6 +750,11 @@ export interface Database {
           prep_time_minutes: number | null
           cook_time_minutes: number | null
           is_public: boolean
+          source_type: 'manual' | 'url_import' | 'menu_import' | 'ai_generated'
+          source_url: string | null
+          source_domain: string | null
+          import_status: 'parsed' | 'needs_review' | 'failed'
+          import_confidence: number | null
           created_at: string
           updated_at: string
         }
@@ -742,6 +768,11 @@ export interface Database {
           prep_time_minutes?: number | null
           cook_time_minutes?: number | null
           is_public?: boolean
+          source_type?: 'manual' | 'url_import' | 'menu_import' | 'ai_generated'
+          source_url?: string | null
+          source_domain?: string | null
+          import_status?: 'parsed' | 'needs_review' | 'failed'
+          import_confidence?: number | null
           created_at?: string
           updated_at?: string
         }
@@ -755,6 +786,11 @@ export interface Database {
           prep_time_minutes?: number | null
           cook_time_minutes?: number | null
           is_public?: boolean
+          source_type?: 'manual' | 'url_import' | 'menu_import' | 'ai_generated'
+          source_url?: string | null
+          source_domain?: string | null
+          import_status?: 'parsed' | 'needs_review' | 'failed'
+          import_confidence?: number | null
           created_at?: string
           updated_at?: string
         }
@@ -798,6 +834,345 @@ export interface Database {
           },
           {
             foreignKeyName: "recipe_ingredients_food_item_id_fkey"
+            columns: ["food_item_id"]
+            referencedRelation: "food_items"
+            referencedColumns: ["id"]
+          }
+        ]
+      }
+      recipe_import_events: {
+        Row: {
+          id: string
+          user_id: string
+          normalized_url_hash: string
+          source_url: string
+          source_domain: string | null
+          parser_path: 'jsonld' | 'html_heuristic' | 'ai_fallback'
+          parse_warnings_json: Json
+          parse_result_json: Json | null
+          error_message: string | null
+          elapsed_ms: number | null
+          created_at: string
+          updated_at: string
+        }
+        Insert: {
+          id?: string
+          user_id: string
+          normalized_url_hash: string
+          source_url: string
+          source_domain?: string | null
+          parser_path?: 'jsonld' | 'html_heuristic' | 'ai_fallback'
+          parse_warnings_json?: Json
+          parse_result_json?: Json | null
+          error_message?: string | null
+          elapsed_ms?: number | null
+          created_at?: string
+          updated_at?: string
+        }
+        Update: {
+          id?: string
+          user_id?: string
+          normalized_url_hash?: string
+          source_url?: string
+          source_domain?: string | null
+          parser_path?: 'jsonld' | 'html_heuristic' | 'ai_fallback'
+          parse_warnings_json?: Json
+          parse_result_json?: Json | null
+          error_message?: string | null
+          elapsed_ms?: number | null
+          created_at?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "recipe_import_events_user_id_fkey"
+            columns: ["user_id"]
+            referencedRelation: "users"
+            referencedColumns: ["id"]
+          }
+        ]
+      }
+      menu_scan_sessions: {
+        Row: {
+          id: string
+          user_id: string
+          input_type: 'text' | 'photo'
+          goal_context_json: Json
+          constraints_json: Json
+          ranked_items_json: Json
+          selected_item_json: Json | null
+          explanations_json: Json
+          applied_plan_meal_id: string | null
+          created_at: string
+          updated_at: string
+        }
+        Insert: {
+          id?: string
+          user_id: string
+          input_type: 'text' | 'photo'
+          goal_context_json?: Json
+          constraints_json?: Json
+          ranked_items_json?: Json
+          selected_item_json?: Json | null
+          explanations_json?: Json
+          applied_plan_meal_id?: string | null
+          created_at?: string
+          updated_at?: string
+        }
+        Update: {
+          id?: string
+          user_id?: string
+          input_type?: 'text' | 'photo'
+          goal_context_json?: Json
+          constraints_json?: Json
+          ranked_items_json?: Json
+          selected_item_json?: Json | null
+          explanations_json?: Json
+          applied_plan_meal_id?: string | null
+          created_at?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "menu_scan_sessions_user_id_fkey"
+            columns: ["user_id"]
+            referencedRelation: "users"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "menu_scan_sessions_applied_plan_meal_id_fkey"
+            columns: ["applied_plan_meal_id"]
+            referencedRelation: "user_nutrition_plan_meals"
+            referencedColumns: ["id"]
+          }
+        ]
+      }
+      pantry_items: {
+        Row: {
+          id: string
+          user_id: string
+          name: string
+          food_item_id: string | null
+          quantity_value: number
+          quantity_unit: string
+          location: string | null
+          expires_at: string | null
+          reorder_threshold: number
+          estimated_cost_per_unit: number | null
+          notes: string | null
+          is_active: boolean
+          created_at: string
+          updated_at: string
+        }
+        Insert: {
+          id?: string
+          user_id: string
+          name: string
+          food_item_id?: string | null
+          quantity_value?: number
+          quantity_unit?: string
+          location?: string | null
+          expires_at?: string | null
+          reorder_threshold?: number
+          estimated_cost_per_unit?: number | null
+          notes?: string | null
+          is_active?: boolean
+          created_at?: string
+          updated_at?: string
+        }
+        Update: {
+          id?: string
+          user_id?: string
+          name?: string
+          food_item_id?: string | null
+          quantity_value?: number
+          quantity_unit?: string
+          location?: string | null
+          expires_at?: string | null
+          reorder_threshold?: number
+          estimated_cost_per_unit?: number | null
+          notes?: string | null
+          is_active?: boolean
+          created_at?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "pantry_items_user_id_fkey"
+            columns: ["user_id"]
+            referencedRelation: "users"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "pantry_items_food_item_id_fkey"
+            columns: ["food_item_id"]
+            referencedRelation: "food_items"
+            referencedColumns: ["id"]
+          }
+        ]
+      }
+      pantry_transactions: {
+        Row: {
+          id: string
+          user_id: string
+          pantry_item_id: string | null
+          transaction_type: 'add' | 'consume' | 'waste' | 'adjust'
+          quantity_delta: number
+          quantity_unit: string
+          source_type: string
+          source_ref_id: string | null
+          notes: string | null
+          created_at: string
+        }
+        Insert: {
+          id?: string
+          user_id: string
+          pantry_item_id?: string | null
+          transaction_type: 'add' | 'consume' | 'waste' | 'adjust'
+          quantity_delta: number
+          quantity_unit?: string
+          source_type?: string
+          source_ref_id?: string | null
+          notes?: string | null
+          created_at?: string
+        }
+        Update: {
+          id?: string
+          user_id?: string
+          pantry_item_id?: string | null
+          transaction_type?: 'add' | 'consume' | 'waste' | 'adjust'
+          quantity_delta?: number
+          quantity_unit?: string
+          source_type?: string
+          source_ref_id?: string | null
+          notes?: string | null
+          created_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "pantry_transactions_user_id_fkey"
+            columns: ["user_id"]
+            referencedRelation: "users"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "pantry_transactions_pantry_item_id_fkey"
+            columns: ["pantry_item_id"]
+            referencedRelation: "pantry_items"
+            referencedColumns: ["id"]
+          }
+        ]
+      }
+      grocery_lists: {
+        Row: {
+          id: string
+          user_id: string
+          title: string
+          week_start_date: string | null
+          source: string
+          budget_limit: number | null
+          total_estimated_cost: number | null
+          status: 'draft' | 'active' | 'completed' | 'archived'
+          metadata_json: Json
+          created_at: string
+          updated_at: string
+        }
+        Insert: {
+          id?: string
+          user_id: string
+          title: string
+          week_start_date?: string | null
+          source?: string
+          budget_limit?: number | null
+          total_estimated_cost?: number | null
+          status?: 'draft' | 'active' | 'completed' | 'archived'
+          metadata_json?: Json
+          created_at?: string
+          updated_at?: string
+        }
+        Update: {
+          id?: string
+          user_id?: string
+          title?: string
+          week_start_date?: string | null
+          source?: string
+          budget_limit?: number | null
+          total_estimated_cost?: number | null
+          status?: 'draft' | 'active' | 'completed' | 'archived'
+          metadata_json?: Json
+          created_at?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "grocery_lists_user_id_fkey"
+            columns: ["user_id"]
+            referencedRelation: "users"
+            referencedColumns: ["id"]
+          }
+        ]
+      }
+      grocery_list_items: {
+        Row: {
+          id: string
+          list_id: string
+          item_name: string
+          food_item_id: string | null
+          required_quantity: number
+          on_hand_quantity: number
+          to_buy_quantity: number
+          quantity_unit: string
+          estimated_unit_cost: number | null
+          estimated_total_cost: number | null
+          substitution_suggestions_json: Json
+          leftovers_json: Json
+          priority: number
+          created_at: string
+          updated_at: string
+        }
+        Insert: {
+          id?: string
+          list_id: string
+          item_name: string
+          food_item_id?: string | null
+          required_quantity?: number
+          on_hand_quantity?: number
+          to_buy_quantity?: number
+          quantity_unit?: string
+          estimated_unit_cost?: number | null
+          estimated_total_cost?: number | null
+          substitution_suggestions_json?: Json
+          leftovers_json?: Json
+          priority?: number
+          created_at?: string
+          updated_at?: string
+        }
+        Update: {
+          id?: string
+          list_id?: string
+          item_name?: string
+          food_item_id?: string | null
+          required_quantity?: number
+          on_hand_quantity?: number
+          to_buy_quantity?: number
+          quantity_unit?: string
+          estimated_unit_cost?: number | null
+          estimated_total_cost?: number | null
+          substitution_suggestions_json?: Json
+          leftovers_json?: Json
+          priority?: number
+          created_at?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "grocery_list_items_list_id_fkey"
+            columns: ["list_id"]
+            referencedRelation: "grocery_lists"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "grocery_list_items_food_item_id_fkey"
             columns: ["food_item_id"]
             referencedRelation: "food_items"
             referencedColumns: ["id"]
@@ -933,6 +1308,7 @@ export interface Database {
           recipe_url: string | null
           prep_time_min: number | null
           is_user_modified: boolean
+          selected_variant_id: string | null
           created_at: string
         }
         Insert: {
@@ -949,6 +1325,7 @@ export interface Database {
           recipe_url?: string | null
           prep_time_min?: number | null
           is_user_modified?: boolean
+          selected_variant_id?: string | null
           created_at?: string
         }
         Update: {
@@ -965,6 +1342,7 @@ export interface Database {
           recipe_url?: string | null
           prep_time_min?: number | null
           is_user_modified?: boolean
+          selected_variant_id?: string | null
           created_at?: string
         }
         Relationships: [
@@ -972,6 +1350,137 @@ export interface Database {
             foreignKeyName: "user_nutrition_plan_meals_plan_id_fkey"
             columns: ["plan_id"]
             referencedRelation: "user_nutrition_plans"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "user_nutrition_plan_meals_selected_variant_id_fkey"
+            columns: ["selected_variant_id"]
+            referencedRelation: "user_nutrition_plan_meal_variants"
+            referencedColumns: ["id"]
+          }
+        ]
+      }
+      user_nutrition_plan_meal_variants: {
+        Row: {
+          id: string
+          plan_meal_id: string
+          variant_type: 'default' | 'alternative' | 'user_custom'
+          name: string
+          description: string | null
+          target_calories: number | null
+          target_protein: number | null
+          target_carbs: number | null
+          target_fat: number | null
+          prep_time_min: number | null
+          source: 'ai' | 'rule' | 'user'
+          is_active: boolean
+          created_at: string
+          updated_at: string
+        }
+        Insert: {
+          id?: string
+          plan_meal_id: string
+          variant_type?: 'default' | 'alternative' | 'user_custom'
+          name: string
+          description?: string | null
+          target_calories?: number | null
+          target_protein?: number | null
+          target_carbs?: number | null
+          target_fat?: number | null
+          prep_time_min?: number | null
+          source?: 'ai' | 'rule' | 'user'
+          is_active?: boolean
+          created_at?: string
+          updated_at?: string
+        }
+        Update: {
+          id?: string
+          plan_meal_id?: string
+          variant_type?: 'default' | 'alternative' | 'user_custom'
+          name?: string
+          description?: string | null
+          target_calories?: number | null
+          target_protein?: number | null
+          target_carbs?: number | null
+          target_fat?: number | null
+          prep_time_min?: number | null
+          source?: 'ai' | 'rule' | 'user'
+          is_active?: boolean
+          created_at?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "user_nutrition_plan_meal_variants_plan_meal_id_fkey"
+            columns: ["plan_meal_id"]
+            referencedRelation: "user_nutrition_plan_meals"
+            referencedColumns: ["id"]
+          }
+        ]
+      }
+      user_nutrition_plan_meal_variant_items: {
+        Row: {
+          id: string
+          variant_id: string
+          food_item_id: string | null
+          item_name: string
+          quantity_value: number
+          quantity_unit: string
+          grams: number | null
+          calories: number | null
+          protein: number | null
+          carbs: number | null
+          fat: number | null
+          fiber: number | null
+          order_index: number
+          created_at: string
+          updated_at: string
+        }
+        Insert: {
+          id?: string
+          variant_id: string
+          food_item_id?: string | null
+          item_name: string
+          quantity_value: number
+          quantity_unit: string
+          grams?: number | null
+          calories?: number | null
+          protein?: number | null
+          carbs?: number | null
+          fat?: number | null
+          fiber?: number | null
+          order_index?: number
+          created_at?: string
+          updated_at?: string
+        }
+        Update: {
+          id?: string
+          variant_id?: string
+          food_item_id?: string | null
+          item_name?: string
+          quantity_value?: number
+          quantity_unit?: string
+          grams?: number | null
+          calories?: number | null
+          protein?: number | null
+          carbs?: number | null
+          fat?: number | null
+          fiber?: number | null
+          order_index?: number
+          created_at?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "user_nutrition_plan_meal_variant_items_variant_id_fkey"
+            columns: ["variant_id"]
+            referencedRelation: "user_nutrition_plan_meal_variants"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "user_nutrition_plan_meal_variant_items_food_item_id_fkey"
+            columns: ["food_item_id"]
+            referencedRelation: "food_items"
             referencedColumns: ["id"]
           }
         ]
@@ -1030,6 +1539,98 @@ export interface Database {
             foreignKeyName: "user_nutrition_plans_generation_run_id_fkey"
             columns: ["generation_run_id"]
             referencedRelation: "plan_generation_runs"
+            referencedColumns: ["id"]
+          }
+        ]
+      }
+      user_plan_consistency_daily: {
+        Row: {
+          id: string
+          user_id: string
+          log_date: string
+          nutrition_score: number
+          workout_score: number
+          hydration_score: number
+          overall_score: number
+          nutrition_status_json: Json | null
+          workout_status_json: Json | null
+          hydration_status_json: Json | null
+          recommendation_json: Json | null
+          created_at: string
+          updated_at: string
+        }
+        Insert: {
+          id?: string
+          user_id: string
+          log_date: string
+          nutrition_score?: number
+          workout_score?: number
+          hydration_score?: number
+          overall_score?: number
+          nutrition_status_json?: Json | null
+          workout_status_json?: Json | null
+          hydration_status_json?: Json | null
+          recommendation_json?: Json | null
+          created_at?: string
+          updated_at?: string
+        }
+        Update: {
+          id?: string
+          user_id?: string
+          log_date?: string
+          nutrition_score?: number
+          workout_score?: number
+          hydration_score?: number
+          overall_score?: number
+          nutrition_status_json?: Json | null
+          workout_status_json?: Json | null
+          hydration_status_json?: Json | null
+          recommendation_json?: Json | null
+          created_at?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "user_plan_consistency_daily_user_id_fkey"
+            columns: ["user_id"]
+            referencedRelation: "users"
+            referencedColumns: ["id"]
+          }
+        ]
+      }
+      user_plan_grocery_weeks: {
+        Row: {
+          id: string
+          plan_id: string
+          week_start_date: string
+          items_json: Json
+          prep_batches_json: Json
+          created_at: string
+          updated_at: string
+        }
+        Insert: {
+          id?: string
+          plan_id: string
+          week_start_date: string
+          items_json?: Json
+          prep_batches_json?: Json
+          created_at?: string
+          updated_at?: string
+        }
+        Update: {
+          id?: string
+          plan_id?: string
+          week_start_date?: string
+          items_json?: Json
+          prep_batches_json?: Json
+          created_at?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "user_plan_grocery_weeks_plan_id_fkey"
+            columns: ["plan_id"]
+            referencedRelation: "user_nutrition_plans"
             referencedColumns: ["id"]
           }
         ]
@@ -1256,6 +1857,67 @@ export interface Database {
             foreignKeyName: "user_workout_plan_exercises_original_exercise_id_fkey"
             columns: ["original_exercise_id"]
             referencedRelation: "exercises"
+            referencedColumns: ["id"]
+          }
+        ]
+      }
+      user_workout_plan_schedule: {
+        Row: {
+          id: string
+          plan_id: string
+          plan_day_id: string | null
+          scheduled_date: string
+          session_type: 'workout' | 'rest' | 'active_recovery' | 'conditioning'
+          status: 'planned' | 'completed' | 'missed' | 'rescheduled' | 'skipped'
+          original_date: string | null
+          completed_session_id: string | null
+          notes: string | null
+          created_at: string
+          updated_at: string
+        }
+        Insert: {
+          id?: string
+          plan_id: string
+          plan_day_id?: string | null
+          scheduled_date: string
+          session_type: 'workout' | 'rest' | 'active_recovery' | 'conditioning'
+          status?: 'planned' | 'completed' | 'missed' | 'rescheduled' | 'skipped'
+          original_date?: string | null
+          completed_session_id?: string | null
+          notes?: string | null
+          created_at?: string
+          updated_at?: string
+        }
+        Update: {
+          id?: string
+          plan_id?: string
+          plan_day_id?: string | null
+          scheduled_date?: string
+          session_type?: 'workout' | 'rest' | 'active_recovery' | 'conditioning'
+          status?: 'planned' | 'completed' | 'missed' | 'rescheduled' | 'skipped'
+          original_date?: string | null
+          completed_session_id?: string | null
+          notes?: string | null
+          created_at?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "user_workout_plan_schedule_plan_id_fkey"
+            columns: ["plan_id"]
+            referencedRelation: "user_workout_plans"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "user_workout_plan_schedule_plan_day_id_fkey"
+            columns: ["plan_day_id"]
+            referencedRelation: "user_workout_plan_days"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "user_workout_plan_schedule_completed_session_id_fkey"
+            columns: ["completed_session_id"]
+            referencedRelation: "workout_sessions"
             referencedColumns: ["id"]
           }
         ]

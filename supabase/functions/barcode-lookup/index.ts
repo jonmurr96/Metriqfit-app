@@ -314,6 +314,31 @@ serve(async (req) => {
     return jsonResponse({ error: "Unauthorized" }, 401);
   }
 
+  // Enforce Elite access server-side for barcode scanning.
+  const { data: subscription, error: subscriptionError } = await supabase
+    .from("subscriptions")
+    .select("plan_type, status, updated_at")
+    .eq("user_id", authData.user.id)
+    .in("status", ["active", "trial", "grace_period"])
+    .order("updated_at", { ascending: false })
+    .maybeSingle();
+
+  if (subscriptionError) {
+    console.error("Subscription lookup error:", subscriptionError);
+    return jsonResponse({ error: "Failed to verify subscription" }, 500);
+  }
+
+  const isElite = Boolean(subscription && subscription.plan_type !== "free");
+  if (!isElite) {
+    return jsonResponse(
+      {
+        error: "MetriqFit Elite required",
+        code: "ELITE_REQUIRED",
+      },
+      402,
+    );
+  }
+
   let payload: any;
   try {
     payload = await req.json();

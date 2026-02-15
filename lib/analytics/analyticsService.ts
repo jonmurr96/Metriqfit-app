@@ -65,6 +65,46 @@ export function trackOnboardingCompleted() {
   trackEvent('onboarding_completed');
 }
 
+export function trackPlanReviewViewed(properties?: Record<string, any>) {
+  trackEvent('plan_review_viewed', properties);
+}
+
+export function trackPlanReviewSectionEdited(properties?: Record<string, any>) {
+  trackEvent('plan_review_section_edited', properties);
+}
+
+export function trackPlanReviewSectionAccepted(properties?: Record<string, any>) {
+  trackEvent('plan_review_section_accepted', properties);
+}
+
+export function trackPlanReviewContinueClicked(properties?: Record<string, any>) {
+  trackEvent('plan_review_continue_clicked', properties);
+}
+
+export function trackOnboardingPricingViewed(properties?: Record<string, any>) {
+  trackEvent('onboarding_pricing_viewed', properties);
+}
+
+export function trackOnboardingPricingTierSelected(properties?: Record<string, any>) {
+  trackEvent('onboarding_pricing_tier_selected', properties);
+}
+
+export function trackOnboardingPurchaseStarted(properties?: Record<string, any>) {
+  trackEvent('onboarding_purchase_started', properties);
+}
+
+export function trackOnboardingPurchaseSucceeded(properties?: Record<string, any>) {
+  trackEvent('onboarding_purchase_succeeded', properties);
+}
+
+export function trackOnboardingPurchaseFailed(properties?: Record<string, any>) {
+  trackEvent('onboarding_purchase_failed', properties);
+}
+
+export function trackOnboardingFreeSelected(properties?: Record<string, any>) {
+  trackEvent('onboarding_free_selected', properties);
+}
+
 // Workout Analytics
 export function trackWorkoutStarted(workoutType?: string) {
   trackEvent('workout_started', { workout_type: workoutType });
@@ -74,6 +114,34 @@ export function trackWorkoutCompleted(workoutType?: string, duration?: number) {
   trackEvent('workout_completed', { workout_type: workoutType, duration });
 }
 
+export function trackWorkoutHomeViewed(properties?: Record<string, any>) {
+  trackEvent('workout_home_viewed', properties);
+}
+
+export function trackWorkoutHomeQuickAccessTapped(properties?: Record<string, any>) {
+  trackEvent('workout_home_quick_access_tapped', properties);
+}
+
+export function trackWorkoutHomeToolTapped(properties?: Record<string, any>) {
+  trackEvent('workout_home_tool_tapped', properties);
+}
+
+export function trackWorkoutInsightRendered(properties?: Record<string, any>) {
+  trackEvent('workout_insight_rendered', properties);
+}
+
+export function trackWorkoutNoteCreated(properties?: Record<string, any>) {
+  trackEvent('workout_note_created', properties);
+}
+
+export function trackWorkoutNoteUpdated(properties?: Record<string, any>) {
+  trackEvent('workout_note_updated', properties);
+}
+
+export function trackWorkoutNoteDeleted(properties?: Record<string, any>) {
+  trackEvent('workout_note_deleted', properties);
+}
+
 // Nutrition Analytics
 export function trackFoodLogged(source?: string) {
   trackEvent('food_logged', { source });
@@ -81,6 +149,30 @@ export function trackFoodLogged(source?: string) {
 
 export function trackWaterLogged(amount?: number) {
   trackEvent('water_logged', { amount });
+}
+
+export function trackRecipeImportStarted(properties?: Record<string, any>) {
+  trackEvent('recipe_import_started', properties);
+}
+
+export function trackRecipeImportCompleted(properties?: Record<string, any>) {
+  trackEvent('recipe_import_completed', properties);
+}
+
+export function trackMenuScanStarted(properties?: Record<string, any>) {
+  trackEvent('menu_scan_started', properties);
+}
+
+export function trackMenuScanCompleted(properties?: Record<string, any>) {
+  trackEvent('menu_scan_completed', properties);
+}
+
+export function trackMealBuilderRun(properties?: Record<string, any>) {
+  trackEvent('meal_builder_run', properties);
+}
+
+export function trackPantryUpdated(properties?: Record<string, any>) {
+  trackEvent('pantry_updated', properties);
 }
 
 // Error Analytics

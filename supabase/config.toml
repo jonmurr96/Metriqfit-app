@@ -1,0 +1,36 @@
+# Supabase CLI function configuration.
+# These functions perform explicit in-function auth checks via `supabase.auth.getUser()`
+# and currently require gateway JWT verification disabled for compatibility in this project.
+
+[functions.import-recipe-url]
+verify_jwt = false
+
+[functions.menu-scan-rank]
+verify_jwt = false
+
+[functions.build-meals-from-constraints]
+verify_jwt = false
+
+[functions.apply-meal-plan-batch-change]
+verify_jwt = false
+
+[functions.generate-user-plans]
+verify_jwt = false
+
+[functions.import-workout-plan]
+verify_jwt = false
+
+[functions.adapt-workout-plan]
+verify_jwt = false
+
+[functions.migrate-workout-plans-v2]
+verify_jwt = false
+
+[functions.reschedule-workout-day]
+verify_jwt = false
+
+[functions.compute-plan-consistency]
+verify_jwt = false
+
+[functions.remediate-workout-mappings]
+verify_jwt = false

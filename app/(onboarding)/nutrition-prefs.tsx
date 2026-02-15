@@ -5,7 +5,16 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { MotiView } from 'moti';
 import { Ionicons } from '@expo/vector-icons';
 import { metriqfitTheme } from '../../lib/theme';
-import { useOnboarding, DietaryPreference, AllergyExclusion, RefusedFood, MealsPerDay } from '../../lib/onboarding';
+import {
+  useOnboarding,
+  DietaryPreference,
+  AllergyExclusion,
+  RefusedFood,
+  MealsPerDay,
+  normalizeOnboardingAnswers,
+  resolvePreferredDaysOff,
+  formatWeekday,
+} from '../../lib/onboarding';
 import { useAuth } from '../../lib/auth';
 import { supabase } from '../../lib/supabase';
 import type { Database } from '../../lib/supabase/types';
@@ -69,7 +78,7 @@ const mealsOptions: { value: MealsPerDay; label: string }[] = [
 
 export default function NutritionPrefsScreen() {
   const { data, updateData, setCurrentStep } = useOnboarding();
-  const { session, user } = useAuth();
+  const { session } = useAuth();
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -89,6 +98,10 @@ export default function NutritionPrefsScreen() {
     data.meals_per_day &&
     (data.dietary_preference !== 'other' || data.dietary_preference_other_text) &&
     (!data.allergies_exclusions.includes('other') || data.allergies_other_text);
+  const resolvedDaysOff = resolvePreferredDaysOff(
+    data.training_days_per_week,
+    data.preferred_days_off,
+  ).resolvedDaysOff;
 
   const handleAllergySelect = (values: string[]) => {
     if (values.includes('none')) {
@@ -117,12 +130,14 @@ export default function NutritionPrefsScreen() {
         return;
       }
 
+      const normalizedAnswers = normalizeOnboardingAnswers(data);
+
       console.log('[Onboarding] Saving answers...');
       const { error: answersError } = await supabase
         .from('onboarding_answers')
         .upsert({
           user_id: userId,
-          answers: data as unknown as Database['public']['Tables']['onboarding_answers']['Insert']['answers'],
+          answers: normalizedAnswers as unknown as Database['public']['Tables']['onboarding_answers']['Insert']['answers'],
           completed_at: new Date().toISOString(),
         } satisfies Database['public']['Tables']['onboarding_answers']['Insert'], { onConflict: 'user_id' });
 
@@ -131,19 +146,19 @@ export default function NutritionPrefsScreen() {
       // Calculate and save targets
       console.log('[Onboarding] Calculating targets...');
       const targets = calculateTargets({
-        sex: data.sex!,
-        dob: data.dob!,
-        height_ft: data.height_ft!,
-        height_in: data.height_in!,
-        current_weight_lb: data.current_weight_lb!,
-        goal_type: data.goal_type!,
-        activity_level: data.activity_level!,
-        training_days_per_week: data.training_days_per_week!,
-        minutes_per_workout: data.minutes_per_workout!,
-        experience_level: data.experience_level!,
-        avg_steps: data.avg_steps,
-        target_weight_lb: data.target_weight_lb,
-        target_date: data.target_date,
+        sex: normalizedAnswers.sex!,
+        dob: normalizedAnswers.dob!,
+        height_ft: normalizedAnswers.height_ft!,
+        height_in: normalizedAnswers.height_in!,
+        current_weight_lb: normalizedAnswers.current_weight_lb!,
+        goal_type: normalizedAnswers.goal_type!,
+        activity_level: normalizedAnswers.activity_level!,
+        training_days_per_week: normalizedAnswers.training_days_per_week!,
+        minutes_per_workout: normalizedAnswers.minutes_per_workout!,
+        experience_level: normalizedAnswers.experience_level!,
+        avg_steps: normalizedAnswers.avg_steps,
+        target_weight_lb: normalizedAnswers.target_weight_lb,
+        target_date: normalizedAnswers.target_date,
       });
 
       if (!targets.calories || !targets.protein_g || !targets.carbs_g || !targets.fat_g || !targets.water_ml) {
@@ -218,6 +233,27 @@ export default function NutritionPrefsScreen() {
               line2Gradient="Nutrition preferences"
               subtitle="Help us personalize your meal suggestions"
             />
+
+            <View style={styles.summaryCard}>
+              <Text style={styles.summaryLabel}>Before we generate your plans</Text>
+              <Text style={styles.summaryText}>
+                Training days: <Text style={styles.summaryStrong}>{data.training_days_per_week || '-'}/week</Text>
+              </Text>
+              <Text style={styles.summaryText}>
+                Days off: <Text style={styles.summaryStrong}>
+                  {resolvedDaysOff.length ? resolvedDaysOff.map(formatWeekday).join(', ') : 'none fixed'}
+                </Text>
+              </Text>
+              <Text style={styles.summaryText}>
+                Equipment: <Text style={styles.summaryStrong}>{(data.equipment_access || 'not set').replaceAll('_', ' ')}</Text>
+              </Text>
+              <Text style={styles.summaryText}>
+                Injuries: <Text style={styles.summaryStrong}>{data.injuries.length ? data.injuries.join(', ') : 'none selected'}</Text>
+              </Text>
+              <Text style={styles.summaryText}>
+                Goal: <Text style={styles.summaryStrong}>{(data.goal_type || 'not set').replaceAll('_', ' ')}</Text>
+              </Text>
+            </View>
 
             {error && (
               <View style={styles.errorBox}>
@@ -352,6 +388,31 @@ const styles = StyleSheet.create({
   },
   inputGroup: {
     marginBottom: s.xl,
+  },
+  summaryCard: {
+    backgroundColor: o.surface,
+    borderWidth: 1,
+    borderColor: o.borderMedium,
+    borderRadius: r.md,
+    padding: s.md,
+    marginBottom: s.xl,
+    gap: 6,
+  },
+  summaryLabel: {
+    color: o.iconColors.teal,
+    fontSize: 12,
+    letterSpacing: 0.8,
+    textTransform: 'uppercase',
+    fontFamily: 'Sora_600SemiBold',
+  },
+  summaryText: {
+    color: o.textMuted,
+    fontSize: 13,
+    fontFamily: 'Sora_400Regular',
+  },
+  summaryStrong: {
+    color: o.text,
+    fontFamily: 'Sora_600SemiBold',
   },
   label: {
     fontSize: 14,

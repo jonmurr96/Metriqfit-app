@@ -15,13 +15,21 @@ import {
   logSet,
   finishSession,
   getTemplateDay,
+  addExerciseToSession,
   deleteSet,
   updateSetTarget,
   checkAndUpdatePR,
   type WorkoutTemplate,
+  type WorkoutStats,
   getExerciseHistory,
   getWorkoutHistory,
+  getWorkoutStats,
+  getUserPRs,
   swapExercise,
+  updateSessionExerciseNote,
+  updateSessionNotes,
+  getWorkoutNotesFeed,
+  type WorkoutNoteItem,
 } from '../services/workoutService';
 
 export const workoutKeys = {
@@ -31,7 +39,12 @@ export const workoutKeys = {
   exercises: (filters?: any) => [...workoutKeys.all, 'exercises', filters] as const,
   history: (userId: string) => [...workoutKeys.all, 'history', userId] as const,
   exerciseHistory: (userId: string, exerciseId: string) => [...workoutKeys.history(userId), 'exercise', exerciseId] as const,
+  prs: (userId: string) => [...workoutKeys.all, 'prs', userId] as const,
+  stats: (userId: string, startDate: string, endDate: string) =>
+    [...workoutKeys.all, 'stats', userId, startDate, endDate] as const,
   activeSession: () => [...workoutKeys.all, 'active-session'] as const,
+  notes: (userId: string, search?: string, from?: string, to?: string) =>
+    [...workoutKeys.all, 'notes', userId, search || '', from || '', to || ''] as const,
 };
 
 /**
@@ -54,6 +67,13 @@ export function useProgramDetails(programId: string) {
     queryFn: () => getProgramWithDays(programId),
     enabled: !!programId,
   });
+}
+
+/**
+ * Backward-compatible alias for historical imports.
+ */
+export function useProgramWithDays(programId: string) {
+  return useProgramDetails(programId);
 }
 
 /**
@@ -181,6 +201,28 @@ export function useFinishSession() {
 }
 
 /**
+ * Add exercise to active session
+ */
+export function useAddExerciseToSession() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: async ({
+      sessionId,
+      exerciseId,
+      orderIndex,
+    }: {
+      sessionId: string;
+      exerciseId: string;
+      orderIndex: number;
+    }) => addExerciseToSession(sessionId, exerciseId, orderIndex),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: workoutKeys.activeSession() });
+    },
+  });
+}
+
+/**
  * Delete a logged set
  */
 export function useDeleteSet() {
@@ -269,6 +311,32 @@ export function useWorkoutHistory(limit: number = 20) {
 }
 
 /**
+ * Get all personal records for the current user.
+ */
+export function useUserPRs() {
+  const { user } = useAuth();
+
+  return useQuery({
+    queryKey: user ? workoutKeys.prs(user.id) : [],
+    queryFn: () => getUserPRs(user!.id),
+    enabled: !!user,
+  });
+}
+
+/**
+ * Get workout statistics for a date range.
+ */
+export function useWorkoutStats(startDate: string, endDate: string) {
+  const { user } = useAuth();
+
+  return useQuery<WorkoutStats>({
+    queryKey: user ? workoutKeys.stats(user.id, startDate, endDate) : [],
+    queryFn: () => getWorkoutStats(user!.id, startDate, endDate),
+    enabled: !!user && !!startDate && !!endDate,
+  });
+}
+
+/**
  * Swap exercise in session
  */
 export function useSwapExercise() {
@@ -288,4 +356,53 @@ export function useSwapExercise() {
       queryClient.invalidateQueries({ queryKey: workoutKeys.activeSession() });
     },
   });
+}
+
+export function useUpdateSessionExerciseNote() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: async ({
+      sessionExerciseId,
+      notes,
+    }: {
+      sessionExerciseId: string;
+      notes: string | null;
+    }) => updateSessionExerciseNote(sessionExerciseId, notes),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: workoutKeys.activeSession() });
+      queryClient.invalidateQueries({ queryKey: workoutKeys.all });
+    },
+  });
+}
+
+export function useUpdateSessionNotes() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: async ({ sessionId, notes }: { sessionId: string; notes: string | null }) =>
+      updateSessionNotes(sessionId, notes),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: workoutKeys.activeSession() });
+      queryClient.invalidateQueries({ queryKey: workoutKeys.all });
+    },
+  });
+}
+
+export function useWorkoutNotesFeed(options?: { limit?: number; search?: string; from?: string; to?: string }) {
+  const { user } = useAuth();
+
+  return useQuery<WorkoutNoteItem[]>({
+    queryKey: user ? workoutKeys.notes(user.id, options?.search, options?.from, options?.to) : [],
+    queryFn: () => getWorkoutNotesFeed(user!.id, options),
+    enabled: !!user,
+    staleTime: 60 * 1000,
+  });
+}
+
+/**
+ * Backward-compatible alias for historical imports.
+ */
+export function useCheckAndUpdatePR() {
+  return useCheckPR();
 }

@@ -18,6 +18,7 @@ export default function WorkoutSummaryScreen() {
   const insets = useSafeAreaInsets();
   const params = useLocalSearchParams();
   const sessionId = params.sessionId as string;
+  const hasSessionId = typeof sessionId === 'string' && sessionId.length > 0;
 
   const { data: session, isLoading } = useSessionDetails(sessionId);
 
@@ -43,10 +44,48 @@ export default function WorkoutSummaryScreen() {
     Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
   }, []);
 
-  if (isLoading || !session) {
+  if (!hasSessionId) {
+    return (
+      <View style={[styles.container, { backgroundColor: c.bg, justifyContent: 'center', alignItems: 'center', paddingHorizontal: s.xl }]}>
+        <Text style={{ color: c.text, fontFamily: ty.heading.familySemibold, fontSize: ty.sizes.lg, textAlign: 'center' }}>
+          No workout summary available
+        </Text>
+        <Text style={{ color: c.textMuted, marginTop: s.sm, textAlign: 'center' }}>
+          Finish a workout session to view your summary.
+        </Text>
+        <Pressable
+          onPress={() => router.replace('/(tabs)/workout')}
+          style={{ marginTop: s.lg, paddingHorizontal: s.lg, paddingVertical: s.sm, borderRadius: r.md, backgroundColor: c.surface }}
+        >
+          <Text style={{ color: c.primary, fontFamily: ty.body.familySemibold }}>Go to Workout</Text>
+        </Pressable>
+      </View>
+    );
+  }
+
+  if (isLoading) {
     return (
       <View style={[styles.container, { backgroundColor: c.bg, justifyContent: 'center', alignItems: 'center' }]}>
         <Text style={{ color: c.textMuted }}>Loading summary...</Text>
+      </View>
+    );
+  }
+
+  if (!session) {
+    return (
+      <View style={[styles.container, { backgroundColor: c.bg, justifyContent: 'center', alignItems: 'center', paddingHorizontal: s.xl }]}>
+        <Text style={{ color: c.text, fontFamily: ty.heading.familySemibold, fontSize: ty.sizes.lg, textAlign: 'center' }}>
+          Summary not found
+        </Text>
+        <Text style={{ color: c.textMuted, marginTop: s.sm, textAlign: 'center' }}>
+          This workout session may have been removed or is still processing.
+        </Text>
+        <Pressable
+          onPress={() => router.replace('/(tabs)/workout')}
+          style={{ marginTop: s.lg, paddingHorizontal: s.lg, paddingVertical: s.sm, borderRadius: r.md, backgroundColor: c.surface }}
+        >
+          <Text style={{ color: c.primary, fontFamily: ty.body.familySemibold }}>Back to Workout</Text>
+        </Pressable>
       </View>
     );
   }

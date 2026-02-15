@@ -61,8 +61,23 @@ export default function DayPreviewScreen() {
     );
   }
 
-  // Sort exercises by order
+  // Sort exercises by order and group into blocks when block_id exists.
   const exercises = day.exercises?.sort((a: any, b: any) => a.order_index - b.order_index) || [];
+  const groupedBlocks = (() => {
+    const map = new Map<string, { key: string; label: string; exercises: any[] }>();
+    for (const exercise of exercises) {
+      const blockKey = exercise.block_id || 'standard';
+      if (!map.has(blockKey)) {
+        map.set(blockKey, {
+          key: blockKey,
+          label: exercise.block_id ? `Block ${map.size + 1}` : 'Standard Block',
+          exercises: [],
+        });
+      }
+      map.get(blockKey)!.exercises.push(exercise);
+    }
+    return Array.from(map.values());
+  })();
 
   return (
     <View style={[styles.container, { backgroundColor: c.bg, paddingTop: insets.top }]}>
@@ -124,46 +139,82 @@ export default function DayPreviewScreen() {
         </View>
 
         {/* Exercise List */}
-        {exercises.map((planExercise: any, index: number) => (
-          <View
-            key={planExercise.id}
-            style={[
-              styles.exerciseCard,
-              {
-                backgroundColor: c.surface,
+        {groupedBlocks.map((block, blockIndex) => (
+          <View key={block.key} style={{ marginBottom: s.md }}>
+            <View
+              style={{
+                backgroundColor: c.surface2,
                 borderRadius: r.md,
-                padding: s.lg,
                 borderWidth: 1,
                 borderColor: c.border,
+                paddingHorizontal: s.md,
+                paddingVertical: s.sm,
                 marginBottom: s.sm,
-              },
-            ]}
-          >
-            <View style={styles.exerciseHeader}>
+              }}
+            >
+              <Text style={{ color: c.text, fontFamily: ty.body.familySemibold, fontSize: ty.sizes.sm }}>
+                {block.label}
+              </Text>
+            </View>
+
+            {block.exercises.map((planExercise: any, index: number) => (
               <View
+                key={planExercise.id}
                 style={[
-                  styles.exerciseNumber,
-                  { backgroundColor: c.surface2, borderRadius: r.sm },
+                  styles.exerciseCard,
+                  {
+                    backgroundColor: c.surface,
+                    borderRadius: r.md,
+                    padding: s.lg,
+                    borderWidth: 1,
+                    borderColor: c.border,
+                    marginBottom: s.sm,
+                  },
                 ]}
               >
-                <Text style={{ color: c.primary, fontFamily: ty.mono.family, fontSize: ty.sizes.sm }}>
-                  {index + 1}
-                </Text>
+                <View style={styles.exerciseHeader}>
+                  <View
+                    style={[
+                      styles.exerciseNumber,
+                      { backgroundColor: c.surface2, borderRadius: r.sm },
+                    ]}
+                  >
+                    <Text style={{ color: c.primary, fontFamily: ty.mono.family, fontSize: ty.sizes.sm }}>
+                      {blockIndex + 1}.{index + 1}
+                    </Text>
+                  </View>
+                  <View style={styles.exerciseInfo}>
+                    <Text style={{ color: c.text, fontFamily: ty.body.familyMedium, fontSize: ty.sizes.md }}>
+                      {planExercise.exercise?.name || 'Unknown Exercise'}
+                    </Text>
+                    <Text style={{ color: c.textMuted, fontFamily: ty.body.family, fontSize: ty.sizes.sm, marginTop: 2 }}>
+                      {planExercise.sets_target || 3} sets × {planExercise.reps_min}-{planExercise.reps_max} reps
+                    </Text>
+                    <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 6, marginTop: s.xs }}>
+                      {!!planExercise.technique_type && (
+                        <View style={{ backgroundColor: `${c.primary}20`, borderRadius: r.pill, paddingHorizontal: 8, paddingVertical: 2 }}>
+                          <Text style={{ color: c.primary, fontFamily: ty.mono.family, fontSize: ty.sizes.xs }}>
+                            {String(planExercise.technique_type).replaceAll('_', ' ')}
+                          </Text>
+                        </View>
+                      )}
+                      {!!planExercise.tempo && (
+                        <View style={{ backgroundColor: c.surface2, borderRadius: r.pill, paddingHorizontal: 8, paddingVertical: 2 }}>
+                          <Text style={{ color: c.textMuted, fontFamily: ty.mono.family, fontSize: ty.sizes.xs }}>
+                            Tempo {planExercise.tempo}
+                          </Text>
+                        </View>
+                      )}
+                    </View>
+                    {(planExercise.user_notes || planExercise.notes) && (
+                      <Text style={{ color: c.textMuted, fontFamily: ty.body.family, fontSize: ty.sizes.xs, marginTop: 4, fontStyle: 'italic' }}>
+                        Note: {planExercise.user_notes || planExercise.notes}
+                      </Text>
+                    )}
+                  </View>
+                </View>
               </View>
-              <View style={styles.exerciseInfo}>
-                <Text style={{ color: c.text, fontFamily: ty.body.familyMedium, fontSize: ty.sizes.md }}>
-                  {planExercise.exercise?.name || 'Unknown Exercise'}
-                </Text>
-                <Text style={{ color: c.textMuted, fontFamily: ty.body.family, fontSize: ty.sizes.sm, marginTop: 2 }}>
-                  {planExercise.sets_target || 3} sets × {planExercise.reps_min}-{planExercise.reps_max} reps
-                </Text>
-                {planExercise.user_notes && (
-                  <Text style={{ color: c.textMuted, fontFamily: ty.body.family, fontSize: ty.sizes.xs, marginTop: 4, fontStyle: 'italic' }}>
-                    Note: {planExercise.user_notes}
-                  </Text>
-                )}
-              </View>
-            </View>
+            ))}
           </View>
         ))}
       </ScrollView>

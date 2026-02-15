@@ -11,29 +11,44 @@ import { activateKeepAwakeAsync, deactivateKeepAwake } from 'expo-keep-awake';
 import { useTokens } from '../../../lib/theme';
 import { TabBarIcon } from '../../../components/navigation/TabBarIcon';
 import { GlassCard } from '../../../components/premium/GlassCard';
-import { useActiveSession, useLogSet, useFinishSession, useCheckPR, useDeleteSet, useSwapExercise, useExerciseHistory, useExercises } from '../../../hooks/useWorkout';
+import {
+  useActiveSession,
+  useLogSet,
+  useFinishSession,
+  useCheckPR,
+  useDeleteSet,
+  useSwapExercise,
+  useExerciseHistory,
+  useExercises,
+  useUpdateSessionExerciseNote,
+  useUpdateSessionNotes,
+} from '../../../hooks/useWorkout';
 import { useMarkDayCompleted } from '../../../hooks/usePlan';
 import { useAuth } from '../../../lib/auth/AuthProvider';
 import { PlateCalculator } from '../../../components/workout/PlateCalculator';
 import { OneRepMaxCalculator } from '../../../components/workout/OneRepMaxCalculator';
 import { Ionicons } from '@expo/vector-icons';
+import { trackWorkoutNoteCreated, trackWorkoutNoteDeleted, trackWorkoutNoteUpdated } from '../../../lib/analytics';
 
 
 const SCREEN_WIDTH = Dimensions.get('window').width;
+
+// Fallback target when session rows do not carry an explicit set target.
+const DEFAULT_SETS_TARGET = 3;
 
 export default function ActiveSessionScreen() {
   useEffect(() => {
     if (Platform.OS !== 'web') {
       const enableKeepAwake = async () => {
         try {
-            await activateKeepAwakeAsync();
+          await activateKeepAwakeAsync();
         } catch (e) {
-            console.warn('KeepAwake failed', e);
+          console.warn('KeepAwake failed', e);
         }
       };
       enableKeepAwake();
       return () => {
-        deactivateKeepAwake().catch(() => {});
+        deactivateKeepAwake().catch(() => { });
       };
     }
   }, []);
@@ -50,6 +65,8 @@ export default function ActiveSessionScreen() {
   const checkPRMutation = useCheckPR();
   const deleteSetMutation = useDeleteSet();
   const swapExerciseMutation = useSwapExercise();
+  const updateExerciseNoteMutation = useUpdateSessionExerciseNote();
+  const updateSessionNoteMutation = useUpdateSessionNotes();
 
   const [currentExerciseIndex, setCurrentExerciseIndex] = useState(0);
   const [elapsedTime, setElapsedTime] = useState(0);
@@ -57,7 +74,7 @@ export default function ActiveSessionScreen() {
   const [restTimer, setRestTimer] = useState<number | null>(null);
   const [plateCalcTarget, setPlateCalcTarget] = useState<number | null>(null);
   const [showOneRepMax, setShowOneRepMax] = useState(false);
-  
+
   // New State for Modals
   const [showQueue, setShowQueue] = useState(false);
   const [showInfo, setShowInfo] = useState(false);
@@ -69,6 +86,10 @@ export default function ActiveSessionScreen() {
   // Local state for set targets (to support "Add Set" visually)
   const [setTargets, setSetTargets] = useState<Record<string, number>>({});
   const [isLoaded, setIsLoaded] = useState(false);
+  const [exerciseNoteDraft, setExerciseNoteDraft] = useState('');
+  const [sessionNoteDraft, setSessionNoteDraft] = useState('');
+  const [exerciseNoteSaving, setExerciseNoteSaving] = useState(false);
+  const [sessionNoteSaving, setSessionNoteSaving] = useState(false);
 
   // Reset inputs when exercise changes
   useEffect(() => {
@@ -161,6 +182,14 @@ export default function ActiveSessionScreen() {
   const exercises = session?.exercises || [];
   const currentExercise = exercises[currentExerciseIndex];
 
+  useEffect(() => {
+    setExerciseNoteDraft((currentExercise as any)?.notes || '');
+  }, [currentExercise?.id, (currentExercise as any)?.notes]);
+
+  useEffect(() => {
+    setSessionNoteDraft(session?.notes || '');
+  }, [session?.id, session?.notes]);
+
   // Fetch history for current exercise to show "Previous"
   const { data: exerciseHistory } = useExerciseHistory(currentExercise?.exercise?.id || '', 5);
   const previousSession = exerciseHistory?.find(s => s.sessionId !== session?.id);
@@ -172,19 +201,19 @@ export default function ActiveSessionScreen() {
   const swapOptions = allExercises?.filter(e => e.id !== currentExercise?.exercise?.id) || [];
 
   const handleSwapExercise = async (newExerciseId: string) => {
-      try {
-          await swapExerciseMutation.mutateAsync({
-              sessionExerciseId: currentExercise.id,
-              newExerciseId
-          });
-          setShowSwap(false);
-          // Haptic feedback
-          if (Platform.OS !== 'web') {
-              Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-          }
-      } catch (e) {
-          Alert.alert('Error', 'Failed to swap exercise');
+    try {
+      await swapExerciseMutation.mutateAsync({
+        sessionExerciseId: currentExercise.id,
+        newExerciseId
+      });
+      setShowSwap(false);
+      // Haptic feedback
+      if (Platform.OS !== 'web') {
+        Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
       }
+    } catch (e) {
+      Alert.alert('Error', 'Failed to swap exercise');
+    }
   };
 
   // Timer logic - Calculate from start time
@@ -277,7 +306,7 @@ export default function ActiveSessionScreen() {
 
             // Also reduce local target count if it was an extra set
             setSetTargets(prev => {
-              const currentTgt = prev[currentExercise.id] || (currentExercise as any).sets_target || 3;
+              const currentTgt = prev[currentExercise.id] || (currentExercise as any)?.sets_target || DEFAULT_SETS_TARGET;
               if (currentTgt > 0) {
                 return { ...prev, [currentExercise.id]: currentTgt - 1 };
               }
@@ -294,7 +323,7 @@ export default function ActiveSessionScreen() {
       Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
     }
     setSetTargets(prev => {
-      const currentCount = prev[currentExercise.id] || Math.max((currentExercise as any).sets_target || 3, currentExercise.sets.length);
+      const currentCount = prev[currentExercise.id] || Math.max((currentExercise as any)?.sets_target || DEFAULT_SETS_TARGET, currentExercise.sets.length);
       return { ...prev, [currentExercise.id]: currentCount + 1 };
     });
   };
@@ -302,7 +331,7 @@ export default function ActiveSessionScreen() {
   const markDayCompletedMutation = useMarkDayCompleted();
 
   const handleFinishWorkout = () => {
-    
+
     if (isPaused) {
       if (Platform.OS === 'web') {
         alert('Session Paused: Please resume the workout timer before finishing.');
@@ -316,11 +345,11 @@ export default function ActiveSessionScreen() {
     let incompleteSets = 0;
     session?.exercises.forEach(ex => {
       // Determine target count: Local state override > DB target > Default 3
-      const target = setTargets[ex.id] || (ex as any).sets_target || 3;
-      
+      const target = setTargets[ex.id] || (ex as any).sets_target || DEFAULT_SETS_TARGET;
+
       // Count completed sets (assuming all logged sets count towards progress)
       const completedCount = ex.sets ? ex.sets.length : 0;
-      
+
       if (completedCount < target) {
         incompleteSets += (target - completedCount);
       }
@@ -330,8 +359,11 @@ export default function ActiveSessionScreen() {
       try {
         if (session?.id) {
           // 1. Finish session
-          await finishSessionMutation.mutateAsync({ sessionId: session.id });
-          
+          await finishSessionMutation.mutateAsync({
+            sessionId: session.id,
+            notes: sessionNoteDraft.trim() || undefined,
+          });
+
           // 2. Mark Plan Day Complete if linked
           if (session.plan_day_id) {
             try {
@@ -345,7 +377,7 @@ export default function ActiveSessionScreen() {
 
           // 3. Cleanup local storage
           await AsyncStorage.removeItem(`workout_session_${session.id}`);
-          
+
           // 4. Navigate to Summary
           router.replace({
             pathname: '/(tabs)/workout/summary',
@@ -364,10 +396,10 @@ export default function ActiveSessionScreen() {
         `You have incomplete sets remaining. Are you sure you want to finish?`,
         [
           { text: 'Cancel', style: 'cancel' },
-          { 
-            text: 'Finish Anyway', 
-            style: 'destructive', 
-            onPress: proceedToFinish 
+          {
+            text: 'Finish Anyway',
+            style: 'destructive',
+            onPress: proceedToFinish
           }
         ]
       );
@@ -377,13 +409,69 @@ export default function ActiveSessionScreen() {
         'Great job! Ready to wrap up?',
         [
           { text: 'Cancel', style: 'cancel' },
-          { 
-            text: 'Finish', 
-            style: 'default', 
-            onPress: proceedToFinish 
+          {
+            text: 'Finish',
+            style: 'default',
+            onPress: proceedToFinish
           }
         ]
       );
+    }
+  };
+
+  const saveExerciseNote = async () => {
+    if (!currentExercise?.id) return;
+    const prev = String((currentExercise as any)?.notes || '').trim();
+    const next = exerciseNoteDraft.trim();
+    if (prev === next) return;
+
+    try {
+      setExerciseNoteSaving(true);
+      await updateExerciseNoteMutation.mutateAsync({
+        sessionExerciseId: currentExercise.id,
+        notes: next.length > 0 ? next : null,
+      });
+
+      if (next.length === 0) {
+        trackWorkoutNoteDeleted({ type: 'exercise', session_exercise_id: currentExercise.id });
+      } else if (prev.length === 0) {
+        trackWorkoutNoteCreated({ type: 'exercise', session_exercise_id: currentExercise.id });
+      } else {
+        trackWorkoutNoteUpdated({ type: 'exercise', session_exercise_id: currentExercise.id });
+      }
+    } catch (error) {
+      console.warn('Failed to save exercise note', error);
+      Alert.alert('Note not saved', 'Unable to save exercise note right now.');
+    } finally {
+      setExerciseNoteSaving(false);
+    }
+  };
+
+  const saveSessionNote = async () => {
+    if (!session?.id) return;
+    const prev = String(session.notes || '').trim();
+    const next = sessionNoteDraft.trim();
+    if (prev === next) return;
+
+    try {
+      setSessionNoteSaving(true);
+      await updateSessionNoteMutation.mutateAsync({
+        sessionId: session.id,
+        notes: next.length > 0 ? next : null,
+      });
+
+      if (next.length === 0) {
+        trackWorkoutNoteDeleted({ type: 'session', session_id: session.id });
+      } else if (prev.length === 0) {
+        trackWorkoutNoteCreated({ type: 'session', session_id: session.id });
+      } else {
+        trackWorkoutNoteUpdated({ type: 'session', session_id: session.id });
+      }
+    } catch (error) {
+      console.warn('Failed to save session note', error);
+      Alert.alert('Note not saved', 'Unable to save session note right now.');
+    } finally {
+      setSessionNoteSaving(false);
     }
   };
 
@@ -478,44 +566,75 @@ export default function ActiveSessionScreen() {
           {/* Exercise Navigation */}
           <View style={[styles.exerciseNav, { marginBottom: s.lg }]}>
             <View style={{ flexDirection: 'row', alignItems: 'center' }}>
-                <Pressable
+              <Pressable
                 onPress={handlePrevExercise}
                 disabled={currentExerciseIndex === 0}
                 style={{ opacity: currentExerciseIndex === 0 ? 0.3 : 1, padding: 10 }}
-                >
+              >
                 <TabBarIcon name="chevron-back" color={c.text} size={24} />
-                </Pressable>
+              </Pressable>
             </View>
-            
+
             <View style={{ alignItems: 'center', flex: 1 }}>
-                <Pressable onPress={() => setShowQueue(true)} style={{ alignItems: 'center' }}>
-                    <Text style={{ color: c.primary, fontFamily: ty.body.familySemibold, fontSize: ty.sizes.xs, letterSpacing: 1 }}>
-                        EXERCISE {currentExerciseIndex + 1}/{session.exercises.length} ▼
-                    </Text>
-                    <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
-                        <Text style={{ color: c.text, fontFamily: ty.heading.familySemibold, fontSize: ty.sizes.lg, textAlign: 'center' }}>
-                            {currentExercise.exercise.name}
-                        </Text>
-                        <Pressable onPress={() => setShowInfo(true)} hitSlop={10}>
-                            <Ionicons name="information-circle-outline" size={20} color={c.textMuted} />
-                        </Pressable>
-                    </View>
-                </Pressable>
+              <Pressable onPress={() => setShowQueue(true)} style={{ alignItems: 'center' }}>
+                <Text style={{ color: c.primary, fontFamily: ty.body.familySemibold, fontSize: ty.sizes.xs, letterSpacing: 1 }}>
+                  EXERCISE {currentExerciseIndex + 1}/{session.exercises.length} ▼
+                </Text>
+                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+                  <Text style={{ color: c.text, fontFamily: ty.heading.familySemibold, fontSize: ty.sizes.lg, textAlign: 'center' }}>
+                    {currentExercise.exercise.name}
+                  </Text>
+                  <Pressable onPress={() => setShowInfo(true)} hitSlop={10}>
+                    <Ionicons name="information-circle-outline" size={20} color={c.textMuted} />
+                  </Pressable>
+                </View>
+              </Pressable>
             </View>
 
             <View style={{ flexDirection: 'row', alignItems: 'center' }}>
-                <Pressable onPress={() => setShowSwap(true)} style={{ padding: 10 }}>
-                    <Ionicons name="swap-horizontal" size={20} color={c.textMuted} />
-                </Pressable>
-                <Pressable
+              <Pressable onPress={() => setShowSwap(true)} style={{ padding: 10 }}>
+                <Ionicons name="swap-horizontal" size={20} color={c.textMuted} />
+              </Pressable>
+              <Pressable
                 onPress={handleNextExercise}
                 disabled={currentExerciseIndex === session.exercises.length - 1}
                 style={{ opacity: currentExerciseIndex === session.exercises.length - 1 ? 0.3 : 1, padding: 10 }}
-                >
+              >
                 <TabBarIcon name="chevron-forward" color={c.text} size={24} />
-                </Pressable>
+              </Pressable>
             </View>
           </View>
+
+          <GlassCard intensity="medium" style={{ marginBottom: s.md }}>
+            <Text style={{ color: c.textMuted, fontFamily: ty.body.familySemibold, fontSize: ty.sizes.xs, letterSpacing: 1 }}>
+              EXERCISE NOTE
+            </Text>
+            <TextInput
+              value={exerciseNoteDraft}
+              onChangeText={setExerciseNoteDraft}
+              onBlur={saveExerciseNote}
+              placeholder={`Add cues or reminders for ${currentExercise.exercise.name}`}
+              placeholderTextColor={c.textSubtle}
+              multiline
+              style={{
+                marginTop: s.xs,
+                minHeight: 52,
+                borderRadius: r.md,
+                borderWidth: 1,
+                borderColor: c.border,
+                backgroundColor: c.surface,
+                color: c.text,
+                fontFamily: ty.body.family,
+                fontSize: ty.sizes.sm,
+                paddingHorizontal: s.sm,
+                paddingVertical: s.xs,
+                textAlignVertical: 'top',
+              }}
+            />
+            <Text style={{ marginTop: 4, color: c.textSubtle, fontFamily: ty.body.family, fontSize: ty.sizes.xs }}>
+              {exerciseNoteSaving ? 'Saving note...' : 'Saved on blur'}
+            </Text>
+          </GlassCard>
 
           {/* Current Set Card */}
           <GlassCard glowEffect intensity="strong" style={{ padding: 0, overflow: 'hidden' }}>
@@ -533,7 +652,7 @@ export default function ActiveSessionScreen() {
 
             {/* Sets */}
             <View style={{ padding: s.md }}>
-              {Array.from({ length: Math.max(setTargets[currentExercise.id] || (currentExercise as any).sets_target || 3, currentExercise.sets.length) }).map((_, index) => {
+              {Array.from({ length: Math.max(setTargets[currentExercise.id] || (currentExercise as any).sets_target || DEFAULT_SETS_TARGET, currentExercise.sets.length) }).map((_, index) => {
                 const setNumber = index + 1;
                 const completedSet = currentExercise.sets.find(s => s.set_number === setNumber);
                 const isCompleted = !!completedSet;
@@ -576,13 +695,13 @@ export default function ActiveSessionScreen() {
                     </View>
 
                     <Text style={[styles.colPrev, { color: c.textMuted, fontFamily: ty.body.family, fontSize: 11 }]}>
-                        {(() => {
-                            const prevSet = previousSession?.sets?.find((s: any) => s.set_number === setNumber);
-                            if (prevSet) {
-                                return `${prevSet.weight_lb}x${prevSet.reps}`;
-                            }
-                            return '-';
-                        })()}
+                      {(() => {
+                        const prevSet = previousSession?.sets?.find((s: any) => s.set_number === setNumber);
+                        if (prevSet) {
+                          return `${prevSet.weight_lb}x${prevSet.reps}`;
+                        }
+                        return '-';
+                      })()}
                     </Text>
 
                     <View style={styles.colInput}>
@@ -620,7 +739,7 @@ export default function ActiveSessionScreen() {
                       <TextInput
                         value={values.reps}
                         onChangeText={(text) => handleInputChange(setNumber, 'reps', text)}
-                        placeholder={(currentExercise as any).reps_min ? `${(currentExercise as any).reps_min}-${(currentExercise as any).reps_max}` : '10'}
+                        placeholder="10"
                         placeholderTextColor={c.textMuted}
                         style={[
                           styles.input,
@@ -698,6 +817,37 @@ export default function ActiveSessionScreen() {
             </Pressable>
           </GlassCard>
 
+          <GlassCard intensity="medium" style={{ marginTop: s.md }}>
+            <Text style={{ color: c.textMuted, fontFamily: ty.body.familySemibold, fontSize: ty.sizes.xs, letterSpacing: 1 }}>
+              SESSION NOTE
+            </Text>
+            <TextInput
+              value={sessionNoteDraft}
+              onChangeText={setSessionNoteDraft}
+              onBlur={saveSessionNote}
+              placeholder="How did this session feel overall?"
+              placeholderTextColor={c.textSubtle}
+              multiline
+              style={{
+                marginTop: s.xs,
+                minHeight: 72,
+                borderRadius: r.md,
+                borderWidth: 1,
+                borderColor: c.border,
+                backgroundColor: c.surface,
+                color: c.text,
+                fontFamily: ty.body.family,
+                fontSize: ty.sizes.sm,
+                paddingHorizontal: s.sm,
+                paddingVertical: s.xs,
+                textAlignVertical: 'top',
+              }}
+            />
+            <Text style={{ marginTop: 4, color: c.textSubtle, fontFamily: ty.body.family, fontSize: ty.sizes.xs }}>
+              {sessionNoteSaving ? 'Saving note...' : 'Saved on blur and at finish'}
+            </Text>
+          </GlassCard>
+
         </ScrollView>
       </KeyboardAvoidingView>
 
@@ -737,156 +887,156 @@ export default function ActiveSessionScreen() {
           </MotiView>
         )}
       </AnimatePresence>
-      
+
       {/* Exercise Queue Modal */}
       <AnimatePresence>
         {showQueue && (
-             <MotiView
-             from={{ opacity: 0, translateY: 100 }}
-             animate={{ opacity: 1, translateY: 0 }}
-             exit={{ opacity: 0, translateY: 100 }}
-             style={[StyleSheet.absoluteFill, { backgroundColor: c.bg, zIndex: 100, paddingTop: insets.top + s.lg }]}
-           >
-             <View style={{ flexDirection: 'row', justifyContent: 'space-between', paddingHorizontal: s.lg, marginBottom: s.lg }}>
-                 <Text style={{ color: c.text, fontFamily: ty.heading.familySemibold, fontSize: ty.sizes.lg }}>Workout Queue</Text>
-                 <Pressable onPress={() => setShowQueue(false)}>
-                     <Ionicons name="close" size={28} color={c.text} />
-                 </Pressable>
-             </View>
-             <ScrollView contentContainerStyle={{ paddingHorizontal: s.lg, paddingBottom: 100 }}>
-                 {exercises.map((ex, idx) => (
-                     <Pressable
-                         key={ex.id}
-                         onPress={() => {
-                             setCurrentExerciseIndex(idx);
-                             setShowQueue(false);
-                         }}
-                         style={{ 
-                             flexDirection: 'row', 
-                             alignItems: 'center', 
-                             paddingVertical: 12,
-                             borderBottomWidth: 1,
-                             borderBottomColor: c.surface2,
-                             backgroundColor: idx === currentExerciseIndex ? c.surface2 : 'transparent',
-                             borderRadius: 8,
-                             paddingHorizontal: 8
-                         }}
-                     >
-                         <Text style={{ color: c.textMuted, width: 30, textAlign: 'center' }}>{idx + 1}</Text>
-                         <View style={{ flex: 1, marginLeft: 10 }}>
-                             <Text style={{ color: idx === currentExerciseIndex ? c.primary : c.text, fontFamily: ty.body.familySemibold }}>
-                                 {ex.exercise.name}
-                             </Text>
-                             <Text style={{ color: c.textMuted, fontSize: 12 }}>
-                                 {ex.sets.length} sets planned
-                             </Text>
-                         </View>
-                         {idx < currentExerciseIndex && (
-                              <Ionicons name="checkmark-circle" size={20} color={c.primary} />
-                         )}
-                     </Pressable>
-                 ))}
-             </ScrollView>
-           </MotiView>
+          <MotiView
+            from={{ opacity: 0, translateY: 100 }}
+            animate={{ opacity: 1, translateY: 0 }}
+            exit={{ opacity: 0, translateY: 100 }}
+            style={[StyleSheet.absoluteFill, { backgroundColor: c.bg, zIndex: 100, paddingTop: insets.top + s.lg }]}
+          >
+            <View style={{ flexDirection: 'row', justifyContent: 'space-between', paddingHorizontal: s.lg, marginBottom: s.lg }}>
+              <Text style={{ color: c.text, fontFamily: ty.heading.familySemibold, fontSize: ty.sizes.lg }}>Workout Queue</Text>
+              <Pressable onPress={() => setShowQueue(false)}>
+                <Ionicons name="close" size={28} color={c.text} />
+              </Pressable>
+            </View>
+            <ScrollView contentContainerStyle={{ paddingHorizontal: s.lg, paddingBottom: 100 }}>
+              {exercises.map((ex, idx) => (
+                <Pressable
+                  key={ex.id}
+                  onPress={() => {
+                    setCurrentExerciseIndex(idx);
+                    setShowQueue(false);
+                  }}
+                  style={{
+                    flexDirection: 'row',
+                    alignItems: 'center',
+                    paddingVertical: 12,
+                    borderBottomWidth: 1,
+                    borderBottomColor: c.surface2,
+                    backgroundColor: idx === currentExerciseIndex ? c.surface2 : 'transparent',
+                    borderRadius: 8,
+                    paddingHorizontal: 8
+                  }}
+                >
+                  <Text style={{ color: c.textMuted, width: 30, textAlign: 'center' }}>{idx + 1}</Text>
+                  <View style={{ flex: 1, marginLeft: 10 }}>
+                    <Text style={{ color: idx === currentExerciseIndex ? c.primary : c.text, fontFamily: ty.body.familySemibold }}>
+                      {ex.exercise.name}
+                    </Text>
+                    <Text style={{ color: c.textMuted, fontSize: 12 }}>
+                      {ex.sets.length} sets planned
+                    </Text>
+                  </View>
+                  {idx < currentExerciseIndex && (
+                    <Ionicons name="checkmark-circle" size={20} color={c.primary} />
+                  )}
+                </Pressable>
+              ))}
+            </ScrollView>
+          </MotiView>
         )}
       </AnimatePresence>
 
       {/* Exercise Info Modal */}
-        <AnimatePresence>
+      <AnimatePresence>
         {showInfo && (
-             <MotiView
-             from={{ opacity: 0, scale: 0.95 }}
-             animate={{ opacity: 1, scale: 1 }}
-             exit={{ opacity: 0, scale: 0.95 }}
-             style={[StyleSheet.absoluteFill, { justifyContent: 'center', alignItems: 'center', backgroundColor: 'rgba(0,0,0,0.8)', zIndex: 110, padding: 20 }]}
-           >
-             <View style={{ width: '100%', maxWidth: 400, backgroundColor: c.surface, borderRadius: 16, padding: 20, maxHeight: '80%' }}>
-                 <View style={{ flexDirection: 'row', justifyContent: 'space-between', marginBottom: 16 }}>
-                     <Text style={{ color: c.text, fontFamily: ty.heading.familySemibold, fontSize: 18, flex: 1 }}>
-                         {currentExercise.exercise.name}
-                     </Text>
-                     <Pressable onPress={() => setShowInfo(false)}>
-                         <Ionicons name="close" size={24} color={c.text} />
-                     </Pressable>
-                 </View>
-                 <ScrollView>
-                     <Text style={{ color: c.textMuted, marginBottom: 8, textTransform: 'uppercase', fontSize: 12 }}>Primary Muscle</Text>
-                     <Text style={{ color: c.primary, fontFamily: ty.body.familySemibold, marginBottom: 16 }}>
-                         {currentExercise.exercise.primary_muscle || 'Unknown'}
-                     </Text>
+          <MotiView
+            from={{ opacity: 0, scale: 0.95 }}
+            animate={{ opacity: 1, scale: 1 }}
+            exit={{ opacity: 0, scale: 0.95 }}
+            style={[StyleSheet.absoluteFill, { justifyContent: 'center', alignItems: 'center', backgroundColor: 'rgba(0,0,0,0.8)', zIndex: 110, padding: 20 }]}
+          >
+            <View style={{ width: '100%', maxWidth: 400, backgroundColor: c.surface, borderRadius: 16, padding: 20, maxHeight: '80%' }}>
+              <View style={{ flexDirection: 'row', justifyContent: 'space-between', marginBottom: 16 }}>
+                <Text style={{ color: c.text, fontFamily: ty.heading.familySemibold, fontSize: 18, flex: 1 }}>
+                  {currentExercise.exercise.name}
+                </Text>
+                <Pressable onPress={() => setShowInfo(false)}>
+                  <Ionicons name="close" size={24} color={c.text} />
+                </Pressable>
+              </View>
+              <ScrollView>
+                <Text style={{ color: c.textMuted, marginBottom: 8, textTransform: 'uppercase', fontSize: 12 }}>Primary Muscle</Text>
+                <Text style={{ color: c.primary, fontFamily: ty.body.familySemibold, marginBottom: 16 }}>
+                  {currentExercise.exercise.primary_muscle || 'Unknown'}
+                </Text>
 
-                     <Text style={{ color: c.textMuted, marginBottom: 8, textTransform: 'uppercase', fontSize: 12 }}>Instructions</Text>
-                     <Text style={{ color: c.text, lineHeight: 22 }}>
-                         {currentExercise.exercise.instructions || 'No instructions available.'}
-                     </Text>
-                 </ScrollView>
-             </View>
-           </MotiView>
+                <Text style={{ color: c.textMuted, marginBottom: 8, textTransform: 'uppercase', fontSize: 12 }}>Instructions</Text>
+                <Text style={{ color: c.text, lineHeight: 22 }}>
+                  {currentExercise.exercise.instructions || 'No instructions available.'}
+                </Text>
+              </ScrollView>
+            </View>
+          </MotiView>
         )}
       </AnimatePresence>
 
       {/* Swap Exercise Modal */}
       <AnimatePresence>
         {showSwap && (
-             <MotiView
-             from={{ opacity: 0, translateY: 100 }}
-             animate={{ opacity: 1, translateY: 0 }}
-             exit={{ opacity: 0, translateY: 100 }}
-             style={[StyleSheet.absoluteFill, { backgroundColor: c.bg, zIndex: 100, paddingTop: insets.top + s.lg }]}
-           >
-             <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingHorizontal: s.lg, marginBottom: s.lg }}>
-                 <Text style={{ color: c.text, fontFamily: ty.heading.familySemibold, fontSize: ty.sizes.lg }}>Swap Exercise</Text>
-                 <Pressable onPress={() => setShowSwap(false)}>
-                     <Ionicons name="close" size={28} color={c.text} />
-                 </Pressable>
-             </View>
-             
-             <View style={{ paddingHorizontal: s.lg, marginBottom: s.md }}>
-                 <TextInput 
-                    placeholder="Search replacement..." 
-                    placeholderTextColor={c.textMuted}
-                    value={swapSearch}
-                    onChangeText={setSwapSearch}
-                    style={{ 
-                        backgroundColor: c.surface, 
-                        color: c.text, 
-                        padding: 12, 
-                        borderRadius: 8,
-                        borderWidth: 1,
-                        borderColor: c.border
-                    }}
-                 />
-             </View>
+          <MotiView
+            from={{ opacity: 0, translateY: 100 }}
+            animate={{ opacity: 1, translateY: 0 }}
+            exit={{ opacity: 0, translateY: 100 }}
+            style={[StyleSheet.absoluteFill, { backgroundColor: c.bg, zIndex: 100, paddingTop: insets.top + s.lg }]}
+          >
+            <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingHorizontal: s.lg, marginBottom: s.lg }}>
+              <Text style={{ color: c.text, fontFamily: ty.heading.familySemibold, fontSize: ty.sizes.lg }}>Swap Exercise</Text>
+              <Pressable onPress={() => setShowSwap(false)}>
+                <Ionicons name="close" size={28} color={c.text} />
+              </Pressable>
+            </View>
 
-             <ScrollView contentContainerStyle={{ paddingHorizontal: s.lg, paddingBottom: 100 }}>
-                 {swapOptions.map((ex) => (
-                     <Pressable
-                         key={ex.id}
-                         onPress={() => handleSwapExercise(ex.id)}
-                         style={{ 
-                             flexDirection: 'row', 
-                             alignItems: 'center', 
-                             paddingVertical: 12,
-                             borderBottomWidth: 1,
-                             borderBottomColor: c.surface2
-                         }}
-                     >
-                         <View style={{ flex: 1 }}>
-                             <Text style={{ color: c.text, fontFamily: ty.body.familySemibold }}>
-                                 {ex.name}
-                             </Text>
-                             <Text style={{ color: c.textMuted, fontSize: 12 }}>
-                                 {ex.primary_muscle} • {ex.category}
-                             </Text>
-                         </View>
-                         <Ionicons name="swap-vertical" size={20} color={c.primary} />
-                     </Pressable>
-                 ))}
-                 {swapOptions.length === 0 && (
-                     <Text style={{ color: c.textMuted, textAlign: 'center', marginTop: 20 }}>No matching exercises found.</Text>
-                 )}
-             </ScrollView>
-           </MotiView>
+            <View style={{ paddingHorizontal: s.lg, marginBottom: s.md }}>
+              <TextInput
+                placeholder="Search replacement..."
+                placeholderTextColor={c.textMuted}
+                value={swapSearch}
+                onChangeText={setSwapSearch}
+                style={{
+                  backgroundColor: c.surface,
+                  color: c.text,
+                  padding: 12,
+                  borderRadius: 8,
+                  borderWidth: 1,
+                  borderColor: c.border
+                }}
+              />
+            </View>
+
+            <ScrollView contentContainerStyle={{ paddingHorizontal: s.lg, paddingBottom: 100 }}>
+              {swapOptions.map((ex) => (
+                <Pressable
+                  key={ex.id}
+                  onPress={() => handleSwapExercise(ex.id)}
+                  style={{
+                    flexDirection: 'row',
+                    alignItems: 'center',
+                    paddingVertical: 12,
+                    borderBottomWidth: 1,
+                    borderBottomColor: c.surface2
+                  }}
+                >
+                  <View style={{ flex: 1 }}>
+                    <Text style={{ color: c.text, fontFamily: ty.body.familySemibold }}>
+                      {ex.name}
+                    </Text>
+                    <Text style={{ color: c.textMuted, fontSize: 12 }}>
+                      {ex.primary_muscle} • {ex.category}
+                    </Text>
+                  </View>
+                  <Ionicons name="swap-vertical" size={20} color={c.primary} />
+                </Pressable>
+              ))}
+              {swapOptions.length === 0 && (
+                <Text style={{ color: c.textMuted, textAlign: 'center', marginTop: 20 }}>No matching exercises found.</Text>
+              )}
+            </ScrollView>
+          </MotiView>
         )}
       </AnimatePresence>
 
@@ -1053,5 +1203,3 @@ const styles = StyleSheet.create({
     borderRadius: 20,
   },
 });
-
-

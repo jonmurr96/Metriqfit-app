@@ -52,6 +52,15 @@ export interface Measurement {
   created_at: string;
 }
 
+export interface OnboardingAnswersRecord {
+  id: string;
+  user_id: string;
+  answers: Database['public']['Tables']['onboarding_answers']['Row']['answers'];
+  completed_at: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
 // Query Keys
 export const userKeys = {
   all: ['user'] as const,
@@ -104,6 +113,20 @@ export async function getMeasurements(userId: string, limit = 30): Promise<Measu
 
   if (error) throw error;
   return data || [];
+}
+
+/**
+ * Get onboarding answers payload.
+ */
+export async function getOnboardingAnswers(userId: string): Promise<OnboardingAnswersRecord | null> {
+  const { data, error } = await supabase
+    .from('onboarding_answers')
+    .select('*')
+    .eq('user_id', userId)
+    .single();
+
+  if (error && error.code !== 'PGRST116') throw error;
+  return data;
 }
 
 /**
@@ -298,6 +321,20 @@ export function useUserTargets() {
 }
 
 /**
+ * Get onboarding answers JSON payload.
+ */
+export function useOnboardingAnswers() {
+  const { user } = useAuth();
+
+  return useQuery({
+    queryKey: userKeys.onboarding(user?.id || ''),
+    queryFn: () => getOnboardingAnswers(user!.id),
+    enabled: !!user,
+    staleTime: 10 * 60 * 1000,
+  });
+}
+
+/**
  * Get weight measurement history
  */
 export function useMeasurements(limit = 30) {
@@ -425,4 +462,35 @@ export function useStreak() {
   });
 }
 
+/**
+ * Count workout sessions completed this week (Monday through today)
+ */
+async function getWorkoutsThisWeek(userId: string): Promise<number> {
+  const now = new Date();
+  // Get start of week (Monday)
+  const dayOfWeek = now.getDay(); // 0 = Sun, 1 = Mon...
+  const daysToMonday = dayOfWeek === 0 ? 6 : dayOfWeek - 1;
+  const monday = new Date(now);
+  monday.setDate(now.getDate() - daysToMonday);
+  monday.setHours(0, 0, 0, 0);
 
+  const { count, error } = await supabase
+    .from('workout_sessions')
+    .select('*', { count: 'exact', head: true })
+    .eq('user_id', userId)
+    .gte('started_at', monday.toISOString());
+
+  if (error) throw error;
+  return count || 0;
+}
+
+export function useWorkoutsThisWeek() {
+  const { user } = useAuth();
+
+  return useQuery({
+    queryKey: ['user', 'workoutsThisWeek', user?.id],
+    queryFn: () => getWorkoutsThisWeek(user!.id),
+    enabled: !!user,
+    staleTime: 5 * 60 * 1000, // 5 minutes
+  });
+}

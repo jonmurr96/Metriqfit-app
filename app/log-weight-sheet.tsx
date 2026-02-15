@@ -185,7 +185,7 @@ export default function LogWeightSheet() {
           <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 12 }}>
             {['Waist', 'Chest', 'Arms', 'Thighs', 'Hips'].map((part) => (
               <View key={part} style={{ width: '48%' }}>
-                <Text style={{ color: c.textSubtle, fontSize: 12, marginBottom: 4 }}>{part} (cm)</Text>
+                <Text style={{ color: c.textSubtle, fontSize: 12, marginBottom: 4 }}>{part} ({selectedUnit === 'lbs' ? 'in' : 'cm'})</Text>
                 <TextInput
                   style={{
                     backgroundColor: c.surface,

@@ -237,7 +237,7 @@ export default function FoodDetailScreen() {
                 marginBottom: s.md,
               }}
             >
-              YOU'LL LOG
+              {"YOU'LL LOG"}
             </Text>
             <View style={styles.nutritionGrid}>
               {[
@@ -449,4 +449,3 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
 });
-

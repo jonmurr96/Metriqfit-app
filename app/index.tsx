@@ -1,8 +1,10 @@
 import { useEffect, useState } from 'react';
 import { View, ActivityIndicator } from 'react-native';
 import { Redirect } from 'expo-router';
+import { MotiView } from 'moti';
 import { useAuth, checkOnboardingStatus, type OnboardingStatus } from '../lib/auth';
 import { metriqfitTheme } from '../lib/theme';
+import { BrandMark } from '../components/branding/BrandMark';
 
 export default function IndexPage() {
   const { user, loading: authLoading, isAuthenticated } = useAuth();
@@ -44,6 +46,14 @@ export default function IndexPage() {
           backgroundColor: metriqfitTheme.colors.bg,
         }}
       >
+        <MotiView
+          from={{ opacity: 0.6, scale: 0.96 }}
+          animate={{ opacity: 1, scale: 1 }}
+          transition={{ type: 'timing', duration: 500 }}
+          style={{ marginBottom: 14 }}
+        >
+          <BrandMark size="sm" glow="soft" />
+        </MotiView>
         <ActivityIndicator size="large" color={metriqfitTheme.colors.accent} />
       </View>
     );
@@ -59,6 +69,11 @@ export default function IndexPage() {
     return <Redirect href="/(onboarding)/identity" />;
   }
 
-  // Authenticated and completed onboarding - go to main app
+  // Authenticated and completed onboarding but no active plans yet.
+  if (onboardingStatus && onboardingStatus.hasCompletedOnboarding && !onboardingStatus.hasPlans) {
+    return <Redirect href="/(onboarding)/plan-generation" />;
+  }
+
+  // Authenticated and completed onboarding with plans - go to main app.
   return <Redirect href="/(tabs)/home" />;
 }

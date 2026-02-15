@@ -1,377 +1,287 @@
-import { useState } from 'react';
-import { StyleSheet, View, Text, ScrollView, Pressable, Platform } from 'react-native';
+import { useEffect, useMemo, useState } from 'react';
+import { ScrollView, StyleSheet, Text, View } from 'react-native';
 import { useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { MotiView } from 'moti';
+
 import { useTokens } from '../../../lib/theme';
-import { TabBarIcon } from '../../../components/navigation/TabBarIcon';
-import { GlassCard } from '../../../components/premium/GlassCard';
-import { RingIconButton } from '../../../components/common/RingIconButton';
-import { NextWorkoutCard } from '../../../components/workout/NextWorkoutCard';
-import { useTodaysWorkout, useActiveWorkoutPlan } from '../../../hooks/usePlan';
+import { PremiumBackground } from '../../../components/premium/PremiumBackground';
+import {
+  useActiveWorkoutPlan,
+  useLatestConsistency,
+  useTodayWorkoutScheduleEntry,
+  useWorkoutSchedule,
+} from '../../../hooks/usePlan';
+import { WorkoutWeekStrip } from '../../../components/workout/home/WorkoutWeekStrip';
+import { WorkoutQuickAccessRow } from '../../../components/workout/home/WorkoutQuickAccessRow';
+import { WorkoutTodayCard } from '../../../components/workout/home/WorkoutTodayCard';
+import { WorkoutInsightCard, type WorkoutInsight } from '../../../components/workout/home/WorkoutInsightCard';
+import { WorkoutToolsGrid } from '../../../components/workout/home/WorkoutToolsGrid';
+import {
+  trackWorkoutHomeQuickAccessTapped,
+  trackWorkoutHomeToolTapped,
+  trackWorkoutHomeViewed,
+  trackWorkoutInsightRendered,
+} from '../../../lib/analytics';
+
+function toDateString(date: Date) {
+  return date.toISOString().split('T')[0];
+}
+
+function startOfWeek(date: Date) {
+  const d = new Date(date);
+  const day = d.getDay();
+  const diff = day === 0 ? -6 : 1 - day;
+  d.setDate(d.getDate() + diff);
+  d.setHours(0, 0, 0, 0);
+  return d;
+}
+
+function formatScreenDate(date: Date) {
+  return date.toLocaleDateString('en-US', { weekday: 'long', month: 'short', day: 'numeric' });
+}
 
 export default function WorkoutHomeScreen() {
-  const { c, s, ty, r, glass, shadow, animation } = useTokens();
+  const { c, s, ty, animation } = useTokens();
   const router = useRouter();
   const insets = useSafeAreaInsets();
-  
-  // Fetch active plan to get status for all days
-  const { data: activePlan } = useActiveWorkoutPlan();
-  const { data: todaysWorkout } = useTodaysWorkout();
 
-  // State for selected day in calendar
-  const [selectedDate, setSelectedDate] = useState(new Date());
-
-  // Derive selected workout from the plan based on selectedDate
-  const selectedDayIndex = selectedDate.getDay(); // 0-6 (Sun-Sat)
-  // Convert JS Date (0=Sun, 1=Mon...) to Plan Day Number (1=Mon, 7=Sun) needed for lookup
-  const planDayNumber = selectedDayIndex === 0 ? 7 : selectedDayIndex;
-  
-  const selectedPlanDay = activePlan?.days?.find(d => d.day_number === planDayNumber);
-
-  // Quick Access with ring icons
-  const shortcuts = [
-    { label: 'My Plan', icon: 'calendar', route: '/(tabs)/workout/my-plan' },
-    { label: 'Programs', icon: 'barbell', route: '/(tabs)/workout/program-browser' },
-    { label: 'Exercises', icon: 'fitness', route: '/(tabs)/workout/exercise-library' },
-    { label: 'History', icon: 'stats-chart', route: '/(tabs)/workout/workout-history' },
-  ];
-
-  const today = new Date();
-  // Reset time for accurate date comparison
-  today.setHours(0, 0, 0, 0);
-  
-  const currentDayIndex = today.getDay();
-  const mondayOffset = currentDayIndex === 0 ? -6 : 1 - currentDayIndex;
-
-  const weekDays = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'].map((day, i) => {
-    const date = new Date(today);
-    date.setDate(today.getDate() + mondayOffset + i);
-    date.setHours(0, 0, 0, 0);
-
-    const isToday = date.getTime() === today.getTime();
-    const isSelected = selectedDate.getDate() === date.getDate() && selectedDate.getMonth() === date.getMonth();
-    const isPast = date.getTime() < today.getTime();
-    
-    // Find matching plan day (1=Mon ... 7=Sun)
-    const dayNum = i + 1;
-    const planDay = activePlan?.days?.find(d => d.day_number === dayNum);
-    
-    // Determine status
-    const isCompleted = planDay?.is_completed;
-    const isMissed = isPast && planDay && !isCompleted && !planDay.is_rest_day; // Assuming we want to track missed workouts (optional logic tweak depending on 'is_rest_day' field existence, inferred from context)
-    
-    // Correct 'isMissed' logic: if it was a workout day, it's in the past, and not completed.
-    // Note: The types check later might show if 'is_rest_day' exists. Use 'name' check if needed.
-    // For now, simple check: if it has exercises and is past and not completed.
-    const hasExercises = planDay?.exercises && planDay.exercises.length > 0;
-    const markedMissed = isPast && hasExercises && !isCompleted;
-
-    return {
-      day,
-      date: date.getDate(),
-      fullDate: date,
-      isToday,
-      isSelected,
-      isCompleted,
-      isMissed: markedMissed,
-      hasDot: hasExercises && !isCompleted && !markedMissed, // Show dot for future/today scheduled
-    };
+  const [selectedDate, setSelectedDate] = useState(() => {
+    const d = new Date();
+    d.setHours(0, 0, 0, 0);
+    return d;
   });
 
+  const { data: activePlan, isLoading: isPlanLoading } = useActiveWorkoutPlan();
+  const { data: todayEntry, isLoading: todayLoading } = useTodayWorkoutScheduleEntry();
+  const { data: latestConsistency } = useLatestConsistency();
+
+  const weekStart = useMemo(() => startOfWeek(selectedDate), [selectedDate]);
+  const weekEnd = useMemo(() => {
+    const end = new Date(weekStart);
+    end.setDate(weekStart.getDate() + 6);
+    return end;
+  }, [weekStart]);
+
+  const { data: weekSchedule } = useWorkoutSchedule(toDateString(weekStart), toDateString(weekEnd), {
+    enabled: !!activePlan,
+  });
+
+  useEffect(() => {
+    trackWorkoutHomeViewed({ has_plan: !!activePlan });
+  }, [activePlan]);
+
+  const today = useMemo(() => {
+    const t = new Date();
+    t.setHours(0, 0, 0, 0);
+    return t;
+  }, []);
+
+  const dayStrip = useMemo(() => {
+    return Array.from({ length: 7 }, (_, index) => {
+      const date = new Date(weekStart);
+      date.setDate(weekStart.getDate() + index);
+      const dateText = toDateString(date);
+      const schedule = (weekSchedule || []).find((entry) => entry.scheduled_date === dateText) || null;
+
+      return {
+        date,
+        dateText,
+        label: date.toLocaleDateString('en-US', { weekday: 'short' }),
+        dayNumber: date.getDate(),
+        isToday: date.getTime() === today.getTime(),
+        isSelected: date.getTime() === selectedDate.getTime(),
+        sessionType: (schedule?.session_type as 'workout' | 'rest' | 'active_recovery' | 'conditioning' | null) || null,
+        status: (schedule?.status as 'planned' | 'completed' | 'missed' | null) || null,
+        onPress: () => {
+          setSelectedDate(date);
+          if (schedule?.session_type === 'workout' && schedule.plan_day_id) {
+            router.push({
+              pathname: '/(tabs)/workout/day-preview',
+              params: { dayId: schedule.plan_day_id },
+            });
+          }
+        },
+      };
+    });
+  }, [weekStart, weekSchedule, selectedDate, today, router]);
+
+  const quickAccess = useMemo(
+    () => [
+      { label: 'My Plan', icon: 'calendar', route: '/(tabs)/workout/my-plan' },
+      { label: 'Programs', icon: 'barbell', route: '/(tabs)/workout/program-browser' },
+      { label: 'History', icon: 'stats-chart', route: '/(tabs)/workout/workout-history' },
+      { label: 'My Tools', icon: 'construct', route: '/(tabs)/workout/tools' },
+    ],
+    [],
+  );
+
+  const quickAccessItems = quickAccess.map((item) => ({
+    label: item.label,
+    icon: item.icon,
+    onPress: () => {
+      trackWorkoutHomeQuickAccessTapped({ action: item.label });
+      router.push(item.route as any);
+    },
+  }));
+
+  const toolTiles = useMemo(
+    () => [
+      { label: '1RM Calculator', icon: 'calculator', route: '/(tabs)/workout/calculators/one-rep-max' },
+      { label: 'Plate Calculator', icon: 'albums', route: '/(tabs)/workout/calculators/plate-calculator' },
+      { label: 'Program Builder', icon: 'build', route: '/(tabs)/workout/program-builder' },
+      { label: 'Import Plan', icon: 'cloud-upload', route: '/(tabs)/workout/import-plan' },
+      { label: 'Adaptive Coach', icon: 'sparkles', route: '/(tabs)/workout/adaptation' },
+      { label: 'Workout Notes', icon: 'document-text', route: '/(tabs)/workout/workout-notes' },
+    ],
+    [],
+  );
+
+  const toolItems = toolTiles.map((item) => ({
+    label: item.label,
+    icon: item.icon,
+    onPress: () => {
+      trackWorkoutHomeToolTapped({ action: item.label });
+      router.push(item.route as any);
+    },
+  }));
+
+  const insight = useMemo<WorkoutInsight>(() => {
+    const score = latestConsistency?.overall_score ?? 0;
+
+    if (!activePlan) {
+      return {
+        title: 'No active plan selected',
+        tip: 'Pick a program to align workouts, recovery, and progression this week.',
+        icon: 'compass',
+      };
+    }
+
+    if (!todayEntry) {
+      return {
+        title: 'Keep momentum this week',
+        tip: 'No session is scheduled today. Use Program Builder or Adapt to stay aligned.',
+        icon: 'flash',
+      };
+    }
+
+    if (todayEntry.session_type === 'workout') {
+      if (todayEntry.status === 'completed') {
+        return {
+          title: 'Session complete',
+          tip: 'Great execution today. Use Workout Notes to capture what worked best before your next lift.',
+          icon: 'checkmark-circle',
+        };
+      }
+
+      if (score >= 80) {
+        return {
+          title: 'Consistency is trending up',
+          tip: 'You are in a strong rhythm. Prioritize high-quality reps and stick to planned rest intervals.',
+          icon: 'trending-up',
+        };
+      }
+
+      return {
+        title: 'Priority: hit today’s session',
+        tip: 'Completing today’s workout is your highest-leverage action for weekly adherence.',
+        icon: 'barbell',
+      };
+    }
+
+    return {
+      title: 'Recovery day focus',
+      tip: 'Use mobility, hydration, and sleep quality to improve readiness for your next training day.',
+      icon: 'leaf',
+    };
+  }, [activePlan, latestConsistency?.overall_score, todayEntry]);
+
+  useEffect(() => {
+    trackWorkoutInsightRendered({ title: insight.title, icon: insight.icon });
+  }, [insight.icon, insight.title]);
+
   return (
-    <ScrollView
-      style={[styles.container, { backgroundColor: c.bg }]}
-      contentContainerStyle={[
-        styles.content,
-        { paddingTop: insets.top + s.lg, paddingBottom: 100 },
-      ]}
-    >
-      {/* Header */}
-      <MotiView
-        from={{ opacity: 0, translateY: -10 }}
-        animate={{ opacity: 1, translateY: 0 }}
-        transition={{ type: 'timing', duration: animation.duration.normal }}
-        style={[styles.header, { paddingHorizontal: s.xl }]}
+    <PremiumBackground variant="default">
+      <ScrollView
+        style={[styles.container, { backgroundColor: 'transparent' }]}
+        contentContainerStyle={[styles.content, { paddingTop: insets.top + s.lg, paddingBottom: 110 }]}
       >
-        <Text
-          style={[
-            styles.headerLabel,
-            {
+        <MotiView
+          from={{ opacity: 0, translateY: -10 }}
+          animate={{ opacity: 1, translateY: 0 }}
+          transition={{ type: 'timing', duration: animation.duration.normal }}
+          style={[styles.header, { paddingHorizontal: s.lg }]}
+        >
+          <Text
+            style={{
               color: c.textMuted,
               fontFamily: ty.body.familySemibold,
               fontSize: ty.sizes.xs,
               letterSpacing: 1.5,
-              marginBottom: s.xs,
-            },
-          ]}
-        >
-          YOUR TRAINING
-        </Text>
-        <Text
-          style={[
-            styles.title,
-            {
+            }}
+          >
+            WORKOUT HUB
+          </Text>
+          <Text
+            style={{
               color: c.text,
               fontFamily: ty.heading.family,
               fontSize: ty.sizes.h2,
-            },
-          ]}
-        >
-          Workout
-        </Text>
-      </MotiView>
+              letterSpacing: -0.5,
+              marginTop: s.xs,
+            }}
+          >
+            {formatScreenDate(today)}
+          </Text>
+        </MotiView>
 
-      {/* Tall Vertical Day Pills - Stadium Shape */}
-      <MotiView
-        from={{ opacity: 0, translateX: -20 }}
-        animate={{ opacity: 1, translateX: 0 }}
-        transition={{ type: 'timing', duration: animation.duration.normal, delay: 100 }}
-        style={[styles.dayPillsSection, { marginTop: s.lg, paddingLeft: s.lg }]}
-      >
-        <ScrollView
-          horizontal
-          showsHorizontalScrollIndicator={false}
-          contentContainerStyle={{ paddingRight: s.lg, gap: 10 }}
-        >
-          {weekDays.map((item, i) => {
-            // Priority of styles: Selected > Today > Completed/Missed > Default
-            let borderColor = `${c.border}60`;
-            let borderWidth = 1;
+        <View style={{ marginTop: s.lg }}>
+          <WorkoutWeekStrip days={dayStrip} />
+        </View>
 
-            if (item.isSelected) {
-               borderColor = c.primary; 
-               // Selected overrides others with a fill usually, but let's stick to the pill design
-            } else if (item.isCompleted) {
-              borderColor = c.primary; // Blue ring for completed
-            } else if (item.isMissed) {
-              borderColor = c.error || '#FF4444'; // Red ring for missed
-            } else if (item.isToday) {
-               borderColor = c.primary;
-            }
-
-            return (
-              <MotiView
-                key={`${item.day}-${i}`}
-                from={{ opacity: 0, scale: 0.9 }}
-                animate={{ opacity: 1, scale: 1 }}
-                transition={{ type: 'spring', damping: 15, delay: 150 + i * 50 }}
-              >
-                <Pressable
-                  onPress={() => setSelectedDate(item.fullDate)}
-                  style={({ pressed }) => [
-                    styles.dayPill,
-                    {
-                      // Fill logic: Today = Filled. Selected = Filled (Stronger). Others = Surface/Transparent
-                      backgroundColor: item.isSelected 
-                        ? c.primary 
-                        : item.isToday 
-                          ? `${c.primary}40` // Light blue fill for today
-                          : c.surface,
-                      
-                      borderRadius: 28,
-                      borderWidth: item.isSelected ? 0 : borderWidth,
-                      borderColor: borderColor,
-                      transform: [{ scale: pressed ? 0.95 : 1 }],
-                    },
-                    // Shadow for selected
-                    item.isSelected && {
-                      shadowColor: c.primary,
-                      shadowOffset: { width: 0, height: 4 },
-                      shadowOpacity: 0.3,
-                      shadowRadius: 8,
-                    }
-                  ]}
-                >
-                  <Text
-                    style={[
-                      styles.dayLabel,
-                      {
-                        color: item.isSelected ? c.bg : c.textMuted,
-                        fontFamily: ty.body.familySemibold,
-                        fontSize: 10,
-                        letterSpacing: 0.8,
-                      },
-                    ]}
-                  >
-                    {item.day.toUpperCase()}
-                  </Text>
-                  <Text
-                    style={[
-                      styles.dayDate,
-                      {
-                        color: item.isSelected ? c.bg : c.text,
-                        fontFamily: ty.heading.familySemibold,
-                        fontSize: 22,
-                        marginTop: 4,
-                      },
-                    ]}
-                  >
-                    {item.date}
-                  </Text>
-                  
-                  {/* Status Indicator Dot (if not selected/today and has functionality) */}
-                  {!item.isSelected && !item.isToday && (
-                    <View style={{ marginTop: 6, opacity: 0.8 }}>
-                       {item.isCompleted && (
-                         <View style={{ width: 6, height: 6, borderRadius: 3, backgroundColor: c.primary }} />
-                       )}
-                       {item.isMissed && (
-                         <View style={{ width: 6, height: 6, borderRadius: 3, backgroundColor: c.error || '#FF4444' }} />
-                       )}
-                       {item.hasDot && (
-                         <View style={{ width: 6, height: 6, borderRadius: 3, backgroundColor: c.textMuted }} />
-                       )}
-                    </View>
-                  )}
-                </Pressable>
-              </MotiView>
-            );
-          })}
-        </ScrollView>
-      </MotiView>
-
-      {/* Quick Access - Ring Icon Buttons */}
-      <MotiView
-        from={{ opacity: 0, translateY: 20 }}
-        animate={{ opacity: 1, translateY: 0 }}
-        transition={{ type: 'timing', duration: animation.duration.normal, delay: 200 }}
-        style={[styles.section, { marginTop: s.xl, paddingHorizontal: s.lg }]}
-      >
-        <Text
-          style={[
-            styles.sectionTitle,
-            {
+        <View style={{ marginTop: s.xl, paddingHorizontal: s.lg }}>
+          <Text
+            style={{
               color: c.textMuted,
               fontFamily: ty.body.familySemibold,
               fontSize: ty.sizes.sm,
               letterSpacing: 1.5,
               marginBottom: s.lg,
-            },
-          ]}
-        >
-          QUICK ACCESS
-        </Text>
-        <View style={styles.shortcuts}>
-          {shortcuts.map((item, index) => (
-            <RingIconButton
-              key={item.label}
-              icon={item.icon}
-              label={item.label}
-              onPress={() => router.push(item.route as any)}
-              size={60}
-              delay={300 + index * 80}
-            />
-          ))}
+            }}
+          >
+            QUICK ACCESS
+          </Text>
+          <WorkoutQuickAccessRow items={quickAccessItems} />
         </View>
-      </MotiView>
 
-      {/* Tools Section */}
-      <MotiView
-        from={{ opacity: 0, translateY: 20 }}
-        animate={{ opacity: 1, translateY: 0 }}
-        transition={{ type: 'timing', duration: animation.duration.normal, delay: 300 }}
-        style={[styles.section, { marginTop: s.xl, paddingHorizontal: s.lg }]}
-      >
-        <Text
-          style={[
-            styles.sectionTitle,
-            {
-              color: c.primary,
-              fontFamily: ty.body.familySemibold,
-              fontSize: ty.sizes.lg,
-              letterSpacing: 0.5,
-              marginBottom: s.md,
-            },
-          ]}
-        >
-          Tools
-        </Text>
-        <View style={{ flexDirection: 'row', gap: s.md }}>
-          {/* 1RM Calculator */}
-          <View style={{ flex: 1 }}>
-            <Pressable
-              onPress={() => router.push('/(tabs)/workout/calculators/one-rep-max')}
-              style={({ pressed }) => ({ opacity: pressed ? 0.8 : 1 })}
-            >
-              <GlassCard
-                glowEffect
-                intensity="medium"
-                style={{
-                  height: 100,
-                  borderWidth: 1,
-                  borderColor: c.primary + '40'
-                }}
-              >
-                <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center' }}>
-                  <TabBarIcon name="barbell-outline" color={c.primary} size={32} />
-                  <Text style={{
-                    color: c.text,
-                    marginTop: s.sm,
-                    fontFamily: ty.body.familyMedium,
-                    fontSize: ty.sizes.md,
-                    textAlign: 'center'
-                  }}>
-                    1RM
-                  </Text>
-                </View>
-              </GlassCard>
-            </Pressable>
-          </View>
-
-          {/* Plate Calculator */}
-          <View style={{ flex: 1 }}>
-            <Pressable
-              onPress={() => router.push('/(tabs)/workout/calculators/plate-calculator')}
-              style={({ pressed }) => ({ opacity: pressed ? 0.8 : 1 })}
-            >
-              <GlassCard
-                glowEffect
-                intensity="medium"
-                style={{
-                  height: 100,
-                  borderWidth: 1,
-                  borderColor: c.primary + '40'
-                }}
-              >
-                <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center' }}>
-                  <TabBarIcon name="calculator-outline" color={c.primary} size={32} />
-                  <Text style={{
-                    color: c.text,
-                    marginTop: s.sm,
-                    fontFamily: ty.body.familyMedium,
-                    fontSize: ty.sizes.md,
-                    textAlign: 'center'
-                  }}>
-                    Plate Calculator
-                  </Text>
-                </View>
-              </GlassCard>
-            </Pressable>
-          </View>
-        </View>
-      </MotiView>
-
-      {/* Selected Day's Workout Card */}
-      <View style={{ paddingHorizontal: s.lg, marginTop: s.xl }}>
-        <NextWorkoutCard
-          delay={400}
-          workoutName={selectedPlanDay?.name || 'Rest Day'}
-          workoutType={selectedPlanDay 
-            ? `Scheduled for ${selectedDate.toLocaleDateString('en-US', { weekday: 'long' })}` 
-            : 'No workout scheduled'}
-          duration={(selectedPlanDay as any)?.duration_minutes || 0}
-          onPress={() => {
-            if (selectedPlanDay?.id) {
-              router.push({
-                pathname: '/(tabs)/workout/day-preview',
-                params: { dayId: selectedPlanDay.id }
-              });
+        <View style={{ marginTop: s.xl, paddingHorizontal: s.lg }}>
+          <WorkoutTodayCard
+            loading={todayLoading || isPlanLoading}
+            entry={todayEntry as any}
+            onOpenWorkoutDay={(dayId) =>
+              router.push({ pathname: '/(tabs)/workout/day-preview', params: { dayId } })
             }
-          }}
-        />
-      </View>
-    </ScrollView >
+            onOpenWeek={() => router.push('/(tabs)/workout/my-plan')}
+          />
+        </View>
+
+        <View style={{ marginTop: s.lg, paddingHorizontal: s.lg }}>
+          <WorkoutInsightCard insight={insight} />
+        </View>
+
+        <View style={{ marginTop: s.lg, paddingHorizontal: s.lg }}>
+          <WorkoutToolsGrid items={toolItems} />
+        </View>
+
+        {!activePlan && !isPlanLoading && (
+          <View style={{ marginTop: s.lg, paddingHorizontal: s.lg }}>
+            <Text style={{ color: c.textMuted, fontFamily: ty.body.family, fontSize: ty.sizes.sm, textAlign: 'center' }}>
+              No active workout plan yet. Open Programs to choose one and start training.
+            </Text>
+          </View>
+        )}
+      </ScrollView>
+    </PremiumBackground>
   );
 }
 
@@ -383,25 +293,6 @@ const styles = StyleSheet.create({
     flexGrow: 1,
   },
   header: {
-    marginBottom: 8,
-  },
-  headerLabel: {},
-  title: {
-    letterSpacing: -0.5,
-  },
-  dayPillsSection: {},
-  dayPill: {
-    width: 52,
-    height: 88,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  dayLabel: {},
-  dayDate: {},
-  section: {},
-  sectionTitle: {},
-  shortcuts: {
-    flexDirection: 'row',
-    justifyContent: 'space-around',
+    marginBottom: 4,
   },
 });

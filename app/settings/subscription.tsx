@@ -1,5 +1,5 @@
 import React from 'react';
-import { StyleSheet, View, Text, ScrollView, Pressable } from 'react-native';
+import { StyleSheet, View, Text, ScrollView, Pressable, Linking, Alert, ActivityIndicator, Platform } from 'react-native';
 import { useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { LinearGradient } from 'expo-linear-gradient';
@@ -7,13 +7,37 @@ import { LinearGradient } from 'expo-linear-gradient';
 import { useTokens } from '../../lib/theme';
 import { TabBarIcon } from '../../components/navigation/TabBarIcon';
 import { GlassCard } from '../../components/premium/GlassCard';
+import { useSubscriptionUI } from '../../hooks/useSubscription';
 
 export default function SubscriptionScreen() {
     const { c, s, ty, r, shadow } = useTokens();
     const router = useRouter();
     const insets = useSafeAreaInsets();
 
-    const isElite = true;
+    const { isElite, expiresAt, restore, isRestoring } = useSubscriptionUI();
+
+    const renewalLabel = expiresAt
+        ? `Renews ${new Date(expiresAt).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}`
+        : isElite ? 'Active' : 'Not subscribed';
+
+    const handleManageSubscription = async () => {
+        const url = Platform.OS === 'ios'
+            ? 'https://apps.apple.com/account/subscriptions'
+            : 'https://play.google.com/store/account/subscriptions';
+        const canOpen = await Linking.canOpenURL(url);
+        if (canOpen) {
+            Linking.openURL(url);
+        } else {
+            Alert.alert('Subscription Management', 'Please manage your subscription through your device\'s app store settings.');
+        }
+    };
+
+    const handleRestorePurchases = () => {
+        restore(undefined, {
+            onSuccess: () => Alert.alert('Success', 'Purchases restored successfully!'),
+            onError: (err: any) => Alert.alert('Restore Failed', err?.message || 'Could not restore purchases.'),
+        });
+    };
 
     return (
         <View style={[styles.container, { backgroundColor: c.bg }]}>
@@ -61,7 +85,7 @@ export default function SubscriptionScreen() {
                                         MetriqFit Elite
                                     </Text>
                                     <Text style={{ color: c.textMuted, fontFamily: ty.body.family, fontSize: 14, marginTop: 4 }}>
-                                        Renews Jan 25, 2026
+                                        {renewalLabel}
                                     </Text>
                                 </View>
                                 <TabBarIcon name="diamond" color={c.primary} size={32} />
@@ -92,17 +116,22 @@ export default function SubscriptionScreen() {
                 <View style={{ marginTop: s.xl, gap: 16 }}>
                     <Pressable
                         style={[styles.actionButton, { backgroundColor: c.surface2, borderRadius: r.md }]}
-                        onPress={() => { }}
+                        onPress={handleManageSubscription}
                     >
                         <Text style={{ color: c.text, fontFamily: ty.body.familySemibold }}>Manage Subscription</Text>
                         <TabBarIcon name="open-outline" color={c.textMuted} size={16} />
                     </Pressable>
 
                     <Pressable
-                        style={[styles.actionButton, { backgroundColor: 'transparent', borderWidth: 1, borderColor: c.border, borderRadius: r.md }]}
-                        onPress={() => { }}
+                        style={[styles.actionButton, { backgroundColor: 'transparent', borderWidth: 1, borderColor: c.border, borderRadius: r.md, opacity: isRestoring ? 0.6 : 1 }]}
+                        onPress={handleRestorePurchases}
+                        disabled={isRestoring}
                     >
-                        <Text style={{ color: c.textMuted, fontFamily: ty.body.family }}>Restore Purchases</Text>
+                        {isRestoring ? (
+                            <ActivityIndicator color={c.textMuted} size="small" />
+                        ) : (
+                            <Text style={{ color: c.textMuted, fontFamily: ty.body.family }}>Restore Purchases</Text>
+                        )}
                     </Pressable>
                 </View>
 

@@ -13,6 +13,10 @@ export type Weekday = 'mon' | 'tue' | 'wed' | 'thu' | 'fri' | 'sat' | 'sun' | 'n
 export type Injury = 'shoulders' | 'knees' | 'back' | 'wrists' | 'ankles' | 'hips' | 'elbows' | 'neck' | 'other' | 'none';
 export type AllergyExclusion = 'gluten' | 'dairy' | 'peanuts' | 'soy' | 'eggs' | 'shellfish' | 'fish' | 'other' | 'none';
 export type RefusedFood = 'pork' | 'beef' | 'chicken' | 'turkey' | 'seafood' | 'rice' | 'pasta' | 'potatoes' | 'oats' | 'cheese' | 'milk' | 'yogurt' | 'whey' | 'nuts' | 'other';
+export type ProgressionPreference = 'linear_overload' | 'undulating' | 'autoregulated' | 'no_preference';
+export type SessionEmphasis = 'strength' | 'hypertrophy' | 'balanced' | 'conditioning' | 'no_preference';
+export type PrepDiscipline = 'bodybuilding' | 'powerlifting';
+export type PrepPhase = 'cut' | 'bulk';
 
 export interface OnboardingData {
   first_name: string | null;
@@ -39,6 +43,14 @@ export interface OnboardingData {
   injuries_other_text: string | null;
   equipment_access: EquipmentAccess | null;
   equipment_other_text: string | null;
+  preferred_split_family: string | null;
+  technique_preferences: string[];
+  progression_preference: ProgressionPreference | null;
+  session_emphasis: SessionEmphasis | null;
+  prep_mode_enabled: boolean;
+  prep_discipline: PrepDiscipline | null;
+  prep_phase: PrepPhase | null;
+  prep_auto_adjust_enabled: boolean;
   dietary_preference: DietaryPreference | null;
   dietary_preference_other_text: string | null;
   allergies_exclusions: AllergyExclusion[];
@@ -83,6 +95,14 @@ const defaultData: OnboardingData = {
   injuries_other_text: null,
   equipment_access: null,
   equipment_other_text: null,
+  preferred_split_family: null,
+  technique_preferences: [],
+  progression_preference: null,
+  session_emphasis: null,
+  prep_mode_enabled: false,
+  prep_discipline: null,
+  prep_phase: null,
+  prep_auto_adjust_enabled: false,
   dietary_preference: null,
   dietary_preference_other_text: null,
   allergies_exclusions: [],

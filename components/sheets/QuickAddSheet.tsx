@@ -8,6 +8,7 @@ import {
   Animated,
   Dimensions,
   Platform,
+  Alert,
 } from 'react-native';
 import { useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -16,6 +17,7 @@ import * as Haptics from 'expo-haptics';
 import { useTokens } from '../../lib/theme';
 import { TabBarIcon } from '../../components/navigation/TabBarIcon';
 import { QUICK_ADD_ACTIONS } from '../../lib/navigation/routes';
+import { useFeatureAccess } from '../../hooks/useSubscription';
 import {
   trackQuickAddActionSelected,
   trackQuickAddDismissed,
@@ -34,9 +36,27 @@ export function QuickAddSheet({ isVisible, onClose }: QuickAddSheetProps) {
   const { c, s, r, ty, state } = useTokens();
   const router = useRouter();
   const insets = useSafeAreaInsets();
+  const photoScanAccess = useFeatureAccess('food_photo_scan');
+  const barcodeScanAccess = useFeatureAccess('barcode_scan');
 
   const translateY = useRef(new Animated.Value(SHEET_HEIGHT)).current;
   const backdropOpacity = useRef(new Animated.Value(0)).current;
+
+  const getEliteActionAccess = useCallback((actionId: string) => {
+    if (actionId === 'scan_meal_photo') {
+      return {
+        hasAccess: photoScanAccess.hasAccess,
+        isLoading: photoScanAccess.isLoading,
+      };
+    }
+    if (actionId === 'scan_barcode') {
+      return {
+        hasAccess: barcodeScanAccess.hasAccess,
+        isLoading: barcodeScanAccess.isLoading,
+      };
+    }
+    return { hasAccess: true, isLoading: false };
+  }, [photoScanAccess.hasAccess, photoScanAccess.isLoading, barcodeScanAccess.hasAccess, barcodeScanAccess.isLoading]);
 
   useEffect(() => {
     if (__DEV__) {
@@ -47,11 +67,6 @@ export function QuickAddSheet({ isVisible, onClose }: QuickAddSheetProps) {
           console.error(`[QuickAdd] Duplicate action ID found: ${action.id}`);
         }
         ids.add(action.id);
-
-        // VALIDATION: Ensure route exists (basic check)
-        if (!action.route) {
-          console.error(`[QuickAdd] Action ${action.id} has no route defined`);
-        }
       });
     }
   }, []); // Run once on mount for dev validation
@@ -95,6 +110,24 @@ export function QuickAddSheet({ isVisible, onClose }: QuickAddSheetProps) {
 
   const handleActionPress = useCallback(async (action: typeof QUICK_ADD_ACTIONS[number]) => {
     try {
+      const access = getEliteActionAccess(action.id);
+
+      if (action.isElite && access.isLoading) {
+        return;
+      }
+
+      if (action.isElite && !access.hasAccess) {
+        Alert.alert(
+          'MetriqFit Elite Required',
+          `${action.label} is available for Elite members. Upgrade to unlock this feature.`,
+          [
+            { text: 'Not now', style: 'cancel' },
+            { text: 'Upgrade', onPress: () => router.push('/settings/subscription') },
+          ]
+        );
+        return;
+      }
+
       if (Platform.OS !== 'web') {
         await Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
       }
@@ -114,7 +147,7 @@ export function QuickAddSheet({ isVisible, onClose }: QuickAddSheetProps) {
       console.error('[QuickAdd] Action failed:', error);
       onClose(); // Ensure we close even if tracking fails
     }
-  }, [onClose, router]);
+  }, [getEliteActionAccess, onClose, router]);
 
   if (!isVisible) return null;
 
@@ -184,81 +217,90 @@ export function QuickAddSheet({ isVisible, onClose }: QuickAddSheetProps) {
         {/* Actions List */}
         <View style={[styles.actionsList, { paddingHorizontal: s.lg }]}>
           {QUICK_ADD_ACTIONS.map((action, index) => (
-            <Pressable
-              key={action.id}
-              style={({ pressed }) => [
-                styles.actionItem,
-                {
-                  backgroundColor: pressed ? state.pressed : 'transparent',
-                  borderRadius: r.md,
-                  marginBottom: index === QUICK_ADD_ACTIONS.length - 1 ? 0 : s.xs,
-                },
-              ]}
-              onPress={() => handleActionPress(action)}
-              accessibilityLabel={action.label}
-              accessibilityHint={action.description}
-              accessibilityRole="button"
-            >
-              <View
-                style={[
-                  styles.actionIcon,
-                  {
-                    backgroundColor: c.surface2,
-                    borderRadius: r.sm,
-                  }
-                ]}
-              >
-                <TabBarIcon name={action.icon} color={c.primary} size={22} />
-              </View>
-              <View style={styles.actionText}>
-                <Text
-                  style={[
-                    styles.actionLabel,
+            (() => {
+              const access = getEliteActionAccess(action.id);
+              const isDisabled = action.isElite && access.isLoading;
+
+              return (
+                <Pressable
+                  key={action.id}
+                  style={({ pressed }) => [
+                    styles.actionItem,
                     {
-                      color: c.text,
-                      fontFamily: ty.body.familyMedium,
-                      fontSize: ty.sizes.md,
-                    }
+                      opacity: isDisabled ? 0.55 : 1,
+                      backgroundColor: pressed ? state.pressed : 'transparent',
+                      borderRadius: r.md,
+                      marginBottom: index === QUICK_ADD_ACTIONS.length - 1 ? 0 : s.xs,
+                    },
                   ]}
+                  disabled={isDisabled}
+                  onPress={() => handleActionPress(action)}
+                  accessibilityLabel={action.label}
+                  accessibilityHint={action.description}
+                  accessibilityRole="button"
                 >
-                  {action.label}
-                </Text>
-                <Text
-                  style={[
-                    styles.actionDescription,
-                    {
-                      color: c.textMuted,
-                      fontFamily: ty.body.family,
-                      fontSize: ty.sizes.sm,
-                    }
-                  ]}
-                >
-                  {action.description}
-                </Text>
-              </View>
-              {action.isElite && (
-                <View
-                  style={[
-                    styles.eliteBadge,
-                    { backgroundColor: c.accent2 }
-                  ]}
-                >
-                  <Text
+                  <View
                     style={[
-                      styles.eliteText,
+                      styles.actionIcon,
                       {
-                        color: c.text,
-                        fontFamily: ty.body.familySemibold,
-                        fontSize: ty.sizes.xs,
+                        backgroundColor: c.surface2,
+                        borderRadius: r.sm,
                       }
                     ]}
                   >
-                    ELITE
-                  </Text>
-                </View>
-              )}
-              <TabBarIcon name="chevron-forward" color={c.textSubtle} size={18} />
-            </Pressable>
+                    <TabBarIcon name={action.icon} color={c.primary} size={22} />
+                  </View>
+                  <View style={styles.actionText}>
+                    <Text
+                      style={[
+                        styles.actionLabel,
+                        {
+                          color: c.text,
+                          fontFamily: ty.body.familyMedium,
+                          fontSize: ty.sizes.md,
+                        }
+                      ]}
+                    >
+                      {action.label}
+                    </Text>
+                    <Text
+                      style={[
+                        styles.actionDescription,
+                        {
+                          color: c.textMuted,
+                          fontFamily: ty.body.family,
+                          fontSize: ty.sizes.sm,
+                        }
+                      ]}
+                    >
+                      {action.description}
+                    </Text>
+                  </View>
+                  {action.isElite && (
+                    <View
+                      style={[
+                        styles.eliteBadge,
+                        { backgroundColor: c.accent2 }
+                      ]}
+                    >
+                      <Text
+                        style={[
+                          styles.eliteText,
+                          {
+                            color: c.text,
+                            fontFamily: ty.body.familySemibold,
+                            fontSize: ty.sizes.xs,
+                          }
+                        ]}
+                      >
+                        ELITE
+                      </Text>
+                    </View>
+                  )}
+                  <TabBarIcon name="chevron-forward" color={c.textSubtle} size={18} />
+                </Pressable>
+              );
+            })()
           ))}
         </View>
 
@@ -344,4 +386,3 @@ const styles = StyleSheet.create({
     letterSpacing: 0.5,
   },
 });
-

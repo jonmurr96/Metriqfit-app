@@ -1,8 +1,8 @@
-import { StyleSheet, View, Text, Pressable, ScrollView, TextInput, ActivityIndicator, Platform } from 'react-native';
+import { StyleSheet, View, Text, Pressable, ScrollView, TextInput, ActivityIndicator, Platform, Alert } from 'react-native';
 import { useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useState } from 'react';
-import { useQuery } from '@tanstack/react-query';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { LinearGradient } from 'expo-linear-gradient'; // Added LinearGradient
 
 import { useTokens } from '../../../lib/theme';
@@ -252,7 +252,7 @@ export default function FoodSearchScreen() {
                     marginTop: s.md,
                   }}
                 >
-                  No foods found for "{searchQuery}"
+                  {`No foods found for "${searchQuery}"`}
                 </Text>
               </View>
             )}
@@ -269,6 +269,7 @@ function RecipeList() {
   const { c, s, ty, r } = useTokens();
   const router = useRouter();
   const { user } = useAuth();
+  const queryClient = useQueryClient();
 
   // Inline fetch for simplicity (should move to hook)
   const { data: recipes, isLoading } = useQuery({
@@ -280,6 +281,38 @@ function RecipeList() {
     },
     enabled: !!user
   });
+
+  const logRecipeMutation = useMutation({
+    mutationFn: async ({
+      recipe,
+      mealSlot,
+    }: {
+      recipe: any;
+      mealSlot: 'breakfast' | 'lunch' | 'dinner' | 'snack';
+    }) => {
+      const { logRecipeAsMeal } = await import('../../../services/recipeService');
+      if (!user) throw new Error('Please sign in again.');
+      return logRecipeAsMeal(user.id, recipe, mealSlot, 1.0);
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['nutrition'] });
+      Alert.alert('Recipe logged', 'Recipe added to your meal log for today.');
+      router.push('/(tabs)/nutrition');
+    },
+    onError: (error: any) => {
+      Alert.alert('Log failed', error?.message || 'Could not log recipe right now.');
+    },
+  });
+
+  const handleLogRecipe = (recipe: any) => {
+    Alert.alert('Log Recipe', `Add "${recipe.name}" to which meal?`, [
+      { text: 'Breakfast', onPress: () => logRecipeMutation.mutate({ recipe, mealSlot: 'breakfast' }) },
+      { text: 'Lunch', onPress: () => logRecipeMutation.mutate({ recipe, mealSlot: 'lunch' }) },
+      { text: 'Dinner', onPress: () => logRecipeMutation.mutate({ recipe, mealSlot: 'dinner' }) },
+      { text: 'Snack', onPress: () => logRecipeMutation.mutate({ recipe, mealSlot: 'snack' }) },
+      { text: 'Cancel', style: 'cancel' },
+    ]);
+  };
 
   return (
     <ScrollView contentContainerStyle={{ padding: s.lg, paddingBottom: 100 }}>
@@ -294,16 +327,43 @@ function RecipeList() {
         <Text style={{ color: c.bg, fontFamily: ty.body.familySemibold, marginLeft: 8 }}>Create New Recipe</Text>
       </Pressable>
 
+      <Pressable
+        style={{
+          flexDirection: 'row', alignItems: 'center', justifyContent: 'center',
+          borderWidth: 1, borderColor: c.border, padding: 12, borderRadius: r.md, marginBottom: s.lg
+        }}
+        onPress={() => router.push('/(tabs)/nutrition/recipe-import')}
+      >
+        <TabBarIcon name="link-outline" color={c.text} size={18} />
+        <Text style={{ color: c.text, fontFamily: ty.body.familySemibold, marginLeft: 8 }}>Import URL</Text>
+      </Pressable>
+
       {isLoading ? <ActivityIndicator color={c.primary} /> : (
         recipes?.map(recipe => (
           <GlassCard key={recipe.id} style={{ marginBottom: s.sm }}>
             <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
               <View>
-                <Text style={{ color: c.text, fontFamily: ty.body.familySemibold }}>{recipe.name}</Text>
+                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+                  <Text style={{ color: c.text, fontFamily: ty.body.familySemibold }}>{recipe.name}</Text>
+                  <View
+                    style={{
+                      paddingHorizontal: 8,
+                      paddingVertical: 2,
+                      borderRadius: 999,
+                      borderWidth: 1,
+                      borderColor: c.border,
+                    }}
+                  >
+                    <Text style={{ color: c.textMuted, fontSize: 10, textTransform: 'capitalize' }}>
+                      {recipe.source_type === 'manual' ? 'Manual' : recipe.source_type?.replace('_', ' ') || 'Imported'}
+                    </Text>
+                  </View>
+                </View>
                 <Text style={{ color: c.textMuted, fontSize: 12 }}>{recipe.ingredients?.length || 0} ingredients</Text>
               </View>
               <Pressable
-                onPress={() => { }} // TODO: View/Log recipe
+                onPress={() => handleLogRecipe(recipe)}
+                disabled={logRecipeMutation.isPending}
                 style={{ padding: 8, backgroundColor: c.surface2, borderRadius: 16 }}
               >
                 <TabBarIcon name="add" color={c.primary} size={20} />

@@ -3,8 +3,9 @@ import { View, Text, Pressable, StyleSheet } from 'react-native';
 import { router } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { metriqfitTheme } from '../../../lib/theme';
+import { BrandMark } from '../../branding/BrandMark';
 
-const { colors: c, spacing: s, radius: r } = metriqfitTheme;
+const { colors: c, spacing: s } = metriqfitTheme;
 
 interface PremiumHeaderProps {
   currentStep: number;
@@ -43,6 +44,7 @@ export function PremiumHeader({ currentStep, totalSteps, showBack = true }: Prem
       </View>
 
       <View style={styles.stepIndicator}>
+        <BrandMark size="xs" glow="none" />
         <Text style={styles.stepText}>{currentStep}/{totalSteps}</Text>
       </View>
     </View>
@@ -96,8 +98,11 @@ const styles = StyleSheet.create({
     boxShadow: `0 0 15px ${c.primary}, 0 0 30px ${c.primary}`,
   } as any,
   stepIndicator: {
-    minWidth: 40,
-    alignItems: 'flex-end',
+    minWidth: 80,
+    alignItems: 'center',
+    flexDirection: 'row',
+    justifyContent: 'flex-end',
+    gap: 6,
   },
   stepText: {
     fontSize: 12,

@@ -1,18 +1,23 @@
-import { Tabs } from 'expo-router';
-import { StyleSheet, View, Pressable, Platform } from 'react-native';
+import { Redirect, Tabs, useSegments } from 'expo-router';
+import { StyleSheet, View, Pressable, Platform, ActivityIndicator } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { useState, useCallback } from 'react';
+import { useState, useCallback, useEffect } from 'react';
 import * as Haptics from 'expo-haptics';
 
 import { useTokens } from '../../lib/theme';
 import { TabBarIcon } from '../../components/navigation/TabBarIcon';
 import { QuickAddSheet } from '../../components/sheets/QuickAddSheet';
 import { trackQuickAddOpen } from '../../lib/analytics';
+import { useAuth, checkOnboardingStatus } from '../../lib/auth';
 
 export default function TabLayout() {
   const { c } = useTokens();
   const insets = useSafeAreaInsets();
+  const segments = useSegments();
+  const { user, isAuthenticated, loading: authLoading } = useAuth();
   const [isQuickAddOpen, setIsQuickAddOpen] = useState(false);
+  const [isCheckingOnboarding, setIsCheckingOnboarding] = useState(true);
+  const [redirectTo, setRedirectTo] = useState<string | null>(null);
 
   const handleQuickAddPress = useCallback(async () => {
     if (Platform.OS !== 'web') {
@@ -26,15 +31,84 @@ export default function TabLayout() {
     setIsQuickAddOpen(false);
   }, []);
 
+  // Onboarding guard: redirect users who haven't completed onboarding
+  useEffect(() => {
+    let cancelled = false;
+
+    async function guardOnboarding() {
+      if (authLoading) {
+        return;
+      }
+
+      if (!isAuthenticated || !user) {
+        if (!cancelled) {
+          setRedirectTo('/(auth)/sign-in');
+          setIsCheckingOnboarding(false);
+        }
+        return;
+      }
+
+      try {
+        const status = await checkOnboardingStatus(user.id);
+        if (!cancelled && !status.hasCompletedOnboarding) {
+          setRedirectTo('/(onboarding)/identity');
+          setIsCheckingOnboarding(false);
+          return;
+        }
+        if (!cancelled && status.hasCompletedOnboarding && !status.hasPlans) {
+          setRedirectTo('/(onboarding)/plan-generation');
+          setIsCheckingOnboarding(false);
+          return;
+        }
+      } catch (error) {
+        console.error('Onboarding guard error:', error);
+        // If we can't verify, let them through (fail open for UX)
+      }
+
+      if (!cancelled) {
+        setRedirectTo(null);
+        setIsCheckingOnboarding(false);
+      }
+    }
+
+    guardOnboarding();
+    return () => { cancelled = true; };
+  }, [authLoading, isAuthenticated, user]);
+
+  const activeTabSegment = segments[1];
+  const activeNestedSegment = segments[2];
+  const hideQuickAddFab =
+    activeTabSegment === 'workout' &&
+    !!activeNestedSegment;
+
+  useEffect(() => {
+    if (hideQuickAddFab && isQuickAddOpen) {
+      setIsQuickAddOpen(false);
+    }
+  }, [hideQuickAddFab, isQuickAddOpen]);
+
+  // Show loading while checking onboarding status
+  if (isCheckingOnboarding) {
+    return (
+      <View style={{ flex: 1, backgroundColor: c.bg, justifyContent: 'center', alignItems: 'center' }}>
+        <ActivityIndicator color={c.primary} size="large" />
+      </View>
+    );
+  }
+
+  if (redirectTo) {
+    return <Redirect href={redirectTo as any} />;
+  }
+
   const tabBarHeight = 70 + insets.bottom;
 
   return (
     <View style={{ flex: 1, backgroundColor: c.bg }}>
       <Tabs
         initialRouteName="home"
-        sceneContainerStyle={{ flex: 1, backgroundColor: c.bg }}
         screenOptions={{
           headerShown: false,
+          sceneStyle: { backgroundColor: c.bg },
           tabBarActiveTintColor: c.primary,
           tabBarInactiveTintColor: c.textSubtle,
           tabBarShowLabel: true,
@@ -120,49 +194,43 @@ export default function TabLayout() {
             ),
           }}
         />
-        {/* Hide placeholder - not needed as a visible tab */}
-        <Tabs.Screen
-          name="quick-add-placeholder"
-          options={{
-            href: null,
-          }}
-        />
       </Tabs>
 
-      {/* Floating FAB positioned absolutely above the tab bar */}
-      <View
-        style={[
-          styles.fabWrapper,
-          {
-            bottom: tabBarHeight + 5,
-          }
-        ]}
-        pointerEvents="box-none"
-      >
-        <Pressable
+      {!hideQuickAddFab && (
+        <View
           style={[
-            styles.fab,
+            styles.fabWrapper,
             {
-              backgroundColor: c.primary,
-              borderColor: c.bg,
-              borderWidth: 4,
-              shadowColor: c.primary,
-              shadowOffset: { width: 0, height: 0 },
-              shadowOpacity: 0.6,
-              shadowRadius: 16,
-            },
-            Platform.OS === 'web' && {
-              boxShadow: `0 0 20px ${c.primary}99, 0 0 40px ${c.primary}40`,
-            } as any,
+              bottom: tabBarHeight + 5,
+            }
           ]}
-          onPress={handleQuickAddPress}
-          accessibilityLabel="Quick Add"
-          accessibilityHint="Opens quick add menu to log food, water, weight, or start a workout"
-          accessibilityRole="button"
+          pointerEvents="box-none"
         >
-          <TabBarIcon name="add" color={c.bg} size={32} />
-        </Pressable>
-      </View>
+          <Pressable
+            style={[
+              styles.fab,
+              {
+                backgroundColor: c.primary,
+                borderColor: c.bg,
+                borderWidth: 4,
+                shadowColor: c.primary,
+                shadowOffset: { width: 0, height: 0 },
+                shadowOpacity: 0.6,
+                shadowRadius: 16,
+              },
+              Platform.OS === 'web' && {
+                boxShadow: `0 0 20px ${c.primary}99, 0 0 40px ${c.primary}40`,
+              } as any,
+            ]}
+            onPress={handleQuickAddPress}
+            accessibilityLabel="Quick Add"
+            accessibilityHint="Opens quick add menu to log food, water, weight, or start a workout"
+            accessibilityRole="button"
+          >
+            <TabBarIcon name="add" color={c.bg} size={32} />
+          </Pressable>
+        </View>
+      )}
 
       {/* Quick Add Bottom Sheet */}
       <QuickAddSheet

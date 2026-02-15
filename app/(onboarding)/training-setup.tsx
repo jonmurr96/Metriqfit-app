@@ -5,7 +5,18 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { MotiView } from 'moti';
 import { Ionicons } from '@expo/vector-icons';
 import { metriqfitTheme } from '../../lib/theme';
-import { useOnboarding, ExperienceLevel, EquipmentAccess, MinutesPerWorkout, Weekday, Injury } from '../../lib/onboarding';
+import {
+  useOnboarding,
+  ExperienceLevel,
+  EquipmentAccess,
+  MinutesPerWorkout,
+  Weekday,
+  Injury,
+  ProgressionPreference,
+  SessionEmphasis,
+  resolvePreferredDaysOff,
+  formatWeekday,
+} from '../../lib/onboarding';
 import {
   PremiumHeader,
   PremiumTitle,
@@ -64,8 +75,47 @@ const equipmentOptions: { value: EquipmentAccess; label: string; icon: keyof typ
   { value: 'other', label: 'Other', icon: 'ellipsis-horizontal-outline', color: 'teal' },
 ];
 
+const splitFamilyOptions = [
+  { value: 'no_preference', label: 'No Preference' },
+  { value: 'bro_split_5', label: 'Bro Split (5)' },
+  { value: 'arnold_split_6', label: 'Arnold Split (6)' },
+  { value: 'ppl_3', label: 'PPL (3)' },
+  { value: 'ppl_6', label: 'PPL (6)' },
+  { value: 'upper_lower_4', label: 'Upper/Lower (4)' },
+  { value: 'phul_4', label: 'PHUL (4)' },
+  { value: 'phat_5', label: 'PHAT (5)' },
+  { value: 'full_body_beginner_3', label: 'Full Body (3)' },
+];
+
+const techniquePreferenceOptions = [
+  { value: 'none', label: 'No preference' },
+  { value: 'superset', label: 'Supersets' },
+  { value: 'drop_set', label: 'Drop sets' },
+  { value: 'pause_reps', label: 'Pause reps' },
+  { value: 'rest_pause', label: 'Rest-pause' },
+  { value: 'amrap', label: 'AMRAP' },
+  { value: 'tempo', label: 'Tempo work' },
+];
+
+const progressionOptions: { value: ProgressionPreference; label: string; description: string; icon: keyof typeof Ionicons.glyphMap; color: keyof typeof o.iconColors }[] = [
+  { value: 'linear_overload', label: 'Linear Overload', description: 'Simple week-to-week progression', icon: 'trending-up-outline', color: 'teal' },
+  { value: 'undulating', label: 'Undulating', description: 'Rotate intensity across the week', icon: 'analytics-outline', color: 'cyan' },
+  { value: 'autoregulated', label: 'Auto-Regulated', description: 'Adjust by readiness and performance', icon: 'pulse-outline', color: 'purple' },
+  { value: 'no_preference', label: 'No Preference', description: 'Let AI choose best fit', icon: 'options-outline', color: 'yellow' },
+];
+
+const sessionEmphasisOptions: { value: SessionEmphasis; label: string; description: string; icon: keyof typeof Ionicons.glyphMap; color: keyof typeof o.iconColors }[] = [
+  { value: 'strength', label: 'Strength', description: 'Heavier sets and lower reps', icon: 'barbell-outline', color: 'orange' },
+  { value: 'hypertrophy', label: 'Hypertrophy', description: 'Muscle growth and volume focus', icon: 'body-outline', color: 'blue' },
+  { value: 'balanced', label: 'Balanced', description: 'Blend strength and hypertrophy', icon: 'git-compare-outline', color: 'green' },
+  { value: 'conditioning', label: 'Conditioning', description: 'Work capacity and cardio support', icon: 'walk-outline', color: 'teal' },
+  { value: 'no_preference', label: 'No Preference', description: 'Let AI decide emphasis', icon: 'options-outline', color: 'yellow' },
+];
+
 export default function TrainingSetupScreen() {
   const { data, updateData, setCurrentStep } = useOnboarding();
+  const dayOffResolution = resolvePreferredDaysOff(data.training_days_per_week, data.preferred_days_off);
+  const hasDroppedDaysOff = dayOffResolution.droppedDaysOff.length > 0;
 
   const isValid =
     data.training_days_per_week &&
@@ -78,6 +128,9 @@ export default function TrainingSetupScreen() {
 
   const handleContinue = () => {
     if (isValid) {
+      updateData({
+        preferred_days_off: dayOffResolution.resolvedDaysOff as Weekday[],
+      });
       setCurrentStep(5);
       router.push('/(onboarding)/nutrition-prefs');
     }
@@ -130,7 +183,7 @@ export default function TrainingSetupScreen() {
             />
 
             <View style={styles.inputGroup}>
-              <Text style={styles.label}>Days you can train per week</Text>
+              <Text style={styles.label}>Days you can train per week (exact schedule)</Text>
               <View style={styles.daysRow}>
                 {daysPerWeekOptions.map((day) => (
                   <Pressable
@@ -186,6 +239,30 @@ export default function TrainingSetupScreen() {
               onSelect={handleDaysOffSelect}
               noneOption="no_preference"
             />
+
+            {hasDroppedDaysOff ? (
+              <View style={styles.warningBox}>
+                <Ionicons name="warning-outline" size={16} color={o.iconColors.orange} />
+                <Text style={styles.warningText}>
+                  {dayOffResolution.warning}
+                </Text>
+              </View>
+            ) : null}
+
+            {data.training_days_per_week ? (
+              <View style={styles.infoBox}>
+                <Ionicons name="calendar-outline" size={16} color={o.iconColors.cyan} />
+                <Text style={styles.infoText}>
+                  Exact schedule: {data.training_days_per_week} training day(s)/week.
+                  {dayOffResolution.resolvedDaysOff.length
+                    ? ` Days off kept: ${dayOffResolution.resolvedDaysOff.map(formatWeekday).join(', ')}.`
+                    : ' No fixed days off selected.'}
+                  {data.preferred_split_family && data.preferred_split_family !== 'no_preference'
+                    ? ` Preferred split: ${data.preferred_split_family.replaceAll('_', ' ')}.`
+                    : ''}
+                </Text>
+              </View>
+            ) : null}
 
             <View style={styles.inputGroup}>
               <Text style={styles.label}>Experience level</Text>
@@ -249,6 +326,63 @@ export default function TrainingSetupScreen() {
                 />
               </View>
             )}
+
+            <View style={styles.inputGroup}>
+              <Text style={styles.label}>Preferred split family (optional)</Text>
+              <PremiumChipSelect
+                label=""
+                options={splitFamilyOptions}
+                selected={data.preferred_split_family ? [data.preferred_split_family] : []}
+                onSelect={(values) => updateData({ preferred_split_family: values[0] || null })}
+                multiple={false}
+                columns={2}
+              />
+            </View>
+
+            <PremiumChipSelect
+              label="Preferred training techniques (optional)"
+              options={techniquePreferenceOptions}
+              selected={data.technique_preferences}
+              onSelect={(values) => {
+                if (values.includes('none')) {
+                  updateData({ technique_preferences: [] });
+                  return;
+                }
+                updateData({ technique_preferences: values });
+              }}
+              noneOption="none"
+              columns={2}
+            />
+
+            <View style={styles.inputGroup}>
+              <Text style={styles.label}>Progression style (optional)</Text>
+              {progressionOptions.map((option) => (
+                <PremiumOptionCard
+                  key={option.value}
+                  label={option.label}
+                  description={option.description}
+                  icon={option.icon}
+                  iconColor={option.color}
+                  selected={data.progression_preference === option.value}
+                  onPress={() => updateData({ progression_preference: option.value })}
+                />
+              ))}
+            </View>
+
+            <View style={styles.inputGroup}>
+              <Text style={styles.label}>Session emphasis (optional)</Text>
+              {sessionEmphasisOptions.map((option) => (
+                <PremiumOptionCard
+                  key={option.value}
+                  label={option.label}
+                  description={option.description}
+                  icon={option.icon}
+                  iconColor={option.color}
+                  selected={data.session_emphasis === option.value}
+                  onPress={() => updateData({ session_emphasis: option.value })}
+                />
+              ))}
+            </View>
           </MotiView>
         </ScrollView>
 
@@ -281,6 +415,44 @@ const styles = StyleSheet.create({
   },
   inputGroup: {
     marginBottom: s.xl,
+  },
+  warningBox: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: s.sm,
+    borderWidth: 1,
+    borderColor: o.iconColors.orange,
+    backgroundColor: `${o.iconColors.orange}14`,
+    borderRadius: r.sm,
+    paddingHorizontal: s.md,
+    paddingVertical: s.sm,
+    marginBottom: s.xl,
+  },
+  warningText: {
+    flex: 1,
+    fontSize: 12,
+    color: o.textMuted,
+    fontFamily: 'Sora_400Regular',
+    lineHeight: 17,
+  },
+  infoBox: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: s.sm,
+    borderWidth: 1,
+    borderColor: o.iconColors.cyan,
+    backgroundColor: `${o.iconColors.cyan}14`,
+    borderRadius: r.sm,
+    paddingHorizontal: s.md,
+    paddingVertical: s.sm,
+    marginBottom: s.xl,
+  },
+  infoText: {
+    flex: 1,
+    fontSize: 12,
+    color: o.textMuted,
+    fontFamily: 'Sora_400Regular',
+    lineHeight: 17,
   },
   label: {
     fontSize: 14,

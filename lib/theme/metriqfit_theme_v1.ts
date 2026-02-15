@@ -56,6 +56,14 @@ export const metriqfitTheme = {
       c5: "#F97316" as Hex, // Orange
     },
 
+    // Meal timeline colors
+    meals: {
+      breakfast: "#F97316" as Hex, // Orange
+      lunch: "#22D3EE" as Hex,     // Cyan (matching primary)
+      dinner: "#A855F7" as Hex,    // Purple
+      snack: "#71717A" as Hex,     // Zinc-500 (subtle)
+    },
+
     // Macro nutrient colors (Neon/Vibrant)
     macros: {
       protein: "#22D3EE" as Hex,      // Cyan (was Blue)
@@ -237,6 +245,14 @@ export const metriqfitTheme = {
     lg: 18,
     xl: 24,
     xxl: 32,
+  },
+
+  auth: {
+    maxWidth: 460,
+    panelOpacity: "D6",
+    panelBorderOpacity: "33",
+    inputBorderOpacity: "44",
+    dividerOpacity: "33",
   },
 
   // --- Shadows (Unified Premium Glows) ---

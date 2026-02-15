@@ -5,6 +5,7 @@
 
 import { supabase } from '../lib/supabase';
 import { lookupBarcode, BarcodeLookupFood } from '../lib/Barcode Scan/barcodeLookupClient';
+import { checkEntitlementStatus } from './subscriptionService';
 
 export interface BarcodeScanResult {
   barcode: string;
@@ -31,6 +32,11 @@ export async function scanBarcode(
   barcode: string,
   userId: string
 ): Promise<BarcodeScanResult> {
+  const entitlement = await checkEntitlementStatus(userId);
+  if (!entitlement.isElite) {
+    throw new Error('ELITE_REQUIRED');
+  }
+
   // First, try to lookup the barcode using the Edge Function
   const lookupResult = await lookupBarcode(barcode);
 

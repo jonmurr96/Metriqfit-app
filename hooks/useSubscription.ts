@@ -9,13 +9,12 @@ import {
   getSubscription,
   checkEntitlementStatus,
   getAvailablePackages,
+  getBillingIntegrationStatus,
   purchasePackage,
   restorePurchases,
   isEliteFeature,
   getFeatureLimit,
-  type Subscription,
-  type SubscriptionPackage,
-  type EntitlementStatus,
+  type BillingIntegrationStatus,
 } from '../services/subscriptionService';
 
 // Query Keys
@@ -23,7 +22,7 @@ export const subscriptionKeys = {
   all: ['subscription'] as const,
   status: (userId: string) => [...subscriptionKeys.all, 'status', userId] as const,
   entitlement: (userId: string) => [...subscriptionKeys.all, 'entitlement', userId] as const,
-  packages: () => [...subscriptionKeys.all, 'packages'] as const,
+  packages: (userId: string) => [...subscriptionKeys.all, 'packages', userId] as const,
 };
 
 /**
@@ -59,9 +58,12 @@ export function useEntitlementStatus() {
  * Get available subscription packages
  */
 export function useAvailablePackages() {
+  const { user } = useAuth();
+
   return useQuery({
-    queryKey: subscriptionKeys.packages(),
-    queryFn: getAvailablePackages,
+    queryKey: subscriptionKeys.packages(user?.id || ''),
+    queryFn: () => getAvailablePackages(user?.id),
+    enabled: !!user,
     staleTime: 30 * 60 * 1000, // 30 minutes
   });
 }
@@ -110,7 +112,16 @@ export function useRestorePurchases() {
 /**
  * Hook for checking if user can access a feature
  */
-export function useFeatureAccess(feature: 'food_photo_scan' | 'barcode_scan' | 'unlimited_ai' | 'advanced_analytics') {
+export function useFeatureAccess(
+  feature:
+    | 'food_photo_scan'
+    | 'barcode_scan'
+    | 'unlimited_ai'
+    | 'advanced_analytics'
+    | 'recipe_url_import'
+    | 'menu_scan'
+    | 'grocery_pantry_builder',
+) {
   const { data: entitlement, isLoading } = useEntitlementStatus();
 
   const requiresElite = isEliteFeature(feature);
@@ -194,4 +205,12 @@ export function usePaywall() {
     annualPackage: packagesQuery.data?.find((p) => p.period === 'annual'),
     lifetimePackage: packagesQuery.data?.find((p) => p.period === 'lifetime'),
   };
+}
+
+export function useBillingStatus() {
+  return useQuery<BillingIntegrationStatus>({
+    queryKey: [...subscriptionKeys.all, 'billing-status'],
+    queryFn: async () => getBillingIntegrationStatus(),
+    staleTime: 60 * 1000,
+  });
 }

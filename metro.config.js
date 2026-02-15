@@ -1,20 +1,26 @@
 const { getDefaultConfig } = require('expo/metro-config');
+const { resolve } = require('metro-resolver');
 
 /** @type {import('expo/metro-config').MetroConfig} */
 const config = getDefaultConfig(__dirname);
+const originalResolveRequest = config.resolver?.resolveRequest;
 
-// Fix tslib module resolution for web
 config.resolver = {
   ...config.resolver,
   resolveRequest: (context, moduleName, platform) => {
-    // Force tslib to use the main CommonJS entry point instead of the ESM modules version
+    // Ensure web runtime uses CommonJS tslib entry to satisfy packages expecting `tslib.default`.
     if (moduleName === 'tslib' || moduleName.startsWith('tslib/')) {
       return {
-        filePath: require.resolve('tslib'),
+        filePath: require.resolve('tslib/tslib.js'),
         type: 'sourceFile',
       };
     }
-    return context.resolveRequest(context, moduleName, platform);
+
+    if (originalResolveRequest) {
+      return originalResolveRequest(context, moduleName, platform);
+    }
+
+    return resolve(context, moduleName, platform);
   },
 };
 

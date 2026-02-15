@@ -19,24 +19,24 @@ export async function checkOnboardingStatus(
       .from('onboarding_answers')
       .select('completed_at')
       .eq('user_id', userId)
-      .single(),
+      .maybeSingle(),
     supabase
       .from('user_targets')
       .select('id')
       .eq('user_id', userId)
-      .single(),
+      .maybeSingle(),
     supabase
       .from('user_workout_plans')
       .select('id')
       .eq('user_id', userId)
       .eq('is_active', true)
-      .single(),
+      .maybeSingle(),
   ]);
 
   return {
     hasCompletedOnboarding:
       !answersRes.error && !!(answersRes.data as any)?.completed_at,
-    hasTargets: !targetsRes.error,
-    hasPlans: !plansRes.error,
+    hasTargets: !targetsRes.error && !!targetsRes.data,
+    hasPlans: !plansRes.error && !!plansRes.data,
   };
 }

@@ -7,7 +7,6 @@ import { useTokens } from '../../../lib/theme';
 import { TabBarIcon } from '../../../components/navigation/TabBarIcon';
 import { WeeklyTrendChart } from '../../../components/progress/WeeklyTrendChart';
 import { useNutritionStats } from '../../../hooks/useNutrition';
-import { useWorkoutStats } from '../../../hooks/useWorkout';
 import { useUserDashboard } from '../../../hooks/useUser';
 
 export default function TrendsScreen() {
@@ -17,7 +16,6 @@ export default function TrendsScreen() {
 
   // Fetch real data
   const { data: nutritionStats } = useNutritionStats(7);
-  const { data: workoutStats } = useWorkoutStats(7);
   const { calorieTarget } = useUserDashboard();
 
   // Transform data for charts
@@ -43,35 +41,6 @@ export default function TrendsScreen() {
       value,
       isOverTarget: value > target,
       isToday
-    };
-  });
-
-  // Workout Data (Volume)
-  const volumeData = last7Days.map(date => {
-    const dayDate = new Date(date);
-    const dayLabel = calendarDays[dayDate.getDay()];
-    // workoutStats is array of sessions, we need to aggregate volume per day
-    // This is a simplification; ideally useWorkoutStats returns daily aggregated data
-    // Assuming useWorkoutStats returns { totalVolume: number, sessions: [] } or similar
-    // Let's assume for now workoutStats returns similar map or we check the sessions array
-    // Since useWorkoutStats currently returns { totalWorkouts, totalVolume, etc } for the whole period, 
-    // we strictly need a daily breakdown.
-    // For this MVP step, we will use a mock transformation if the hook doesn't support daily breakdown yet,
-    // or checks strictly if the hook returns daily data.
-    // Checking useWorkoutStats implementation: it calls getWorkoutStats which returns { totalWorkouts, totalVolume, totalTime, prsCount }
-    // It does NOT return a daily breakdown. 
-    // CRITICAL: We need daily workout stats. 
-    // FOR NOW: We will assume 0 for previous days to avoid breaking, or mock "random" variance for demo if real data is missing?
-    // No, "Remove all placeholder data".
-    // Since getWorkoutStats doesn't provide daily breakdown, we should probably fetch history and aggregate.
-
-    // We'll leave Volume chart as 0 until we improve the service or just show the Calories chart which we have data for.
-    // Actually, let's fetch workout history for last 7 days to get precise daily volume.
-
-    return {
-      day: dayLabel,
-      value: 0, // Placeholder until service upgrade
-      isToday: false
     };
   });
 
@@ -116,8 +85,23 @@ export default function TrendsScreen() {
             title="Daily Calories"
             data={calorieData}
             targetValue={calorieTarget || 2000}
-            changePercent={12} // TODO: Calculate real change
-            changeDirection="down"
+            changePercent={(() => {
+              // Calculate real change: compare recent 3 days avg to prior 4 days avg
+              const values = calorieData.map(d => d.value).filter(v => v > 0);
+              if (values.length < 2) return 0;
+              const mid = Math.floor(values.length / 2);
+              const recent = values.slice(mid);
+              const prior = values.slice(0, mid);
+              const recentAvg = recent.reduce((a, b) => a + b, 0) / recent.length;
+              const priorAvg = prior.reduce((a, b) => a + b, 0) / prior.length;
+              if (priorAvg === 0) return 0;
+              return Math.round(((recentAvg - priorAvg) / priorAvg) * 100);
+            })()}
+            changeDirection={(() => {
+              const values = calorieData.map(d => d.value).filter(v => v > 0);
+              if (values.length < 2) return 'up' as const;
+              return values[values.length - 1] >= values[0] ? 'up' as const : 'down' as const;
+            })()}
           />
         </MotiView>
 

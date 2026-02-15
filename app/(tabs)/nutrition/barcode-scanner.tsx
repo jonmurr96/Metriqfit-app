@@ -7,12 +7,14 @@ import { useTokens } from '../../../lib/theme';
 import { TabBarIcon } from '../../../components/navigation/TabBarIcon';
 import { useAuth } from '../../../lib/auth/AuthProvider';
 import { scanBarcode } from '../../../services/barcodeService';
+import { useFeatureAccess } from '../../../hooks/useSubscription';
 
 export default function BarcodeScannerScreen() {
   const { c, s, ty, r } = useTokens();
   const router = useRouter();
   const insets = useSafeAreaInsets();
   const { user } = useAuth();
+  const barcodeAccess = useFeatureAccess('barcode_scan');
 
   const [permission, requestPermission] = useCameraPermissions();
   const [isScanning, setIsScanning] = useState(false);
@@ -20,10 +22,10 @@ export default function BarcodeScannerScreen() {
 
   // Request permission on mount
   useEffect(() => {
-    if (!permission?.granted && permission?.canAskAgain) {
+    if (barcodeAccess.hasAccess && !permission?.granted && permission?.canAskAgain) {
       requestPermission();
     }
-  }, [permission]);
+  }, [barcodeAccess.hasAccess, permission, requestPermission]);
 
   const handleBarcodScanned = async ({ data }: BarcodeScanningResult) => {
     // Prevent duplicate scans
@@ -89,7 +91,18 @@ export default function BarcodeScannerScreen() {
       }
     } catch (error) {
       console.error('Barcode scan error:', error);
-      Alert.alert('Error', 'Failed to scan barcode. Please try again.');
+      if (error instanceof Error && error.message === 'ELITE_REQUIRED') {
+        Alert.alert(
+          'MetriqFit Elite Required',
+          'Barcode scanning is available for Elite members.',
+          [
+            { text: 'Not now', style: 'cancel' },
+            { text: 'Upgrade', onPress: () => router.push('/settings/subscription') },
+          ]
+        );
+      } else {
+        Alert.alert('Error', 'Failed to scan barcode. Please try again.');
+      }
     } finally {
       // Allow scanning again after 2 seconds
       setTimeout(() => {
@@ -98,6 +111,104 @@ export default function BarcodeScannerScreen() {
       }, 2000);
     }
   };
+
+  if (barcodeAccess.isLoading) {
+    return (
+      <View style={[styles.container, { backgroundColor: c.bg, paddingTop: insets.top }]}>
+        <View style={[styles.content, { padding: s.xl, justifyContent: 'center' }]}>
+          <ActivityIndicator size="large" color={c.primary} />
+        </View>
+      </View>
+    );
+  }
+
+  if (!barcodeAccess.hasAccess) {
+    return (
+      <View style={[styles.container, { backgroundColor: c.bg, paddingTop: insets.top }]}>
+        <View style={[styles.header, { paddingHorizontal: s.lg }]}>
+          <Pressable
+            onPress={() => router.back()}
+            style={[styles.backButton, { backgroundColor: c.surface }]}
+            accessibilityLabel="Go back"
+            accessibilityRole="button"
+          >
+            <TabBarIcon name="chevron-back" color={c.text} size={24} />
+          </Pressable>
+          <Text
+            style={[
+              styles.title,
+              {
+                color: c.text,
+                fontFamily: ty.heading.familySemibold,
+                fontSize: ty.sizes.xl,
+              },
+            ]}
+          >
+            Scan Barcode
+          </Text>
+          <View style={styles.placeholder} />
+        </View>
+
+        <View style={[styles.content, { padding: s.xl }]}>
+          <View
+            style={[
+              styles.permissionDenied,
+              {
+                backgroundColor: c.surface,
+                borderRadius: r.lg,
+                padding: s.xl,
+              },
+            ]}
+          >
+            <TabBarIcon name="diamond-outline" color={c.primary} size={64} />
+            <Text
+              style={{
+                color: c.text,
+                fontFamily: ty.heading.familySemibold,
+                fontSize: ty.sizes.lg,
+                textAlign: 'center',
+                marginTop: s.lg,
+              }}
+            >
+              Elite Feature
+            </Text>
+            <Text
+              style={{
+                color: c.textMuted,
+                fontFamily: ty.body.family,
+                fontSize: ty.sizes.md,
+                textAlign: 'center',
+                marginTop: s.sm,
+              }}
+            >
+              Barcode scanning is available for Elite members.
+            </Text>
+            <Pressable
+              style={[
+                styles.ctaButton,
+                {
+                  backgroundColor: c.primary,
+                  borderRadius: r.md,
+                  marginTop: s.xl,
+                },
+              ]}
+              onPress={() => router.push('/settings/subscription')}
+            >
+              <Text
+                style={{
+                  color: c.bg,
+                  fontFamily: ty.body.familySemibold,
+                  fontSize: ty.sizes.md,
+                }}
+              >
+                Upgrade to Elite
+              </Text>
+            </Pressable>
+          </View>
+        </View>
+      </View>
+    );
+  }
 
   // Permission denied
   if (permission?.granted === false) {
