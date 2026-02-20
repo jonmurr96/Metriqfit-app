@@ -37,7 +37,22 @@ export {
   trackMenuScanCompleted,
   trackMealBuilderRun,
   trackPantryUpdated,
+  trackHomeViewed,
+  trackHomeCtaTapped,
+  trackHomeCardRendered,
+  trackProgressViewed,
+  trackProgressTimeframeChanged,
+  trackProgressCardRendered,
+  trackProgressCtaTapped,
+  trackProgressPhotoUploaded,
+  trackProgressPhotoDeleted,
+  trackProgressPhotoTimelineViewed,
   trackErrorDisplayed,
+  trackProgressCardCompleted,
+  trackProgressWeeklyActivityViewed,
+  trackProgressGoalTrackerTapped,
+  trackProgressPhotoCompareViewed,
+  trackProgressHistoryRangeChanged,
 } from './analyticsService';
 
 export type { QuickAddActionId } from './analyticsService';

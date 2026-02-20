@@ -220,6 +220,14 @@ export {
   useRevertPrepAdjustment,
 } from './usePrepCoach';
 
+// Progress photo hooks
+export {
+  progressPhotoKeys,
+  useProgressPhotos,
+  useUploadProgressPhoto,
+  useDeleteProgressPhoto,
+} from './useProgressPhotos';
+
 // Onboarding review hooks
 export {
   onboardingReviewKeys,

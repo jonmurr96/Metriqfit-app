@@ -1,468 +1,492 @@
-import React, { useEffect, useMemo, useState } from 'react';
-import { StyleSheet, View, Text, ScrollView, Pressable, ActivityIndicator, Alert } from 'react-native';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import {
+  ActivityIndicator,
+  Pressable,
+  ScrollView,
+  StyleSheet,
+  Text,
+  View,
+} from 'react-native';
 import { useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { MotiView } from 'moti';
+
 import { useTokens } from '../../../lib/theme';
-import { TabBarIcon } from '../../../components/navigation/TabBarIcon';
-import { RingIconButton } from '../../../components/common/RingIconButton';
+import { useAuth } from '../../../lib/auth';
 import {
-  TimeFrameTabs,
-  GoalForecastCard,
-  WeeklyTrendChart,
-} from '../../../components/progress';
-import { useMeasurements, useOnboardingAnswers, useProfile } from '../../../hooks/useUser';
-import { useComputePlanConsistency, useConsistencyHistory } from '../../../hooks/usePlan';
-import { usePrepCoachState, useRevertPrepAdjustment } from '../../../hooks/usePrepCoach';
+  trackProgressViewed,
+  trackProgressCardRendered,
+  trackProgressCtaTapped,
+  trackProgressHistoryRangeChanged,
+  trackProgressWeeklyActivityViewed,
+} from '../../../lib/analytics';
+import { useProgressSnapshot, useWeeklyActivity } from '../../../hooks/useProgressMetrics';
+import { useProfile, useOnboardingAnswers, useMeasurements } from '../../../hooks/useUser';
+import { usePrepCoachState } from '../../../hooks/usePrepCoach';
+import { WeeklyActivityBar } from '../../../components/progress/WeeklyActivityBar';
+import { GoalTrackerRow, type GoalTrackerItem } from '../../../components/progress/GoalTrackerRow';
+import { StreakCard } from '../../../components/progress/StreakCard';
+import { FreshnessChip } from '../../../components/progress/FreshnessChip';
+import { WeeklyTrendChart } from '../../../components/progress/WeeklyTrendChart';
+import { GlassCard } from '../../../components/premium/GlassCard';
+import { TabBarIcon } from '../../../components/navigation/TabBarIcon';
 
-type TimeFrame = 'week' | 'month' | 'year';
+import type { ProgressTimeframe } from '../../../services/progressMetricsService';
 
-function getPrepRateBounds(
-  discipline: 'bodybuilding' | 'powerlifting' | null | undefined,
-  phase: 'cut' | 'bulk' | null | undefined,
-) {
-  if (!discipline || !phase) return null;
-  if (discipline === 'bodybuilding' && phase === 'cut') return { min: -0.8, max: -0.4 };
-  if (discipline === 'bodybuilding' && phase === 'bulk') return { min: 0.2, max: 0.5 };
-  if (discipline === 'powerlifting' && phase === 'cut') return { min: -0.6, max: -0.25 };
-  if (discipline === 'powerlifting' && phase === 'bulk') return { min: 0.15, max: 0.35 };
-  return null;
+// —— History time-range options ——
+const HISTORY_RANGES = [
+  { label: '7D', days: 7, tf: 'week' as ProgressTimeframe },
+  { label: '14D', days: 14, tf: 'week' as ProgressTimeframe },
+  { label: '1M', days: 30, tf: 'month' as ProgressTimeframe },
+  { label: '3M', days: 90, tf: 'month' as ProgressTimeframe },
+  { label: '6M', days: 180, tf: 'year' as ProgressTimeframe },
+  { label: '12M', days: 365, tf: 'year' as ProgressTimeframe },
+];
+
+function formatKg(kg: number | null) {
+  if (kg == null) return '—';
+  return `${Math.round(kg * 2.205)} lb`;
+}
+
+function formatDelta(delta: number, unit: string) {
+  const sign = delta > 0 ? '+' : '';
+  return `${sign}${delta}${unit}`;
 }
 
 export default function ProgressHomeScreen() {
-  const { c, s, ty, r } = useTokens();
+  const { c, ty, s, r } = useTokens();
   const router = useRouter();
   const insets = useSafeAreaInsets();
-  const [timeFrame, setTimeFrame] = useState<TimeFrame>('week');
+  const { user } = useAuth();
+  const trackedView = useRef(false);
 
-  // Fetch Data
+  // — Data hooks —
+  const [historyRange, setHistoryRange] = useState(HISTORY_RANGES[0]);
+  const timeFrame = historyRange.tf;
+
+  const { data: snapshot, isLoading } = useProgressSnapshot(timeFrame);
+  const { data: weeklyDays, isLoading: weekLoading } = useWeeklyActivity();
   const { data: profile } = useProfile();
-  const { data: onboardingAnswers } = useOnboardingAnswers();
-  const { data: measurements, isLoading } = useMeasurements(30);
-  const { data: consistencyHistory } = useConsistencyHistory(7);
-  const { data: prepState } = usePrepCoachState();
-  const revertPrepAdjustmentMutation = useRevertPrepAdjustment();
-  const computeConsistencyMutation = useComputePlanConsistency();
+  const { data: onboarding } = useOnboardingAnswers();
+  const { data: measurements } = useMeasurements();
 
+  // — Track screen view once —
   useEffect(() => {
-    computeConsistencyMutation.mutate({ days: 7 });
-    // run once on screen mount
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+    if (!trackedView.current && user) {
+      trackProgressViewed({ timeframe: timeFrame });
+      trackedView.current = true;
+    }
+  }, [user, timeFrame]);
+
+  // — Goal Tracker row items —
+  const goalItems: GoalTrackerItem[] = useMemo(() => {
+    if (!snapshot) return [];
+    const items: GoalTrackerItem[] = [
+      {
+        id: 'streak',
+        label: 'Streak',
+        value: `${snapshot.adherence.streakDays}`,
+        subtitle: 'consecutive days',
+        progress: Math.min(100, (snapshot.adherence.streakDays / 30) * 100),
+        lastUpdatedIso: snapshot.dataFreshness?.consistencyLastLoggedAt || null,
+        onPress: () => {
+          trackProgressCtaTapped({ cta_id: 'streak_detail' });
+          router.push('/(tabs)/progress/trends');
+        },
+      },
+      {
+        id: 'weight',
+        label: 'Weight',
+        value: formatKg(snapshot.bodyComp.currentWeightKg),
+        subtitle: snapshot.bodyComp.weightDeltaKg
+          ? formatDelta(Math.round(snapshot.bodyComp.weightDeltaKg * 2.205), ' lb')
+          : 'No change',
+        progress: Math.min(100, snapshot.bodyComp.weightTrendQualityScore),
+        lastUpdatedIso: snapshot.dataFreshness?.weightLastLoggedAt || null,
+        onPress: () => {
+          trackProgressCtaTapped({ cta_id: 'weight_detail' });
+          router.push('/(tabs)/progress/trends');
+        },
+      },
+      {
+        id: 'bodyfat',
+        label: 'Body Fat',
+        value: snapshot.bodyComp.bodyFatCurrent != null ? `${snapshot.bodyComp.bodyFatCurrent}%` : '—',
+        subtitle: snapshot.bodyComp.bodyFatChange != null ? formatDelta(snapshot.bodyComp.bodyFatChange, '%') : 'Not tracked',
+        progress: snapshot.bodyComp.bodyFatCurrent != null ? Math.min(100, (1 - snapshot.bodyComp.bodyFatCurrent / 40) * 100) : 0,
+        lastUpdatedIso: snapshot.dataFreshness?.weightLastLoggedAt || null,
+      },
+      {
+        id: 'consistency',
+        label: 'Consistency',
+        value: `${Math.round(snapshot.adherence.consistencyAverage)}%`,
+        subtitle: `${snapshot.adherence.nutritionHitDays}/${snapshot.adherence.timeframeDays} days hit`,
+        progress: snapshot.adherence.consistencyAverage,
+        lastUpdatedIso: snapshot.dataFreshness?.consistencyLastLoggedAt || null,
+        onPress: () => {
+          trackProgressCtaTapped({ cta_id: 'consistency_detail' });
+          router.push('/(tabs)/progress/daily-summary');
+        },
+      },
+    ];
+    return items;
+  }, [snapshot, router]);
+
+  // — History range handler —
+  const handleRangeChange = useCallback((range: typeof HISTORY_RANGES[number]) => {
+    setHistoryRange(range);
+    trackProgressHistoryRangeChanged({ range: range.label, days: range.days });
   }, []);
 
-  // Quick Access ring icons
-  const quickLinks = [
-    { label: 'History', icon: 'time-outline', onPress: () => router.push('/(tabs)/workout/workout-history') },
-    { label: 'Log Weight', icon: 'scale-outline', onPress: () => router.push('/log-weight-sheet') },
-    { label: 'Records', icon: 'trophy-outline', onPress: () => router.push('/(tabs)/progress/personal-records') },
-    { label: 'Photos', icon: 'camera-outline', onPress: () => router.push('/(tabs)/progress/photos' as any) },
-  ];
+  // — Quick-access buttons —
+  const quickAccessButtons = useMemo(() => [
+    { id: 'personal-records', label: 'Personal Records', icon: 'trophy-outline' as const, route: '/(tabs)/progress/personal-records' },
+    { id: 'photo-compare', label: 'Compare Photos', icon: 'images-outline' as const, route: '/(tabs)/progress/photo-compare' },
+    { id: 'weekly-review', label: 'Weekly Review', icon: 'calendar-outline' as const, route: '/(tabs)/progress/weekly-review' },
+    { id: 'trends', label: 'Trends', icon: 'trending-up-outline' as const, route: '/(tabs)/progress/trends' },
+  ], []);
 
-  // Unit conversion: respect user preference
-  const isImperial = profile?.unit_system === 'imperial';
-  const toDisplayWeight = (kg: number) => isImperial ? kg * 2.20462 : kg;
-  const weightUnit = isImperial ? 'lbs' : 'kg';
-
-  // Process data for chart
-  const weightData = (measurements || [])
-    .slice(0, 7) // Last 7 entries
-    .reverse()
-    .map(m => ({
-      day: new Date(m.logged_at).toLocaleDateString('en-US', { weekday: 'narrow' }),
-      value: Math.round(toDisplayWeight(m.weight_kg) * 10) / 10,
-      isToday: new Date(m.logged_at).getDate() === new Date().getDate(),
-    }));
-
-  const currentWeight = toDisplayWeight(profile?.current_weight_kg || 0);
-  const onboardingPayload = (onboardingAnswers?.answers || {}) as Record<string, unknown>;
-  const parseNumeric = (value: unknown): number | null => {
-    if (typeof value === 'number' && Number.isFinite(value)) return value;
-    if (typeof value === 'string') {
-      const parsed = parseFloat(value);
-      return Number.isFinite(parsed) ? parsed : null;
-    }
-    return null;
-  };
-  const targetWeightEnabled = onboardingPayload.target_weight_enabled === true;
-  const targetWeightLb = parseNumeric(onboardingPayload.target_weight_lb);
-  const targetWeightDate = typeof onboardingPayload.target_date === 'string'
-    ? onboardingPayload.target_date
-    : null;
-  const goalWeight = targetWeightEnabled && targetWeightLb
-    ? (isImperial ? targetWeightLb : targetWeightLb * 0.453592)
-    : currentWeight;
-  const hasGoalWeight = targetWeightEnabled && !!targetWeightLb;
-
-  // Calculate actual weight change percent from first to last measurement
-  const weightChangePercent = useMemo(() => {
-    if (!measurements || measurements.length < 2) return 0;
-    const oldest = measurements[measurements.length - 1].weight_kg;
-    const newest = measurements[0].weight_kg;
-    if (oldest === 0) return 0;
-    return Math.round(((newest - oldest) / oldest) * 1000) / 10; // 1 decimal place
-  }, [measurements]);
-
-  const hasData = measurements && measurements.length > 0;
-  const consistencyAverage = useMemo(() => {
-    if (!consistencyHistory?.length) return 0;
-    return consistencyHistory.reduce((sum, row) => sum + Number(row.overall_score || 0), 0) / consistencyHistory.length;
-  }, [consistencyHistory]);
-
-  const consistencyTrend = useMemo(() => {
-    return (consistencyHistory || []).map((row) => ({
-      day: new Date(row.log_date).toLocaleDateString('en-US', { weekday: 'narrow' }),
-      value: Number(row.overall_score || 0),
-      isToday: row.log_date === new Date().toISOString().split('T')[0],
-    }));
-  }, [consistencyHistory]);
-
-  const consistencyChangePercent = useMemo(() => {
-    if (!consistencyHistory || consistencyHistory.length < 2) return 0;
-    const latest = Number(consistencyHistory[0].overall_score || 0);
-    const earliest = Number(consistencyHistory[consistencyHistory.length - 1].overall_score || 0);
-    if (earliest === 0) return 0;
-    return Math.round(((latest - earliest) / earliest) * 1000) / 10;
-  }, [consistencyHistory]);
-
-  // Calculate estimated target date based on weight trend
-  const targetDate = useMemo(() => {
-    if (!hasGoalWeight) return 'Set goal in onboarding';
-    if (targetWeightDate) {
-      const date = new Date(targetWeightDate);
-      if (!Number.isNaN(date.getTime())) {
-        return date.toLocaleDateString('en-US', { month: 'short', year: 'numeric' });
-      }
-    }
-    if (!measurements || measurements.length < 2) return 'Add more weigh-ins';
-    const oldest = measurements[measurements.length - 1];
-    const newest = measurements[0];
-    const daysBetween = Math.max(
-      1,
-      (new Date(newest.logged_at).getTime() - new Date(oldest.logged_at).getTime()) / (1000 * 60 * 60 * 24)
+  if (isLoading && !snapshot) {
+    return (
+      <View style={[styles.loadingContainer, { backgroundColor: c.bg }]}>
+        <ActivityIndicator size="large" color={c.primary} />
+      </View>
     );
-    const weightDiffKg = newest.weight_kg - oldest.weight_kg;
-    const ratePerDay = weightDiffKg / daysBetween; // kg per day (negative = losing)
-    const remainingKg = (currentWeight / (isImperial ? 2.20462 : 1)) - (goalWeight / (isImperial ? 2.20462 : 1));
-    if (ratePerDay >= 0 || Math.abs(ratePerDay) < 0.001) return 'Maintain pace';
-    const daysToGoal = Math.abs(remainingKg / ratePerDay);
-    if (daysToGoal > 365 * 3) return '3+ years';
-    const projected = new Date();
-    projected.setDate(projected.getDate() + Math.ceil(daysToGoal));
-    return projected.toLocaleDateString('en-US', { month: 'short', year: 'numeric' });
-  }, [measurements, currentWeight, goalWeight, hasGoalWeight, isImperial, targetWeightDate]);
-
-  const prepRateBounds = useMemo(
-    () => getPrepRateBounds(prepState?.discipline, prepState?.phase),
-    [prepState?.discipline, prepState?.phase],
-  );
-
-  const actualWeeklyRate = useMemo(() => {
-    if (!measurements || measurements.length < 2) return null;
-    const latest = measurements[0];
-    const previous = measurements[1];
-    const daysBetween = Math.max(
-      1,
-      (new Date(latest.logged_at).getTime() - new Date(previous.logged_at).getTime()) / (1000 * 60 * 60 * 24),
-    );
-    const weeklyMultiplier = 7 / daysBetween;
-    if (!previous.weight_kg) return null;
-    return (((latest.weight_kg - previous.weight_kg) / previous.weight_kg) * 100) * weeklyMultiplier;
-  }, [measurements]);
-
-  const prepAdherenceConfidence = useMemo(() => {
-    if (!prepState?.enabled || actualWeeklyRate === null || !prepRateBounds) return null;
-    const inBand = actualWeeklyRate >= prepRateBounds.min && actualWeeklyRate <= prepRateBounds.max;
-    const paceScore = inBand
-      ? 92
-      : Math.max(
-          45,
-          92 - (Math.min(
-            Math.abs(actualWeeklyRate - prepRateBounds.min),
-            Math.abs(actualWeeklyRate - prepRateBounds.max),
-          ) * 35),
-        );
-    const consistencyScore = Math.max(40, Math.min(100, consistencyAverage));
-    return Math.round((paceScore * 0.65) + (consistencyScore * 0.35));
-  }, [actualWeeklyRate, consistencyAverage, prepRateBounds, prepState?.enabled]);
-
-  const handleRollbackPrepAdjustment = () => {
-    const eventId = prepState?.lastAdjustment?.id;
-    if (!eventId) return;
-    Alert.alert(
-      'Revert Prep Adjustment?',
-      'This restores your previous targets and nutrition plan version. Session history will remain unchanged.',
-      [
-        { text: 'Cancel', style: 'cancel' },
-        {
-          text: 'Revert',
-          style: 'destructive',
-          onPress: () => {
-            revertPrepAdjustmentMutation.mutate(eventId, {
-              onError: (error: any) => {
-                Alert.alert('Rollback failed', error?.message || 'Could not revert this prep adjustment.');
-              },
-            });
-          },
-        },
-      ],
-    );
-  };
+  }
 
   return (
-    <View style={[styles.container, { backgroundColor: c.bg }]}>
-      <MotiView
-        from={{ opacity: 0, translateY: -10 }}
-        animate={{ opacity: 1, translateY: 0 }}
-        transition={{ type: 'timing', duration: 300 }}
-        style={[
-          styles.header,
-          {
-            paddingTop: insets.top + s.md,
-            paddingHorizontal: s.lg,
-            backgroundColor: c.bg,
-          },
-        ]}
-      >
-        <View style={styles.headerRow}>
-          <View style={styles.headerButton} />
-          <Pressable
-            style={[
-              styles.headerButton,
-              {
-                borderWidth: 2,
-                borderColor: c.primary,
-                backgroundColor: `${c.primary}15`,
-                width: 'auto',
-                paddingHorizontal: 16,
-                flexDirection: 'row',
-                gap: 6
-              },
-            ]}
-            onPress={() => router.push('/check-in')}
-          >
-            <TabBarIcon name="scan-outline" color={c.primary} size={18} />
-            <Text style={{ color: c.primary, fontFamily: ty.body.familySemibold, fontSize: 12 }}>Check In</Text>
-          </Pressable>
-        </View>
-        <Text
-          style={[
-            styles.title,
-            {
-              color: c.text,
-              fontFamily: ty.heading.family,
-              fontSize: 28,
-            },
-          ]}
-        >
-          Progress & Insights
+    <View style={[styles.container, { backgroundColor: c.bg, paddingTop: insets.top }]}>
+      {/* Header */}
+      <View style={[styles.header, { paddingHorizontal: s.lg }]}>
+        <Text style={[styles.headerTitle, { color: c.text, fontFamily: ty.heading.familySemibold, fontSize: ty.sizes.h3 }]}>
+          Progress
         </Text>
-      </MotiView>
-
-      <View style={{ paddingHorizontal: s.lg }}>
-        <TimeFrameTabs selected={timeFrame} onSelect={setTimeFrame} />
+        <Pressable
+          onPress={() => {
+            trackProgressCtaTapped({ cta_id: 'photos_cta' });
+            router.push('/(tabs)/progress/photos');
+          }}
+          hitSlop={12}
+        >
+          <TabBarIcon name="camera-outline" color={c.primary} size={24} />
+        </Pressable>
       </View>
 
       <ScrollView
-        style={styles.scrollView}
-        contentContainerStyle={[
-          styles.content,
-          { paddingBottom: 120 },
-        ]}
+        contentContainerStyle={[styles.scrollContent, { paddingHorizontal: s.lg, paddingBottom: insets.bottom + 100 }]}
         showsVerticalScrollIndicator={false}
       >
-        {isLoading ? (
-          <View style={{ padding: s.xl, alignItems: 'center' }}>
-            <ActivityIndicator size="large" color={c.primary} />
+        {/* ────────── 1. Weekly Activity Bar ────────── */}
+        <MotiView
+          from={{ opacity: 0, translateY: 10 }}
+          animate={{ opacity: 1, translateY: 0 }}
+          transition={{ type: 'timing', duration: 400 }}
+          style={styles.section}
+        >
+          <WeeklyActivityBar days={weeklyDays || [
+            { dayLabel: 'SUN', macroGoalMet: false, workoutCompleted: false, isToday: false },
+            { dayLabel: 'MON', macroGoalMet: false, workoutCompleted: false, isToday: false },
+            { dayLabel: 'TUE', macroGoalMet: false, workoutCompleted: false, isToday: false },
+            { dayLabel: 'WED', macroGoalMet: false, workoutCompleted: false, isToday: false },
+            { dayLabel: 'THU', macroGoalMet: false, workoutCompleted: false, isToday: false },
+            { dayLabel: 'FRI', macroGoalMet: false, workoutCompleted: false, isToday: false },
+            { dayLabel: 'SAT', macroGoalMet: false, workoutCompleted: false, isToday: false },
+          ]} />
+        </MotiView>
+
+        {/* ────────── 2. Goal Tracker Row ────────── */}
+        <MotiView
+          from={{ opacity: 0, translateY: 10 }}
+          animate={{ opacity: 1, translateY: 0 }}
+          transition={{ type: 'timing', duration: 400, delay: 100 }}
+        >
+          <GoalTrackerRow items={goalItems} />
+        </MotiView>
+
+        {/* ────────── 3. Insights Section ────────── */}
+        <MotiView
+          from={{ opacity: 0, translateY: 10 }}
+          animate={{ opacity: 1, translateY: 0 }}
+          transition={{ type: 'timing', duration: 400, delay: 200 }}
+          style={styles.section}
+        >
+          <Text style={[styles.sectionTitle, { color: c.text, fontFamily: ty.heading.familySemibold }]}>
+            Insights
+          </Text>
+
+          {/* Streak cards */}
+          <View style={styles.streakRow}>
+            <StreakCard
+              title="Workout"
+              currentStreak={snapshot?.adherence.streakDays ?? 0}
+              longestStreak={snapshot?.adherence.streakDays ?? 0}
+              variant="workout"
+            />
+            <StreakCard
+              title="Nutrition"
+              currentStreak={snapshot?.adherence.nutritionHitDays ?? 0}
+              longestStreak={snapshot?.adherence.nutritionHitDays ?? 0}
+              variant="nutrition"
+            />
           </View>
-        ) : !hasData ? (
-          <View style={{ padding: s.xl, alignItems: 'center' }}>
-            <Text style={{ color: c.textMuted, textAlign: 'center' }}>No progress data yet. Log your weight to see trends!</Text>
-            <Pressable
-              onPress={() => router.push('/log-weight-sheet')}
-              style={{ marginTop: s.md, padding: s.md, backgroundColor: c.surface, borderRadius: r.md }}
-            >
-              <Text style={{ color: c.primary, fontFamily: ty.body.familySemibold }}>Log First Weigh-in</Text>
-            </Pressable>
-          </View>
-        ) : (
-          <>
-            <View style={{ paddingHorizontal: s.lg, gap: s.lg }}>
-              <View
-                style={{
-                  backgroundColor: c.surface,
-                  borderRadius: r.lg,
-                  padding: s.lg,
-                  borderWidth: 1,
-                  borderColor: c.border,
-                }}
-              >
-                <Text style={{ color: c.text, fontFamily: ty.heading.familySemibold, fontSize: ty.sizes.md }}>
-                  Composite Consistency
-                </Text>
-                <Text style={{ color: c.primary, fontFamily: ty.heading.familySemibold, fontSize: ty.sizes.h2, marginTop: s.xs }}>
-                  {Math.round(consistencyAverage)}%
-                </Text>
-                <Text style={{ color: c.textMuted, fontFamily: ty.body.family, fontSize: ty.sizes.sm, marginTop: s.xs }}>
-                  Nutrition 50% • Workout 35% • Hydration 15%
-                </Text>
-              </View>
 
-              <GoalForecastCard
-                startWeight={Math.round(toDisplayWeight(measurements[measurements.length - 1].weight_kg) * 10) / 10}
-                currentWeight={Math.round(currentWeight * 10) / 10}
-                goalWeight={Math.round(goalWeight * 10) / 10}
-                targetDate={targetDate}
-                onViewProjection={() => router.push('/(tabs)/progress/trends')}
-              />
-            </View>
-
-            <View style={{ paddingHorizontal: s.lg, marginTop: s.xl }}>
-              <WeeklyTrendChart
-                title={`Weight Trend (${weightUnit})`}
-                data={weightData.length > 0 ? weightData : [{ day: 'Now', value: Math.round(currentWeight * 10) / 10, isToday: true }]}
-                changePercent={weightChangePercent}
-              />
-            </View>
-
-            <View style={{ paddingHorizontal: s.lg, marginTop: s.lg }}>
-              <WeeklyTrendChart
-                title="Consistency Trend (%)"
-                data={consistencyTrend.length > 0 ? consistencyTrend : [{ day: 'Now', value: 0, isToday: true }]}
-                changePercent={consistencyChangePercent}
-              />
-            </View>
-
-            {prepState?.enabled && (
-              <View style={{ paddingHorizontal: s.lg, marginTop: s.lg }}>
-                <View
-                  style={{
-                    backgroundColor: c.surface,
-                    borderRadius: r.lg,
-                    padding: s.lg,
-                    borderWidth: 1,
-                    borderColor: c.border,
-                    gap: 8,
-                  }}
-                >
-                  <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
-                    <Text style={{ color: c.primary, fontFamily: ty.body.familySemibold }}>
-                      AI Prep Coach
-                    </Text>
-                    <Text style={{ color: c.textMuted, fontFamily: ty.body.family, fontSize: ty.sizes.xs }}>
-                      {prepState.discipline || 'prep'} • {prepState.phase || 'phase'}
+          {/* Goal Benchmark Banner */}
+          {snapshot?.goalBenchmark && (
+            <GlassCard style={{ marginTop: 12 }}>
+              <View style={styles.benchmarkRow}>
+                <View style={styles.benchmarkInfo}>
+                  <View style={styles.benchmarkTitleRow}>
+                    <TabBarIcon
+                      name={snapshot.goalBenchmark.key === 'fat_loss' ? 'flame-outline' : 'barbell-outline'}
+                      color={
+                        snapshot.goalBenchmark.status === 'on_track' ? c.success as string :
+                          snapshot.goalBenchmark.status === 'off_track' ? '#FF5C5C' : c.textMuted as string
+                      }
+                      size={16}
+                    />
+                    <Text style={[styles.benchmarkTitle, { color: c.text, fontFamily: ty.body.familySemibold }]}>
+                      {snapshot.goalBenchmark.title}
                     </Text>
                   </View>
-
-                  <Text style={{ color: c.text, fontFamily: ty.body.familyMedium }}>
-                    Target weekly rate: {prepRateBounds ? `${prepRateBounds.min}% to ${prepRateBounds.max}%` : 'Not set'}
+                  <Text style={[styles.benchmarkPace, { color: c.primary, fontFamily: ty.heading.family }]}>
+                    {snapshot.goalBenchmark.paceValue}
                   </Text>
-                  <Text style={{ color: c.textMuted, fontFamily: ty.body.family }}>
-                    Actual weekly rate: {actualWeeklyRate === null ? 'Need 2 check-ins' : `${actualWeeklyRate.toFixed(2)}%`}
+                  <Text style={[styles.benchmarkDetail, { color: c.textMuted, fontFamily: ty.body.family }]}>
+                    Target: {snapshot.goalBenchmark.targetBand}
                   </Text>
-                  <Text style={{ color: c.textMuted, fontFamily: ty.body.family }}>
-                    Adherence confidence: {prepAdherenceConfidence === null ? '--' : `${prepAdherenceConfidence}%`}
+                </View>
+                <View style={[
+                  styles.statusBadge,
+                  {
+                    backgroundColor:
+                      snapshot.goalBenchmark.status === 'on_track' ? `${c.success}20` :
+                        snapshot.goalBenchmark.status === 'off_track' ? '#FF5C5C20' : `${c.textMuted}20`,
+                  },
+                ]}>
+                  <Text style={{
+                    fontSize: 10,
+                    fontFamily: ty.body.familySemibold,
+                    color:
+                      snapshot.goalBenchmark.status === 'on_track' ? c.success :
+                        snapshot.goalBenchmark.status === 'off_track' ? '#FF5C5C' : c.textMuted,
+                    textTransform: 'uppercase',
+                    letterSpacing: 0.8,
+                  }}>
+                    {snapshot.goalBenchmark.status.replace('_', ' ')}
                   </Text>
-
-                  {prepState.lastAdjustment?.coach_summary ? (
-                    <View style={{ marginTop: s.xs }}>
-                      <Text style={{ color: c.textMuted, fontFamily: ty.body.familySemibold, fontSize: ty.sizes.xs, letterSpacing: 1.2 }}>
-                        LAST ADJUSTMENT
-                      </Text>
-                      <Text style={{ color: c.textMuted, fontFamily: ty.body.family, marginTop: 4 }}>
-                        {prepState.lastAdjustment.coach_summary}
-                      </Text>
-                    </View>
-                  ) : null}
-
-                  {prepState.lastAdjustment?.status === 'applied' && prepState.lastAdjustment?.id ? (
-                    <Pressable
-                      onPress={handleRollbackPrepAdjustment}
-                      disabled={revertPrepAdjustmentMutation.isPending}
-                      style={{
-                        alignSelf: 'flex-start',
-                        marginTop: s.sm,
-                        borderWidth: 1,
-                        borderColor: `${c.warning}66`,
-                        borderRadius: r.pill,
-                        paddingHorizontal: 12,
-                        paddingVertical: 6,
-                      }}
-                    >
-                      <Text style={{ color: c.warning, fontFamily: ty.body.familySemibold, fontSize: ty.sizes.xs }}>
-                        {revertPrepAdjustmentMutation.isPending ? 'Reverting...' : 'Rollback Last Adjustment'}
-                      </Text>
-                    </Pressable>
-                  ) : null}
                 </View>
               </View>
-            )}
-          </>
-        )}
+            </GlassCard>
+          )}
 
-        {/* Quick Access - Ring Icons */}
-        <View style={[styles.quickAccess, { paddingHorizontal: s.lg, marginTop: s.xl }]}>
-          <Text
-            style={{
-              color: c.textMuted,
-              fontFamily: ty.body.familySemibold,
-              fontSize: ty.sizes.sm,
-              letterSpacing: 1.5,
-              marginBottom: s.lg,
-            }}
-          >
-            QUICK ACCESS
-          </Text>
-          <View style={styles.linkRow}>
-            {quickLinks.map((link, index) => (
-              <RingIconButton
-                key={link.label}
-                icon={link.icon}
-                label={link.label}
-                onPress={link.onPress}
-                size={56}
-                delay={100 + index * 60}
-              />
+          {/* Quick access buttons */}
+          <View style={styles.quickAccessRow}>
+            {quickAccessButtons.map((btn) => (
+              <Pressable
+                key={btn.id}
+                style={[styles.quickAccessBtn, { backgroundColor: c.surface, borderColor: c.border }]}
+                onPress={() => {
+                  trackProgressCtaTapped({ cta_id: btn.id });
+                  router.push(btn.route as any);
+                }}
+              >
+                <TabBarIcon name={btn.icon} color={c.primary} size={18} />
+                <Text style={[styles.quickAccessLabel, { color: c.text, fontFamily: ty.body.family }]}>
+                  {btn.label}
+                </Text>
+              </Pressable>
             ))}
           </View>
-        </View>
+        </MotiView>
+
+        {/* ────────── 4. History Section ────────── */}
+        <MotiView
+          from={{ opacity: 0, translateY: 10 }}
+          animate={{ opacity: 1, translateY: 0 }}
+          transition={{ type: 'timing', duration: 400, delay: 300 }}
+          style={styles.section}
+        >
+          <Text style={[styles.sectionTitle, { color: c.text, fontFamily: ty.heading.familySemibold }]}>
+            History
+          </Text>
+
+          {/* Time-range chips */}
+          <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.chipRow}>
+            {HISTORY_RANGES.map((range) => (
+              <Pressable
+                key={range.label}
+                style={[
+                  styles.chip,
+                  {
+                    backgroundColor: historyRange.label === range.label ? c.primary : c.surface,
+                    borderColor: historyRange.label === range.label ? c.primary : c.border,
+                  },
+                ]}
+                onPress={() => handleRangeChange(range)}
+              >
+                <Text style={[
+                  styles.chipText,
+                  {
+                    color: historyRange.label === range.label ? c.bg : c.text,
+                    fontFamily: ty.body.familySemibold,
+                  },
+                ]}>
+                  {range.label}
+                </Text>
+              </Pressable>
+            ))}
+          </ScrollView>
+
+          {/* Trend chart */}
+          <GlassCard style={{ marginTop: 12 }}>
+            <View style={styles.chartHeader}>
+              <Text style={[styles.chartTitle, { color: c.text, fontFamily: ty.body.familySemibold }]}>
+                Weight Trend
+              </Text>
+              <FreshnessChip lastUpdatedIso={snapshot?.dataFreshness?.weightLastLoggedAt || null} />
+            </View>
+            {snapshot?.bodyComp.weightTrendSeries && snapshot.bodyComp.weightTrendSeries.length > 0 ? (
+              <WeeklyTrendChart
+                title="Weight Trend"
+                data={snapshot.bodyComp.weightTrendSeries.map((pt) => ({
+                  day: pt.day,
+                  value: Math.round(pt.value * 2.205),
+                }))}
+              />
+            ) : (
+              <View style={styles.emptyChart}>
+                <TabBarIcon name="analytics-outline" color={c.textMuted} size={32} />
+                <Text style={[styles.emptyChartText, { color: c.textMuted, fontFamily: ty.body.family }]}>
+                  Add weigh-ins to see your trend
+                </Text>
+              </View>
+            )}
+          </GlassCard>
+
+          {/* Performance summary */}
+          {snapshot && snapshot.performance.sessions > 0 && (
+            <GlassCard style={{ marginTop: 12 }}>
+              <View style={styles.chartHeader}>
+                <Text style={[styles.chartTitle, { color: c.text, fontFamily: ty.body.familySemibold }]}>
+                  Performance
+                </Text>
+                <FreshnessChip lastUpdatedIso={snapshot.dataFreshness?.workoutLastSessionAt || null} />
+              </View>
+              <View style={styles.perfRow}>
+                <View style={styles.perfStat}>
+                  <Text style={[styles.perfValue, { color: c.text, fontFamily: ty.heading.family }]}>
+                    {snapshot.performance.sessions}
+                  </Text>
+                  <Text style={[styles.perfLabel, { color: c.textMuted, fontFamily: ty.body.family }]}>Sessions</Text>
+                </View>
+                <View style={[styles.perfDivider, { backgroundColor: c.border }]} />
+                <View style={styles.perfStat}>
+                  <Text style={[styles.perfValue, { color: c.text, fontFamily: ty.heading.family }]}>
+                    {Math.round(snapshot.performance.totalVolumeLb).toLocaleString()}
+                  </Text>
+                  <Text style={[styles.perfLabel, { color: c.textMuted, fontFamily: ty.body.family }]}>Total Vol (lb)</Text>
+                </View>
+                <View style={[styles.perfDivider, { backgroundColor: c.border }]} />
+                <View style={styles.perfStat}>
+                  <Text style={[styles.perfValue, { color: c.text, fontFamily: ty.heading.family }]}>
+                    {snapshot.performance.prVelocity30d}
+                  </Text>
+                  <Text style={[styles.perfLabel, { color: c.textMuted, fontFamily: ty.body.family }]}>PRs (30d)</Text>
+                </View>
+              </View>
+            </GlassCard>
+          )}
+
+          {/* Data quality flags */}
+          {snapshot?.qualityFlags && snapshot.qualityFlags.some((f) => f.status !== 'good') && (
+            <View style={[styles.flagsContainer, { marginTop: 12 }]}>
+              {snapshot.qualityFlags
+                .filter((f) => f.status !== 'good')
+                .map((flag) => (
+                  <View key={flag.key} style={[styles.flagBadge, { backgroundColor: flag.status === 'warn' ? '#FFB94615' : '#FF5C5C15' }]}>
+                    <TabBarIcon
+                      name={flag.status === 'warn' ? 'warning-outline' : 'alert-circle-outline'}
+                      color={flag.status === 'warn' ? '#FFB946' : '#FF5C5C'}
+                      size={14}
+                    />
+                    <Text style={{ color: flag.status === 'warn' ? '#FFB946' : '#FF5C5C', fontSize: 11, fontFamily: ty.body.family, flex: 1 }}>
+                      {flag.message}
+                    </Text>
+                  </View>
+                ))}
+            </View>
+          )}
+        </MotiView>
       </ScrollView>
     </View>
   );
 }
 
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-  },
+  container: { flex: 1 },
+  loadingContainer: { flex: 1, justifyContent: 'center', alignItems: 'center' },
   header: {
-    paddingBottom: 8,
-  },
-  headerRow: {
     flexDirection: 'row',
+    alignItems: 'center',
     justifyContent: 'space-between',
-    alignItems: 'center',
-    height: 48,
+    paddingVertical: 16,
   },
-  headerButton: {
-    width: 44,
-    height: 44,
-    borderRadius: 22,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  title: {
-    letterSpacing: -0.5,
-    marginTop: 4,
-  },
-  scrollView: {
-    flex: 1,
-  },
-  content: {
-    paddingTop: 16,
-  },
-  quickAccess: {},
-  linkRow: {
+  headerTitle: { letterSpacing: -0.5 },
+  scrollContent: { gap: 20, paddingTop: 4 },
+  section: { gap: 12 },
+  sectionTitle: { fontSize: 18, letterSpacing: -0.3 },
+
+  // Streak row
+  streakRow: { flexDirection: 'row', gap: 10 },
+
+  // Goal benchmark
+  benchmarkRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start' },
+  benchmarkInfo: { flex: 1, gap: 4 },
+  benchmarkTitleRow: { flexDirection: 'row', alignItems: 'center', gap: 6 },
+  benchmarkTitle: { fontSize: 13 },
+  benchmarkPace: { fontSize: 20, letterSpacing: -0.5 },
+  benchmarkDetail: { fontSize: 11 },
+  statusBadge: { paddingHorizontal: 8, paddingVertical: 4, borderRadius: 8 },
+
+  // Quick access
+  quickAccessRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginTop: 4 },
+  quickAccessBtn: {
     flexDirection: 'row',
-    justifyContent: 'space-around',
+    alignItems: 'center',
+    gap: 6,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    borderRadius: 12,
+    borderWidth: 1,
+  },
+  quickAccessLabel: { fontSize: 12 },
+
+  // Chips
+  chipRow: { gap: 8, paddingVertical: 2 },
+  chip: { paddingHorizontal: 14, paddingVertical: 7, borderRadius: 16, borderWidth: 1 },
+  chipText: { fontSize: 12 },
+
+  // Chart
+  chartHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 },
+  chartTitle: { fontSize: 14 },
+  emptyChart: { alignItems: 'center', paddingVertical: 30, gap: 8 },
+  emptyChartText: { fontSize: 13 },
+
+  // Performance
+  perfRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-around', paddingVertical: 8 },
+  perfStat: { alignItems: 'center' },
+  perfValue: { fontSize: 20, letterSpacing: -0.5 },
+  perfLabel: { fontSize: 11, marginTop: 2 },
+  perfDivider: { width: 1, height: 28 },
+
+  // Flags
+  flagsContainer: { gap: 6 },
+  flagBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderRadius: 10,
   },
 });

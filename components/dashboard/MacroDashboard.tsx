@@ -10,13 +10,8 @@ import { GlassCard } from '../../components/premium/GlassCard';
 import { getDailyTotals } from '../../services/nutritionService';
 import { getUserTargets } from '../../hooks/useUser';
 
-interface MacroData {
-  consumed: number;
-  target: number;
-}
-
 export function MacroDashboard() {
-  const { c, s, ty, r } = useTokens();
+  const { c, s, ty } = useTokens();
   const { user } = useAuth();
   const today = new Date().toISOString().split('T')[0];
 
@@ -102,9 +97,13 @@ export function MacroDashboard() {
     fat: { consumed: Math.round(consumed?.fat || 0), target: targets?.fat_g || 65 },
   };
 
-  const proteinPercent = Math.round((data.protein.consumed / data.protein.target) * 100);
-  const carbsPercent = Math.round((data.carbs.consumed / data.carbs.target) * 100);
-  const fatPercent = Math.round((data.fat.consumed / data.fat.target) * 100);
+  const safePercent = (consumed: number, target: number) => {
+    if (!target || target <= 0) return 0;
+    return Math.round((consumed / target) * 100);
+  };
+  const proteinPercent = safePercent(data.protein.consumed, data.protein.target);
+  const carbsPercent = safePercent(data.carbs.consumed, data.carbs.target);
+  const fatPercent = safePercent(data.fat.consumed, data.fat.target);
 
   const macroCards = [
     {

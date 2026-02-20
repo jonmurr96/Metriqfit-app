@@ -1,9 +1,10 @@
-import React, { useState, useEffect } from 'react';
-import { StyleSheet, View, Text, Pressable, ScrollView, TextInput, Alert } from 'react-native';
+import React, { useState, useEffect, useRef } from 'react';
+import { StyleSheet, View, Text, Pressable, ScrollView, TextInput, Alert, Modal, Image } from 'react-native';
 import { useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { LinearGradient } from 'expo-linear-gradient';
 import { MotiView, AnimatePresence } from 'moti';
+import { CameraView, type CameraType, useCameraPermissions } from 'expo-camera';
 
 import { useTokens } from '../../lib/theme';
 import { TabBarIcon } from '../../components/navigation/TabBarIcon';
@@ -13,10 +14,13 @@ import { useProfile } from '../../hooks/useUser';
 import { useApplyCheckInUpdates, usePreviewCheckIn } from '../../hooks/useCheckIn';
 import { usePrepCoachState, useRunPrepCheckInAdjustment } from '../../hooks/usePrepCoach';
 import { useEntitlementStatus } from '../../hooks/useSubscription';
+import { useUploadProgressPhoto } from '../../hooks/useProgressPhotos';
+import { trackEvent, trackProgressPhotoUploaded } from '../../lib/analytics';
 import type { CheckInPreviewResult } from '../../services/checkInService';
 import type { PrepCoachAdjustmentResult } from '../../services/prepCoachService';
 
 type Step = 'metrics' | 'wellness' | 'photos' | 'analysis';
+type PhotoAngle = 'front' | 'side' | 'back';
 
 export default function CheckInScreen() {
     const { c, s, ty, r, shadow } = useTokens();
@@ -29,9 +33,15 @@ export default function CheckInScreen() {
     const previewCheckInMutation = usePreviewCheckIn();
     const applyUpdatesMutation = useApplyCheckInUpdates();
     const runPrepAdjustmentMutation = useRunPrepCheckInAdjustment();
+    const uploadProgressPhotoMutation = useUploadProgressPhoto();
+    const cameraRef = useRef<CameraView | null>(null);
+    const [cameraPermission, requestCameraPermission] = useCameraPermissions();
 
     const [currentStep, setCurrentStep] = useState<Step>('metrics');
     const [progress, setProgress] = useState(0.25);
+    const [cameraFacing, setCameraFacing] = useState<CameraType>('back');
+    const [captureSlot, setCaptureSlot] = useState<PhotoAngle | null>(null);
+    const [capturedPhotos, setCapturedPhotos] = useState<Partial<Record<PhotoAngle, string>>>({});
 
     // Determine user's unit system
     const isImperial = profile?.unit_system === 'imperial';
@@ -114,6 +124,7 @@ export default function CheckInScreen() {
                 stress,
                 energy,
             });
+            await uploadCapturedPhotos(preview.measurementId);
             setAnalysisResult(preview);
             setUpdatesApplied(false);
             setPrepAppliedResult(null);
@@ -145,6 +156,7 @@ export default function CheckInScreen() {
         try {
             let prepApplyResult: PrepCoachAdjustmentResult | null = null;
             if (prepModeEnabled) {
+                // Use local variable — don't rely on stale state
                 prepApplyResult = await runPrepAdjustmentMutation.mutateAsync({
                     measurementId: analysisResult.measurementId,
                     dryRun: false,
@@ -158,7 +170,8 @@ export default function CheckInScreen() {
             setUpdatesApplied(true);
 
             if (prepModeEnabled) {
-                if (isElite && prepAppliedResult?.applied) {
+                // Use local prepApplyResult (not stale state) for the applied check
+                if (isElite && prepApplyResult?.applied) {
                     Alert.alert('Prep adjustments applied', 'Targets, nutrition plan, and workout adaptations have been updated for this prep cycle.', [
                         { text: 'Done', onPress: () => router.back() },
                     ]);
@@ -179,6 +192,93 @@ export default function CheckInScreen() {
         }
     };
 
+    const openPhotoCapture = async (slot: PhotoAngle) => {
+        trackEvent('checkin_photo_capture_opened', { slot });
+        if (!cameraPermission?.granted) {
+            const permission = await requestCameraPermission();
+            if (!permission.granted) {
+                Alert.alert('Camera access needed', 'Enable camera permission to capture progress photos.');
+                return;
+            }
+        }
+        setCaptureSlot(slot);
+    };
+
+    const removePhotoSlot = (slot: PhotoAngle) => {
+        setCapturedPhotos((prev) => {
+            const next = { ...prev };
+            delete next[slot];
+            return next;
+        });
+        trackEvent('checkin_photo_removed', { slot });
+    };
+
+    const handlePhotoSlotPress = (slot: PhotoAngle) => {
+        const uri = capturedPhotos[slot];
+        if (!uri) {
+            openPhotoCapture(slot).catch(() => undefined);
+            return;
+        }
+        Alert.alert(
+            `${slot[0].toUpperCase()}${slot.slice(1)} photo`,
+            'Choose an action for this photo.',
+            [
+                { text: 'Retake', onPress: () => openPhotoCapture(slot).catch(() => undefined) },
+                { text: 'Remove', style: 'destructive', onPress: () => removePhotoSlot(slot) },
+                { text: 'Cancel', style: 'cancel' },
+            ],
+        );
+    };
+
+    const captureProgressPhoto = async () => {
+        if (!cameraRef.current || !captureSlot) return;
+        try {
+            const snap = await cameraRef.current.takePictureAsync({
+                quality: 0.7,
+                skipProcessing: true,
+            });
+            if (!snap?.uri) {
+                throw new Error('Capture failed');
+            }
+            setCapturedPhotos((prev) => ({ ...prev, [captureSlot]: snap.uri }));
+            trackEvent('checkin_photo_captured', { slot: captureSlot });
+            setCaptureSlot(null);
+        } catch (error: any) {
+            Alert.alert('Capture failed', error?.message || 'Could not capture photo.');
+        }
+    };
+
+    const uploadCapturedPhotos = async (measurementId: string) => {
+        const entries = Object.entries(capturedPhotos) as [PhotoAngle, string][];
+        if (!entries.length) return;
+        let successCount = 0;
+        for (const [angle, uri] of entries) {
+            if (!uri) continue;
+            try {
+                await uploadProgressPhotoMutation.mutateAsync({
+                    uri,
+                    angle,
+                    measurementId,
+                    metadata: {
+                        source: 'weekly_check_in',
+                    },
+                });
+                successCount += 1;
+                trackProgressPhotoUploaded({ source: 'weekly_check_in', angle, measurement_id: measurementId });
+            } catch (uploadError: any) {
+                trackEvent('checkin_photo_upload_failed', {
+                    angle,
+                    message: uploadError?.message || 'upload_failed',
+                });
+            }
+        }
+        trackEvent('checkin_photo_upload_batch_completed', {
+            uploaded_count: successCount,
+            attempted_count: entries.length,
+            measurement_id: measurementId,
+        });
+    };
+
     // --- Components ---
 
     const StepHeader = ({ title, subtitle }: { title: string, subtitle: string }) => (
@@ -192,43 +292,178 @@ export default function CheckInScreen() {
         </View>
     );
 
-    const Slider = ({ label, value, onChange }: any) => (
-        <View style={{ marginBottom: s.xl }}>
-            <View style={{ flexDirection: 'row', justifyContent: 'space-between', marginBottom: 12 }}>
-                <Text style={{ color: c.text, fontFamily: ty.body.familyMedium }}>{label}</Text>
-                <Text style={{ color: c.primary, fontFamily: ty.mono.family, fontSize: 16 }}>{value}/10</Text>
-            </View>
-            <View style={{ height: 44, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 4 }}>
-                {[1, 2, 3, 4, 5, 6, 7, 8, 9, 10].map((num) => (
+    const getValueLabel = (val: number, type: 'sleep' | 'stress' | 'energy') => {
+        if (type === 'sleep') {
+            if (val <= 3) return { label: 'Poor', color: c.danger as string };
+            if (val <= 5) return { label: 'Fair', color: c.warning as string };
+            if (val <= 7) return { label: 'Good', color: c.primary as string };
+            return { label: 'Excellent', color: c.success as string };
+        }
+        if (type === 'stress') {
+            if (val <= 3) return { label: 'Low', color: c.success as string };
+            if (val <= 5) return { label: 'Moderate', color: c.primary as string };
+            if (val <= 7) return { label: 'High', color: c.warning as string };
+            return { label: 'Very High', color: c.danger as string };
+        }
+        // energy
+        if (val <= 3) return { label: 'Drained', color: c.danger as string };
+        if (val <= 5) return { label: 'Low', color: c.warning as string };
+        if (val <= 7) return { label: 'Good', color: c.primary as string };
+        return { label: 'Peak', color: c.success as string };
+    };
+
+    const WellnessCard = ({
+        emoji, label, value, onChange, type,
+    }: { emoji: string; label: string; value: number; onChange: (v: number) => void; type: 'sleep' | 'stress' | 'energy' }) => {
+        const { label: valLabel, color } = getValueLabel(value, type);
+        const trackRef = React.useRef<View>(null);
+        const [trackWidth, setTrackWidth] = React.useState(0);
+
+        const handleTrackPress = (e: any) => {
+            const locationX = e.nativeEvent.locationX;
+            if (!trackWidth) return;
+            const clamped = Math.max(0, Math.min(locationX, trackWidth));
+            const ratio = clamped / trackWidth;
+            const newVal = Math.max(1, Math.min(10, Math.round(ratio * 10)));
+            onChange(newVal);
+        };
+
+        const fillPct = ((value - 1) / 9) * 100;
+
+        return (
+            <MotiView
+                from={{ opacity: 0, translateY: 12 }}
+                animate={{ opacity: 1, translateY: 0 }}
+                transition={{ type: 'timing', duration: 400 }}
+                style={[styles.wellnessCard, {
+                    backgroundColor: 'rgba(255,255,255,0.04)',
+                    borderColor: `${color}30`,
+                    borderWidth: 1,
+                    borderRadius: 20,
+                    padding: 20,
+                    marginBottom: 16,
+                }]}
+            >
+                {/* Card Header */}
+                <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 16 }}>
+                    <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}>
+                        <Text style={{ fontSize: 24 }}>{emoji}</Text>
+                        <Text style={{ color: c.text, fontFamily: ty.body.familySemibold, fontSize: 15 }}>{label}</Text>
+                    </View>
+                    <View style={{ flexDirection: 'row', alignItems: 'baseline', gap: 4 }}>
+                        <Text style={{ color, fontFamily: ty.heading.familySemibold, fontSize: 28 }}>{value}</Text>
+                        <Text style={{ color: c.textMuted, fontFamily: ty.body.family, fontSize: 13 }}>/10</Text>
+                    </View>
+                </View>
+
+                {/* Value label */}
+                <Text style={{ color, fontFamily: ty.body.familyMedium, fontSize: 12, marginBottom: 12, letterSpacing: 0.8, textTransform: 'uppercase' }}>
+                    {valLabel}
+                </Text>
+
+                {/* Slider Track */}
+                <View>
                     <Pressable
-                        key={num}
-                        onPress={() => onChange(num)}
+                        ref={trackRef as any}
+                        onLayout={(e) => setTrackWidth(e.nativeEvent.layout.width)}
+                        onPress={handleTrackPress}
                         style={{
-                            width: 28,
-                            height: num === value ? 40 : 28,
-                            backgroundColor: num <= value ? c.primary : c.surface2,
-                            borderRadius: 4,
-                            alignItems: 'center',
-                            justifyContent: 'center',
-                            opacity: num <= value ? 1 : 0.3
+                            height: 10,
+                            backgroundColor: 'rgba(255,255,255,0.08)',
+                            borderRadius: 999,
+                            overflow: 'hidden',
+                            position: 'relative',
                         }}
                     >
-                        {num === value && <View style={{ width: 4, height: 4, borderRadius: 2, backgroundColor: c.bg }} />}
+                        <View style={{
+                            position: 'absolute',
+                            left: 0,
+                            top: 0,
+                            bottom: 0,
+                            width: `${fillPct}%`,
+                            backgroundColor: color,
+                            borderRadius: 999,
+                            opacity: 0.85,
+                        }} />
                     </Pressable>
-                ))}
-            </View>
-        </View>
-    );
 
-    const PhotoSlot = ({ label }: { label: string }) => (
-        <Pressable
-            onPress={() => Alert.alert('Progress Photos', 'Camera integration coming soon! You\'ll be able to take front, side, and back photos to track your physique over time.')}
-            style={{ flex: 1, aspectRatio: 0.75, borderWidth: 1, borderColor: c.border, borderRadius: r.md, borderStyle: 'dashed', alignItems: 'center', justifyContent: 'center', backgroundColor: 'rgba(255,255,255,0.02)' }}
-        >
-            <TabBarIcon name="camera" color={c.textMuted} size={24} />
-            <Text style={{ color: c.textMuted, fontSize: 12, marginTop: 8, fontFamily: ty.body.family }}>{label}</Text>
-        </Pressable>
-    );
+                    {/* Thumb + step dots */}
+                    <View style={{ flexDirection: 'row', justifyContent: 'space-between', marginTop: 14 }}>
+                        {[1, 2, 3, 4, 5, 6, 7, 8, 9, 10].map((num) => (
+                            <Pressable
+                                key={num}
+                                onPress={() => onChange(num)}
+                                style={{ alignItems: 'center', paddingVertical: 4, paddingHorizontal: 2 }}
+                            >
+                                <View style={{
+                                    width: num === value ? 14 : 6,
+                                    height: num === value ? 14 : 6,
+                                    borderRadius: 999,
+                                    backgroundColor: num <= value ? color : 'rgba(255,255,255,0.12)',
+                                    ...(num === value ? {
+                                        shadowColor: color,
+                                        shadowOffset: { width: 0, height: 0 },
+                                        shadowOpacity: 1,
+                                        shadowRadius: 8,
+                                    } : {}),
+                                }} />
+                                {num === 1 || num === 10 ? (
+                                    <Text style={{ color: c.textMuted, fontSize: 9, fontFamily: ty.body.family, marginTop: 4 }}>
+                                        {num}
+                                    </Text>
+                                ) : null}
+                            </Pressable>
+                        ))}
+                    </View>
+                </View>
+            </MotiView>
+        );
+    };
+
+    const PhotoSlot = ({ label, slot }: { label: string; slot: PhotoAngle }) => {
+        const uri = capturedPhotos[slot];
+        return (
+            <Pressable
+                onPress={() => handlePhotoSlotPress(slot)}
+                style={{
+                    flex: 1,
+                    aspectRatio: 0.75,
+                    borderWidth: 1,
+                    borderColor: uri ? c.primary : c.border,
+                    borderRadius: r.md,
+                    borderStyle: uri ? 'solid' : 'dashed',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    backgroundColor: 'rgba(255,255,255,0.02)',
+                    overflow: 'hidden',
+                }}
+            >
+                {uri ? (
+                    <>
+                        <Image source={{ uri }} style={{ width: '100%', height: '100%', position: 'absolute' }} />
+                        <View
+                            style={{
+                                position: 'absolute',
+                                left: 0,
+                                right: 0,
+                                bottom: 0,
+                                paddingVertical: 6,
+                                backgroundColor: 'rgba(0,0,0,0.55)',
+                                alignItems: 'center',
+                            }}
+                        >
+                            <Text style={{ color: '#fff', fontSize: 12, fontFamily: ty.body.familySemibold }}>{label}</Text>
+                        </View>
+                    </>
+                ) : (
+                    <>
+                        <TabBarIcon name="camera" color={c.textMuted} size={24} />
+                        <Text style={{ color: c.textMuted, fontSize: 12, marginTop: 8, fontFamily: ty.body.family }}>{label}</Text>
+                    </>
+                )}
+            </Pressable>
+        );
+    };
 
     const formatDelta = (value: number, suffix = '') => `${value >= 0 ? '+' : ''}${value}${suffix}`;
 
@@ -321,11 +556,27 @@ export default function CheckInScreen() {
                                 subtitle="Your recovery dictates your intensity. Be honest."
                             />
 
-                            <GlassCard intensity="light" style={{ padding: s.xl }}>
-                                <Slider label="Sleep Quality" value={sleep} onChange={setSleep} />
-                                <Slider label="Stress Level" value={stress} onChange={setStress} />
-                                <Slider label="Energy Level" value={energy} onChange={setEnergy} />
-                            </GlassCard>
+                            <WellnessCard
+                                emoji="🌙"
+                                label="Sleep Quality"
+                                value={sleep}
+                                onChange={setSleep}
+                                type="sleep"
+                            />
+                            <WellnessCard
+                                emoji="⚡"
+                                label="Stress Level"
+                                value={stress}
+                                onChange={setStress}
+                                type="stress"
+                            />
+                            <WellnessCard
+                                emoji="🔋"
+                                label="Energy Level"
+                                value={energy}
+                                onChange={setEnergy}
+                                type="energy"
+                            />
                         </MotiView>
                     )}
 
@@ -344,17 +595,20 @@ export default function CheckInScreen() {
                             />
 
                             <View style={{ flexDirection: 'row', gap: 12, height: 200 }}>
-                                <PhotoSlot label="Front" />
-                                <PhotoSlot label="Side" />
-                                <PhotoSlot label="Back" />
+                                <PhotoSlot label="Front" slot="front" />
+                                <PhotoSlot label="Side" slot="side" />
+                                <PhotoSlot label="Back" slot="back" />
                             </View>
 
                             <View style={{ marginTop: s.xl, flexDirection: 'row', alignItems: 'center', gap: 12, backgroundColor: 'rgba(34, 211, 238, 0.1)', padding: 16, borderRadius: r.md }}>
                                 <TabBarIcon name="information-circle" color={c.primary} size={20} />
                                 <Text style={{ color: c.text, flex: 1, fontSize: 12 }}>
-                                    Photos are privately stored and only analyzed by AI for body fat estimation.
+                                    Photos are privately stored in your timeline and attached to this check-in measurement.
                                 </Text>
                             </View>
+                            <Text style={{ color: c.textMuted, marginTop: s.md, fontFamily: ty.body.family, fontSize: 12 }}>
+                                Captured this check-in: {Object.keys(capturedPhotos).length}/3
+                            </Text>
                         </MotiView>
                     )}
 
@@ -507,6 +761,42 @@ export default function CheckInScreen() {
                 </AnimatePresence>
             </ScrollView>
 
+            <Modal visible={!!captureSlot} animationType="slide" transparent={false} onRequestClose={() => setCaptureSlot(null)}>
+                <View style={{ flex: 1, backgroundColor: c.bg }}>
+                    <View style={[styles.header, { marginTop: insets.top + 6 }]}>
+                        <Pressable onPress={() => setCaptureSlot(null)} style={{ padding: 8 }}>
+                            <TabBarIcon name="close" color={c.textMuted} size={24} />
+                        </Pressable>
+                        <Text style={{ color: c.text, fontFamily: ty.body.familySemibold }}>
+                            Capture {captureSlot ? `${captureSlot[0].toUpperCase()}${captureSlot.slice(1)}` : ''} Photo
+                        </Text>
+                        <Pressable onPress={() => setCameraFacing((prev) => (prev === 'back' ? 'front' : 'back'))} style={{ padding: 8 }}>
+                            <TabBarIcon name="camera-reverse-outline" color={c.textMuted} size={22} />
+                        </Pressable>
+                    </View>
+                    <View style={{ flex: 1, margin: 16, borderRadius: r.lg, overflow: 'hidden' }}>
+                        <CameraView ref={cameraRef} style={{ flex: 1 }} facing={cameraFacing} />
+                    </View>
+                    <View style={{ paddingHorizontal: 24, paddingBottom: insets.bottom + 20 }}>
+                        <Pressable
+                            style={({ pressed }) => [
+                                styles.primaryButton,
+                                {
+                                    backgroundColor: c.primary,
+                                    borderRadius: r.md,
+                                    opacity: pressed ? 0.9 : 1,
+                                },
+                            ]}
+                            onPress={() => captureProgressPhoto().catch(() => undefined)}
+                        >
+                            <Text style={{ color: c.bg, fontFamily: ty.heading.familySemibold, fontSize: 16 }}>
+                                Capture Photo
+                            </Text>
+                        </Pressable>
+                    </View>
+                </View>
+            </Modal>
+
             {/* Footer CTA */}
             {!isAnalyzing && (
                 <View style={[styles.footer, { paddingBottom: insets.bottom + s.lg, backgroundColor: c.bg }]}>
@@ -595,5 +885,8 @@ const styles = StyleSheet.create({
         shadowOffset: { width: 0, height: 0 },
         shadowOpacity: 0.8,
         shadowRadius: 40,
-    }
+    },
+    wellnessCard: {
+        // base styles applied inline, this just reserves the name
+    },
 });

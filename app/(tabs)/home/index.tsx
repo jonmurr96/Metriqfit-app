@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { StyleSheet, View, Text, ScrollView, Pressable } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -17,6 +17,8 @@ import { HomeMealPreviewCard } from '../../../components/home/HomeMealPreviewCar
 import { useNutritionPlanDay, useTodayWorkoutScheduleEntry, useTodaysWorkout } from '../../../hooks/usePlan';
 import { useOnboardingAnswers, useStreak } from '../../../hooks/useUser';
 import { useDailyMeals, useDailyTotals } from '../../../hooks/useNutrition';
+import { useHomeSnapshot } from '../../../hooks/useProgressMetrics';
+import { trackHomeCardRendered, trackHomeCtaTapped, trackHomeViewed } from '../../../lib/analytics';
 
 const ALIGNMENT_BANNER_STORAGE_KEY = 'home_alignment_banner_v1';
 const ALIGNMENT_BANNER_RECENT_DAYS = 21;
@@ -31,6 +33,9 @@ export default function HomeScreen() {
   const { data: streak } = useStreak();
   const { data: onboardingAnswers } = useOnboardingAnswers();
   const { data: dailyTotals } = useDailyTotals();
+  const { data: homeSnapshot } = useHomeSnapshot();
+  const hasTrackedHomeViewRef = useRef(false);
+  const renderedHomeCardsRef = useRef<Record<string, boolean>>({});
   const [showAlignmentBanner, setShowAlignmentBanner] = useState(false);
   const todayDate = new Date().toISOString().split('T')[0];
   const dayOfWeek = new Date().getDay();
@@ -75,6 +80,22 @@ export default function HomeScreen() {
     };
   }, [onboardingAnswers?.completed_at, user?.id]);
 
+  useEffect(() => {
+    if (!hasTrackedHomeViewRef.current) {
+      trackHomeViewed({ source: 'home_tab' });
+      hasTrackedHomeViewRef.current = true;
+    }
+  }, []);
+
+  useEffect(() => {
+    if (!homeSnapshot) return;
+    ['kpi_strip', 'plan_health', 'next_best_actions'].forEach((cardId) => {
+      if (renderedHomeCardsRef.current[cardId]) return;
+      trackHomeCardRendered({ card_id: cardId });
+      renderedHomeCardsRef.current[cardId] = true;
+    });
+  }, [homeSnapshot]);
+
   const dismissAlignmentBanner = async () => {
     if (!user?.id) return;
     const key = `${ALIGNMENT_BANNER_STORAGE_KEY}:${user.id}`;
@@ -84,10 +105,38 @@ export default function HomeScreen() {
 
   // Quick Actions for Home
   const quickActions = [
-    { label: 'Food', icon: 'fast-food-outline', onPress: () => router.push('/(tabs)/nutrition/food-search') },
-    { label: 'Workout', icon: 'barbell-outline', onPress: () => router.push('/(tabs)/workout') },
-    { label: 'Summary', icon: 'analytics-outline', onPress: () => router.push('/(tabs)/home/daily-summary') },
-    { label: 'Settings', icon: 'settings-outline', onPress: () => router.push('/settings') },
+    {
+      label: 'Food',
+      icon: 'fast-food-outline',
+      onPress: () => {
+        trackHomeCtaTapped({ cta_id: 'quick_food' });
+        router.push('/(tabs)/nutrition/food-search');
+      },
+    },
+    {
+      label: 'Workout',
+      icon: 'barbell-outline',
+      onPress: () => {
+        trackHomeCtaTapped({ cta_id: 'quick_workout' });
+        router.push('/(tabs)/workout');
+      },
+    },
+    {
+      label: 'Summary',
+      icon: 'analytics-outline',
+      onPress: () => {
+        trackHomeCtaTapped({ cta_id: 'quick_summary' });
+        router.push('/(tabs)/home/daily-summary');
+      },
+    },
+    {
+      label: 'Settings',
+      icon: 'settings-outline',
+      onPress: () => {
+        trackHomeCtaTapped({ cta_id: 'quick_settings' });
+        router.push('/settings');
+      },
+    },
   ];
 
   const slotLabelMap: Record<string, string> = {
@@ -127,6 +176,17 @@ export default function HomeScreen() {
       : todaySchedule?.session_type === 'conditioning'
         ? 'Cardio and conditioning focus scheduled for today.'
         : 'Recovery, mobility, and hydration.';
+
+  const workoutStatusLabel = homeSnapshot?.todayStatus.workoutStatus === 'completed'
+    ? 'Workout complete'
+    : homeSnapshot?.todayStatus.workoutStatus === 'planned'
+      ? 'Workout pending'
+      : homeSnapshot?.todayStatus.workoutStatus === 'rest'
+        ? 'Recovery day'
+        : 'No workout scheduled';
+
+  const quickActionPrimary = homeSnapshot?.nextBestActions?.[0];
+  const quickActionSecondary = homeSnapshot?.nextBestActions?.[1];
 
   return (
     <PremiumBackground>
@@ -187,7 +247,10 @@ export default function HomeScreen() {
                   borderColor: `${c.primary}40`,
                 },
               ]}
-              onPress={() => router.push('/settings')}
+              onPress={() => {
+                trackHomeCtaTapped({ cta_id: 'header_profile_settings' });
+                router.push('/settings');
+              }}
             >
               <TabBarIcon name="person-circle-outline" color={c.primary} size={22} />
             </Pressable>
@@ -223,6 +286,60 @@ export default function HomeScreen() {
         {/* Macro Dashboard */}
         <View style={[styles.dashboardContainer, { marginTop: s.xl }]}>
           <MacroDashboard />
+        </View>
+
+        {/* KPI Strip */}
+        <View style={[styles.section, { marginTop: s.lg, paddingHorizontal: s.lg }]}>
+          <GlassCard intensity="light" animated delay={560}>
+            <View style={styles.kpiRow}>
+              <View style={styles.kpiItem}>
+                <Text style={[styles.kpiLabel, { color: c.textMuted, fontFamily: ty.body.familySemibold }]}>Weight 7d</Text>
+                <Text style={[styles.kpiValue, { color: c.text, fontFamily: ty.heading.familySemibold }]}>
+                  {homeSnapshot?.kpiStrip.weightDelta7dKg == null
+                    ? '--'
+                    : `${homeSnapshot.kpiStrip.weightDelta7dKg > 0 ? '+' : ''}${homeSnapshot.kpiStrip.weightDelta7dKg} kg`}
+                </Text>
+              </View>
+              <View style={styles.kpiItem}>
+                <Text style={[styles.kpiLabel, { color: c.textMuted, fontFamily: ty.body.familySemibold }]}>Consistency</Text>
+                <Text style={[styles.kpiValue, { color: c.text, fontFamily: ty.heading.familySemibold }]}>
+                  {homeSnapshot?.kpiStrip.consistencyScore ?? '--'}%
+                </Text>
+              </View>
+              <View style={styles.kpiItem}>
+                <Text style={[styles.kpiLabel, { color: c.textMuted, fontFamily: ty.body.familySemibold }]}>Sessions</Text>
+                <Text style={[styles.kpiValue, { color: c.text, fontFamily: ty.heading.familySemibold }]}>
+                  {homeSnapshot?.kpiStrip.sessionsThisWeek ?? 0}/wk
+                </Text>
+              </View>
+              <View style={styles.kpiItem}>
+                <Text style={[styles.kpiLabel, { color: c.textMuted, fontFamily: ty.body.familySemibold }]}>Prep</Text>
+                <Text style={[styles.kpiValue, { color: c.text, fontFamily: ty.heading.familySemibold }]}>
+                  {homeSnapshot?.kpiStrip.prepStatus || 'Off'}
+                </Text>
+              </View>
+            </View>
+          </GlassCard>
+        </View>
+
+        {/* Today Plan Health */}
+        <View style={[styles.section, { marginTop: s.lg, paddingHorizontal: s.lg }]}>
+          <GlassCard intensity="light" animated delay={620}>
+            <View style={styles.planHealthHeader}>
+              <Text style={{ color: c.text, fontFamily: ty.heading.familySemibold, fontSize: ty.sizes.md }}>
+                Today&apos;s Plan Health
+              </Text>
+              <Text style={{ color: c.primary, fontFamily: ty.body.familySemibold, fontSize: ty.sizes.xs }}>
+                Live
+              </Text>
+            </View>
+            <Text style={{ color: c.textMuted, fontFamily: ty.body.family, fontSize: ty.sizes.sm, marginTop: 6 }}>
+              Nutrition proximity {homeSnapshot?.todayStatus.nutritionTargetProximity ?? 0}% · {workoutStatusLabel} · Hydration readiness {homeSnapshot?.todayStatus.hydrationReadiness ?? 0}%
+            </Text>
+            <Text style={{ color: c.textMuted, fontFamily: ty.body.family, fontSize: ty.sizes.xs, marginTop: 6 }}>
+              Why changed: daily intake vs target, workout schedule state, and hydration consistency score.
+            </Text>
+          </GlassCard>
         </View>
 
         {/* Quick Actions - Ring Icons */}
@@ -309,25 +426,39 @@ export default function HomeScreen() {
           <GlassCard intensity="light" animated delay={1100}>
             <View style={styles.insightContent}>
               <TabBarIcon name="analytics" color={c.accent} size={20} />
-              <Text
-                style={{
-                  color: c.textMuted,
-                  fontFamily: ty.body.family,
-                  fontSize: ty.sizes.sm,
-                  marginLeft: s.sm,
-                  flex: 1,
-                }}
-              >
-                {hasLoggedToday ? (
-                  <>
-                    You&apos;ve logged <Text style={{ color: c.primary, fontFamily: ty.body.familySemibold }}>today</Text>. Keep consistent!
-                  </>
+              <View style={{ marginLeft: s.sm, flex: 1, gap: 6 }}>
+                <Text style={{ color: c.text, fontFamily: ty.body.familySemibold, fontSize: ty.sizes.sm }}>
+                  Next Best Actions
+                </Text>
+                {quickActionPrimary ? (
+                  <Pressable
+                    onPress={() => {
+                      trackHomeCtaTapped({ cta_id: `next_action_${quickActionPrimary.id}` });
+                      router.push(quickActionPrimary.route as any);
+                    }}
+                  >
+                    <Text style={{ color: c.textMuted, fontFamily: ty.body.family, fontSize: ty.sizes.sm }}>
+                      1. <Text style={{ color: c.primary, fontFamily: ty.body.familySemibold }}>{quickActionPrimary.title}</Text> — {quickActionPrimary.description}
+                    </Text>
+                  </Pressable>
                 ) : (
-                  <>
-                    No entries logged <Text style={{ color: c.primary, fontFamily: ty.body.familySemibold }}>yet today</Text>. Start with Quick Log.
-                  </>
+                  <Text style={{ color: c.textMuted, fontFamily: ty.body.family, fontSize: ty.sizes.sm }}>
+                    {hasLoggedToday ? 'You&apos;re on track today. Keep consistency high.' : 'No entries logged yet today. Start with Quick Log.'}
+                  </Text>
                 )}
-              </Text>
+                {quickActionSecondary ? (
+                  <Pressable
+                    onPress={() => {
+                      trackHomeCtaTapped({ cta_id: `next_action_${quickActionSecondary.id}` });
+                      router.push(quickActionSecondary.route as any);
+                    }}
+                  >
+                    <Text style={{ color: c.textMuted, fontFamily: ty.body.family, fontSize: ty.sizes.sm }}>
+                      2. <Text style={{ color: c.primary, fontFamily: ty.body.familySemibold }}>{quickActionSecondary.title}</Text> — {quickActionSecondary.description}
+                    </Text>
+                  </Pressable>
+                ) : null}
+              </View>
             </View>
           </GlassCard>
         </View>
@@ -412,8 +543,29 @@ const styles = StyleSheet.create({
     justifyContent: 'space-around',
     alignItems: 'flex-start',
   },
+  kpiRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    gap: 8,
+  },
+  kpiItem: {
+    flex: 1,
+  },
+  kpiLabel: {
+    fontSize: 11,
+    letterSpacing: 0.8,
+  },
+  kpiValue: {
+    marginTop: 3,
+    fontSize: 14,
+  },
+  planHealthHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+  },
   insightContent: {
     flexDirection: 'row',
-    alignItems: 'center',
+    alignItems: 'flex-start',
   },
 });

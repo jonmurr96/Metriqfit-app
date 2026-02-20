@@ -23,11 +23,14 @@ export function GoalForecastCard({
   targetDate = 'Feb 15',
   onViewProjection,
 }: GoalForecastCardProps) {
-  const { c, s, ty, r } = useTokens();
+  const { c, ty, r } = useTokens();
 
   const totalToLose = startWeight - goalWeight;
   const lostSoFar = startWeight - currentWeight;
-  const progressPercent = Math.min((lostSoFar / totalToLose) * 100, 100);
+  const hasMeaningfulGap = Math.abs(totalToLose) > 0.001;
+  const progressPercent = hasMeaningfulGap
+    ? Math.min((lostSoFar / totalToLose) * 100, 100)
+    : 100;
 
   const isLosingWeight = goalWeight < startWeight;
   const trendIcon = isLosingWeight ? 'trending-down' : 'trending-up';

@@ -175,7 +175,69 @@ export function trackPantryUpdated(properties?: Record<string, any>) {
   trackEvent('pantry_updated', properties);
 }
 
+// Home + Progress Analytics
+export function trackHomeViewed(properties?: Record<string, any>) {
+  trackEvent('home_viewed', properties);
+}
+
+export function trackHomeCtaTapped(properties?: Record<string, any>) {
+  trackEvent('home_cta_tapped', properties);
+}
+
+export function trackHomeCardRendered(properties?: Record<string, any>) {
+  trackEvent('home_card_rendered', properties);
+}
+
+export function trackProgressViewed(properties?: Record<string, any>) {
+  trackEvent('progress_viewed', properties);
+}
+
+export function trackProgressTimeframeChanged(properties?: Record<string, any>) {
+  trackEvent('progress_timeframe_changed', properties);
+}
+
+export function trackProgressCardRendered(properties?: Record<string, any>) {
+  trackEvent('progress_card_rendered', properties);
+}
+
+export function trackProgressCtaTapped(properties?: Record<string, any>) {
+  trackEvent('progress_cta_tapped', properties);
+}
+
+export function trackProgressPhotoUploaded(properties?: Record<string, any>) {
+  trackEvent('progress_photo_uploaded', properties);
+}
+
+export function trackProgressPhotoDeleted(properties?: Record<string, any>) {
+  trackEvent('progress_photo_deleted', properties);
+}
+
+export function trackProgressPhotoTimelineViewed(properties?: Record<string, any>) {
+  trackEvent('progress_photo_timeline_viewed', properties);
+}
+
 // Error Analytics
 export function trackErrorDisplayed(error: string, context?: string) {
   trackEvent('error_displayed', { error, context });
+}
+
+// Progress Tab Rebuild – New Events
+export function trackProgressCardCompleted(properties?: Record<string, any>) {
+  trackEvent('progress_card_completed', properties);
+}
+
+export function trackProgressWeeklyActivityViewed(properties?: Record<string, any>) {
+  trackEvent('progress_weekly_activity_viewed', properties);
+}
+
+export function trackProgressGoalTrackerTapped(properties?: Record<string, any>) {
+  trackEvent('progress_goal_tracker_tapped', properties);
+}
+
+export function trackProgressPhotoCompareViewed(properties?: Record<string, any>) {
+  trackEvent('progress_photo_compare_viewed', properties);
+}
+
+export function trackProgressHistoryRangeChanged(properties?: Record<string, any>) {
+  trackEvent('progress_history_range_changed', properties);
 }

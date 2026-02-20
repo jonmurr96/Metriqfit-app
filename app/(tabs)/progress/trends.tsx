@@ -8,6 +8,8 @@ import { TabBarIcon } from '../../../components/navigation/TabBarIcon';
 import { WeeklyTrendChart } from '../../../components/progress/WeeklyTrendChart';
 import { useNutritionStats } from '../../../hooks/useNutrition';
 import { useUserDashboard } from '../../../hooks/useUser';
+import { useWorkoutHistory, useWorkoutStats } from '../../../hooks/useWorkout';
+import { trackProgressCardRendered, trackProgressViewed } from '../../../lib/analytics';
 
 export default function TrendsScreen() {
   const { c, s, ty, r } = useTokens();
@@ -17,6 +19,16 @@ export default function TrendsScreen() {
   // Fetch real data
   const { data: nutritionStats } = useNutritionStats(7);
   const { calorieTarget } = useUserDashboard();
+  const { data: workoutHistory } = useWorkoutHistory(60);
+  const startDate = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString();
+  const endDate = new Date().toISOString();
+  const { data: workoutStats } = useWorkoutStats(startDate, endDate);
+
+  React.useEffect(() => {
+    trackProgressViewed({ source: 'progress_trends' });
+    trackProgressCardRendered({ card_id: 'trends_calorie' });
+    trackProgressCardRendered({ card_id: 'trends_volume' });
+  }, []);
 
   // Transform data for charts
   const today = new Date();
@@ -43,6 +55,43 @@ export default function TrendsScreen() {
       isToday
     };
   });
+
+  const workoutVolumeData = last7Days.map((date) => {
+    const dayDate = new Date(date);
+    const dayLabel = calendarDays[dayDate.getDay()];
+    const sessionsForDay = (workoutHistory || []).filter((session: any) => {
+      if (!session?.started_at) return false;
+      return session.started_at.split('T')[0] === date;
+    });
+    const value = sessionsForDay.reduce((total: number, session: any) => {
+      const volume = (session.exercises || []).reduce((sessionVolume: number, ex: any) => {
+        const exVolume = (ex.sets || []).reduce((setVolume: number, set: any) => {
+          if (set?.is_warmup) return setVolume;
+          const reps = Number(set?.reps || 0);
+          const weight = Number(set?.weight_lb || 0);
+          return setVolume + (reps * weight);
+        }, 0);
+        return sessionVolume + exVolume;
+      }, 0);
+      return total + volume;
+    }, 0);
+
+    return {
+      day: dayLabel,
+      value: Math.round(value),
+      isToday: date === today.toISOString().split('T')[0],
+      isOverTarget: false,
+    };
+  });
+
+  const workoutVolumeChange = (() => {
+    const values = workoutVolumeData.map((d) => d.value).filter((v) => v > 0);
+    if (values.length < 2) return 0;
+    const first = values[0];
+    const last = values[values.length - 1];
+    if (first === 0) return 0;
+    return Math.round(((last - first) / first) * 100);
+  })();
 
   return (
     <View style={[styles.container, { backgroundColor: c.bg, paddingTop: insets.top }]}>
@@ -105,11 +154,25 @@ export default function TrendsScreen() {
           />
         </MotiView>
 
-        {/* Workout Volume (Future Implementation) */}
-        {/* Hiding Volume Chart until service provides daily breakdown to avoid showing 0s */}
+        <MotiView
+          from={{ opacity: 0, translateY: 20 }}
+          animate={{ opacity: 1, translateY: 0 }}
+          transition={{ type: 'timing', duration: 500, delay: 120 }}
+          style={{ marginBottom: s.lg }}
+        >
+          <WeeklyTrendChart
+            title="Workout Volume (lb)"
+            data={workoutVolumeData}
+            targetValue={Math.max(1, Math.round((workoutStats?.totalVolumeLb || 0) / 7))}
+            changePercent={Math.abs(workoutVolumeChange)}
+            changeDirection={workoutVolumeChange >= 0 ? 'up' : 'down'}
+            emptyBehavior="min-bar"
+          />
+        </MotiView>
+
         <View style={[styles.infoCard, { backgroundColor: c.surface2, borderRadius: r.md, padding: s.md }]}>
           <Text style={{ color: c.textMuted, fontFamily: ty.body.family, textAlign: 'center' }}>
-            Workout Volume Trends coming in next update.
+            Sessions: {workoutStats?.totalSessions || 0} · Avg duration: {workoutStats?.avgDurationMinutes || 0} min · PR pace: {workoutStats?.sessionsPerWeek || 0}/week
           </Text>
         </View>
 
@@ -145,6 +208,6 @@ const styles = StyleSheet.create({
     paddingBottom: 40,
   },
   infoCard: {
-    marginTop: 20
-  }
+    marginTop: 8
+  },
 });

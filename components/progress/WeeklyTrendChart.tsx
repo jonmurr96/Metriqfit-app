@@ -19,6 +19,9 @@ interface WeeklyTrendChartProps {
   targetValue?: number;
   changePercent?: number;
   changeDirection?: 'up' | 'down';
+  yDomainMin?: number;
+  yDomainMax?: number;
+  emptyBehavior?: 'zero' | 'min-bar';
 }
 
 const DEFAULT_DATA: DayData[] = [
@@ -41,10 +44,14 @@ export function WeeklyTrendChart({
   targetValue = 2400,
   changePercent = 5,
   changeDirection = 'up',
+  yDomainMin = 0,
+  yDomainMax,
+  emptyBehavior = 'zero',
 }: WeeklyTrendChartProps) {
-  const { c, s, ty, r } = useTokens();
-
-  const maxValue = Math.max(...data.map((d) => d.value));
+  const { c, ty } = useTokens();
+  const fallbackMax = yDomainMax ?? Math.max(targetValue, ...data.map((d) => d.value), 1);
+  const maxValue = Math.max(fallbackMax, yDomainMin + 1);
+  const targetTopPct = clamp(((maxValue - targetValue) / Math.max(1, maxValue - yDomainMin)) * 100, 0, 100);
 
   return (
     <GlassCard glowEffect animated delay={350}>
@@ -98,13 +105,15 @@ export function WeeklyTrendChart({
             styles.targetLine,
             {
               backgroundColor: c.primary,
-              top: '30%',
+              top: `${targetTopPct}%`,
             },
           ]}
         />
         <View style={styles.bars}>
           {data.map((item, index) => {
-            const heightPercent = (item.value / maxValue) * 100;
+            const normalized = ((item.value - yDomainMin) / Math.max(1, maxValue - yDomainMin)) * 100;
+            const minBarPct = emptyBehavior === 'min-bar' ? 3 : 0;
+            const heightPercent = clamp(Number.isFinite(normalized) ? normalized : 0, minBarPct, 100);
             const barColor = item.isOverTarget
               ? c.macros.carbs
               : item.isToday
@@ -240,3 +249,7 @@ const styles = StyleSheet.create({
   },
   dayLabel: {},
 });
+
+function clamp(n: number, min: number, max: number) {
+  return Math.max(min, Math.min(max, n));
+}
