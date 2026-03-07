@@ -10,6 +10,20 @@ import { useQuery } from '@tanstack/react-query';
 import { getExerciseById } from '../../../services/workoutService';
 import { Ionicons } from '@expo/vector-icons';
 import { PlateCalculator } from '../../../components/tools/PlateCalculator';
+import { Video, ResizeMode } from 'expo-av';
+
+function normalizeInstructionSteps(raw: unknown, legacyInstructions?: string | null): string[] {
+    if (Array.isArray(raw)) {
+        return raw.map((item) => String(item || '').trim()).filter(Boolean);
+    }
+    if (legacyInstructions) {
+        return legacyInstructions
+            .split(/\n+/)
+            .map((line) => line.trim().replace(/^[-*]\s*/, ''))
+            .filter(Boolean);
+    }
+    return [];
+}
 
 export default function ExerciseDetailScreen() {
     const { c, s, ty, r } = useTokens();
@@ -35,6 +49,8 @@ export default function ExerciseDetailScreen() {
         // Loading state or error
         return <View style={[styles.container, { backgroundColor: c.bg }]} />;
     }
+
+    const instructionSteps = normalizeInstructionSteps(exercise.instruction_steps, exercise.instructions);
 
     return (
         <View style={[styles.container, { backgroundColor: c.bg, paddingTop: insets.top }]}>
@@ -90,6 +106,40 @@ export default function ExerciseDetailScreen() {
             <ScrollView contentContainerStyle={{ padding: s.lg, paddingBottom: 100 }}>
                 {activeTab === 'about' ? (
                     <View>
+                        <GlassCard style={{ marginBottom: s.lg, overflow: 'hidden' }}>
+                            {exercise.video_url ? (
+                                <Video
+                                    source={{ uri: exercise.video_url }}
+                                    style={{ width: '100%', height: 210, borderRadius: 12, backgroundColor: c.surface2 }}
+                                    useNativeControls
+                                    resizeMode={ResizeMode.COVER}
+                                    isLooping
+                                />
+                            ) : exercise.gif_url ? (
+                                <Image
+                                    source={{ uri: exercise.gif_url }}
+                                    style={{ width: '100%', height: 210, borderRadius: 12, backgroundColor: c.surface2 }}
+                                    resizeMode="cover"
+                                />
+                            ) : (
+                                <View
+                                    style={{
+                                        width: '100%',
+                                        height: 150,
+                                        borderRadius: 12,
+                                        backgroundColor: c.surface2,
+                                        alignItems: 'center',
+                                        justifyContent: 'center',
+                                        paddingHorizontal: 20,
+                                    }}
+                                >
+                                    <Text style={{ color: c.textMuted, textAlign: 'center' }}>
+                                        No media available for this exercise yet.
+                                    </Text>
+                                </View>
+                            )}
+                        </GlassCard>
+
                         {/* About Content */}
                         <GlassCard style={{ marginBottom: s.lg }}>
                             <Text style={{ color: c.textMuted, marginBottom: 4 }}>Primary Muscle</Text>
@@ -98,16 +148,25 @@ export default function ExerciseDetailScreen() {
                             </Text>
                         </GlassCard>
 
-                        {exercise.instructions && (
-                            <GlassCard>
-                                <Text style={{ color: c.text, fontFamily: ty.heading.familySemibold, marginBottom: 8 }}>
-                                    Instructions
-                                </Text>
+                        <GlassCard>
+                            <Text style={{ color: c.text, fontFamily: ty.heading.familySemibold, marginBottom: 8 }}>
+                                Instructions
+                            </Text>
+                            {instructionSteps.length > 0 ? (
+                                <View style={{ gap: 8 }}>
+                                    {instructionSteps.map((step, idx) => (
+                                        <View key={`${idx}-${step.slice(0, 20)}`} style={{ flexDirection: 'row', gap: 10 }}>
+                                            <Text style={{ color: c.primary, fontFamily: ty.body.familySemibold }}>{idx + 1}.</Text>
+                                            <Text style={{ color: c.textMuted, lineHeight: 22, flex: 1 }}>{step}</Text>
+                                        </View>
+                                    ))}
+                                </View>
+                            ) : (
                                 <Text style={{ color: c.textMuted, lineHeight: 22 }}>
-                                    {exercise.instructions}
+                                    No instructions available.
                                 </Text>
-                            </GlassCard>
-                        )}
+                            )}
+                        </GlassCard>
                     </View>
                 ) : (
                     <View>

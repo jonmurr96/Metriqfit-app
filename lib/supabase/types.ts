@@ -161,6 +161,15 @@ export interface Database {
           instructions: string | null
           video_url: string | null
           image_url: string | null
+          source_provider: string
+          source_id: string | null
+          body_part: string | null
+          target_muscle: string | null
+          instruction_steps: unknown
+          gif_url: string | null
+          poster_url: string | null
+          is_reference_only: boolean
+          has_media: boolean
           is_compound: boolean
           created_at: string
         }
@@ -177,6 +186,15 @@ export interface Database {
           instructions?: string | null
           video_url?: string | null
           image_url?: string | null
+          source_provider?: string
+          source_id?: string | null
+          body_part?: string | null
+          target_muscle?: string | null
+          instruction_steps?: unknown
+          gif_url?: string | null
+          poster_url?: string | null
+          is_reference_only?: boolean
+          has_media?: boolean
           is_compound?: boolean
           created_at?: string
         }
@@ -193,6 +211,15 @@ export interface Database {
           instructions?: string | null
           video_url?: string | null
           image_url?: string | null
+          source_provider?: string
+          source_id?: string | null
+          body_part?: string | null
+          target_muscle?: string | null
+          instruction_steps?: unknown
+          gif_url?: string | null
+          poster_url?: string | null
+          is_reference_only?: boolean
+          has_media?: boolean
           is_compound?: boolean
           created_at?: string
         }

@@ -30,6 +30,7 @@ import {
   updateSessionNotes,
   getWorkoutNotesFeed,
   type WorkoutNoteItem,
+  type ExerciseFilters,
 } from '../services/workoutService';
 
 export const workoutKeys = {
@@ -90,7 +91,7 @@ export function useTemplateDay(dayId: string) {
 /**
  * Get exercises
  */
-export function useExercises(filters?: any) {
+export function useExercises(filters?: ExerciseFilters) {
   return useQuery({
     queryKey: workoutKeys.exercises(filters),
     queryFn: () => getExercises(filters),

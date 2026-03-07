@@ -24,9 +24,20 @@ module.exports = ({ config }) => {
     plugins.splice(insertIndex, 0, 'react-native-purchases');
   }
 
+  const extra = {
+    ...(base.extra || {}),
+    supabaseUrl: process.env.EXPO_PUBLIC_SUPABASE_URL || base.extra?.supabaseUrl || '',
+    supabaseAnonKey: process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY || base.extra?.supabaseAnonKey || '',
+    authGoogleEnabled:
+      process.env.EXPO_PUBLIC_AUTH_GOOGLE_ENABLED || base.extra?.authGoogleEnabled || 'true',
+    authAppleEnabled:
+      process.env.EXPO_PUBLIC_AUTH_APPLE_ENABLED || base.extra?.authAppleEnabled || 'false',
+  };
+
   return {
     ...config,
     ...base,
     plugins,
+    extra,
   };
 };

@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { StyleSheet, View, Text, Pressable, ScrollView, TextInput, KeyboardAvoidingView, Platform, Dimensions, ActivityIndicator, Alert } from 'react-native';
+import { StyleSheet, View, Text, Pressable, ScrollView, TextInput, KeyboardAvoidingView, Platform, Dimensions, ActivityIndicator, Alert, Image } from 'react-native';
 import { useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { MotiView, AnimatePresence } from 'moti';
@@ -29,12 +29,26 @@ import { PlateCalculator } from '../../../components/workout/PlateCalculator';
 import { OneRepMaxCalculator } from '../../../components/workout/OneRepMaxCalculator';
 import { Ionicons } from '@expo/vector-icons';
 import { trackWorkoutNoteCreated, trackWorkoutNoteDeleted, trackWorkoutNoteUpdated } from '../../../lib/analytics';
+import { Video, ResizeMode } from 'expo-av';
 
 
 const SCREEN_WIDTH = Dimensions.get('window').width;
 
 // Fallback target when session rows do not carry an explicit set target.
 const DEFAULT_SETS_TARGET = 3;
+
+function normalizeInstructionSteps(raw: unknown, legacyInstructions?: string | null): string[] {
+  if (Array.isArray(raw)) {
+    return raw.map((item) => String(item || '').trim()).filter(Boolean);
+  }
+  if (legacyInstructions) {
+    return legacyInstructions
+      .split(/\n+/)
+      .map((line) => line.trim().replace(/^[-*]\s*/, ''))
+      .filter(Boolean);
+  }
+  return [];
+}
 
 export default function ActiveSessionScreen() {
   useEffect(() => {
@@ -181,6 +195,10 @@ export default function ActiveSessionScreen() {
 
   const exercises = session?.exercises || [];
   const currentExercise = exercises[currentExerciseIndex];
+  const currentExerciseSteps = normalizeInstructionSteps(
+    (currentExercise as any)?.exercise?.instruction_steps,
+    (currentExercise as any)?.exercise?.instructions,
+  );
 
   useEffect(() => {
     setExerciseNoteDraft((currentExercise as any)?.notes || '');
@@ -965,10 +983,37 @@ export default function ActiveSessionScreen() {
                   {currentExercise.exercise.primary_muscle || 'Unknown'}
                 </Text>
 
+                {(currentExercise as any)?.exercise?.video_url ? (
+                  <Video
+                    source={{ uri: (currentExercise as any).exercise.video_url }}
+                    style={{ width: '100%', height: 140, borderRadius: 10, backgroundColor: c.surface2, marginBottom: 16 }}
+                    useNativeControls
+                    resizeMode={ResizeMode.COVER}
+                    isLooping
+                  />
+                ) : (currentExercise as any)?.exercise?.gif_url ? (
+                  <Image
+                    source={{ uri: (currentExercise as any).exercise.gif_url }}
+                    style={{ width: '100%', height: 140, borderRadius: 10, backgroundColor: c.surface2, marginBottom: 16 }}
+                    resizeMode="cover"
+                  />
+                ) : null}
+
                 <Text style={{ color: c.textMuted, marginBottom: 8, textTransform: 'uppercase', fontSize: 12 }}>Instructions</Text>
-                <Text style={{ color: c.text, lineHeight: 22 }}>
-                  {currentExercise.exercise.instructions || 'No instructions available.'}
-                </Text>
+                {currentExerciseSteps.length > 0 ? (
+                  <View style={{ gap: 8 }}>
+                    {currentExerciseSteps.slice(0, 3).map((step, idx) => (
+                      <View key={`${idx}-${step.slice(0, 20)}`} style={{ flexDirection: 'row', gap: 8 }}>
+                        <Text style={{ color: c.primary, fontFamily: ty.body.familySemibold }}>{idx + 1}.</Text>
+                        <Text style={{ color: c.text, lineHeight: 20, flex: 1 }}>{step}</Text>
+                      </View>
+                    ))}
+                  </View>
+                ) : (
+                  <Text style={{ color: c.text, lineHeight: 22 }}>
+                    No instructions available.
+                  </Text>
+                )}
               </ScrollView>
             </View>
           </MotiView>

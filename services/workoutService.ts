@@ -32,6 +32,18 @@ export type SessionExercise = Database['public']['Tables']['session_exercises'][
 export type WorkoutSet = Database['public']['Tables']['workout_sets']['Row'];
 export type UserPR = Database['public']['Tables']['user_prs']['Row'];
 
+export interface ExerciseFilters {
+  category?: string;
+  equipment?: string[];
+  difficulty?: 'beginner' | 'intermediate' | 'advanced';
+  search?: string;
+  referenceOnly?: boolean;
+  sourceProvider?: string;
+  hasMedia?: boolean;
+  sortBy?: 'name' | 'has_media';
+  sortAscending?: boolean;
+}
+
 // Extended types with joins
 export interface WorkoutTemplateWithDays extends WorkoutTemplate {
   days: (WorkoutTemplateDay & {
@@ -582,12 +594,7 @@ export async function getTemplateDay(dayId: string): Promise<WorkoutTemplateDay 
 /**
  * Get exercises with optional filters
  */
-export async function getExercises(filters?: {
-  category?: string;
-  equipment?: string[];
-  difficulty?: 'beginner' | 'intermediate' | 'advanced';
-  search?: string;
-}): Promise<Exercise[]> {
+export async function getExercises(filters?: ExerciseFilters): Promise<Exercise[]> {
   let query = supabase.from('exercises').select('*');
 
   // Filter by category
@@ -610,7 +617,27 @@ export async function getExercises(filters?: {
     query = query.ilike('name', `%${filters.search}%`);
   }
 
-  query = query.order('name');
+  // Filter to program/reference subsets
+  if (typeof filters?.referenceOnly === 'boolean') {
+    query = query.eq('is_reference_only', filters.referenceOnly);
+  }
+
+  // Filter by source provider
+  if (filters?.sourceProvider) {
+    query = query.eq('source_provider', filters.sourceProvider);
+  }
+
+  // Filter by media availability
+  if (typeof filters?.hasMedia === 'boolean') {
+    query = query.eq('has_media', filters.hasMedia);
+  }
+
+  // Default sort boosts rows with media, unless caller specifies explicit sort.
+  if (filters?.sortBy) {
+    query = query.order(filters.sortBy, { ascending: filters.sortAscending ?? true });
+  } else {
+    query = query.order('has_media', { ascending: false }).order('name', { ascending: true });
+  }
 
   const { data, error } = await query;
 
