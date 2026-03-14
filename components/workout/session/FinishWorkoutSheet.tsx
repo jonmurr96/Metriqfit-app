@@ -9,6 +9,8 @@ import { useTokens } from '../../../lib/theme';
 interface FinishWorkoutSheetProps {
   visible: boolean;
   viewModel: FinishWorkoutViewModel;
+  bottomInset: number;
+  topInset: number;
   isPaused: boolean;
   isSubmitting: boolean;
   onClose: () => void;
@@ -52,8 +54,9 @@ export function FinishWorkoutSheet(props: FinishWorkoutSheetProps) {
               backgroundColor: c.surface,
               paddingHorizontal: s.lg,
               paddingTop: s.lg,
-              paddingBottom: s.xl,
-              maxHeight: '78%',
+              paddingBottom: props.bottomInset + s.lg,
+              maxHeight: '84%',
+              marginTop: props.topInset + s.lg,
             }}
           >
             <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: s.md }}>
@@ -71,54 +74,60 @@ export function FinishWorkoutSheet(props: FinishWorkoutSheetProps) {
               </Pressable>
             </View>
 
-            <View style={{ flexDirection: 'row', gap: s.sm, marginBottom: s.md }}>
-              <Metric label="Exercises" value={`${props.viewModel.exercisesCompleted}/${props.viewModel.totalExercises}`} />
-              <Metric label="Sets" value={`${props.viewModel.totalSets}`} />
-              <Metric label="Duration" value={props.viewModel.durationLabel} />
-            </View>
-
-            {props.isPaused ? (
-              <View
-                style={{
-                  borderRadius: r.lg,
-                  backgroundColor: `${c.warning}14`,
-                  borderWidth: 1,
-                  borderColor: `${c.warning}35`,
-                  padding: s.md,
-                  marginBottom: s.md,
-                }}
-              >
-                <Text style={{ color: c.warning, fontFamily: ty.body.familySemibold, fontSize: ty.sizes.sm }}>
-                  Resume the session timer before finishing.
-                </Text>
+            <ScrollView
+              style={{ flexGrow: 0 }}
+              contentContainerStyle={{ paddingBottom: s.sm }}
+              showsVerticalScrollIndicator={false}
+            >
+              <View style={{ flexDirection: 'row', gap: s.sm, marginBottom: s.md }}>
+                <Metric label="Exercises" value={`${props.viewModel.exercisesCompleted}/${props.viewModel.totalExercises}`} />
+                <Metric label="Sets" value={`${props.viewModel.totalSets}`} />
+                <Metric label="Duration" value={props.viewModel.durationLabel} />
               </View>
-            ) : null}
 
-            {props.viewModel.incompleteItems.length > 0 ? (
-              <ScrollView style={{ maxHeight: 220 }} contentContainerStyle={{ gap: s.sm, paddingBottom: s.sm }}>
-                {props.viewModel.incompleteItems.map((item) => (
-                  <View
-                    key={item.exerciseId}
-                    style={{
-                      borderRadius: r.lg,
-                      padding: s.md,
-                      backgroundColor: c.surface2,
-                    }}
-                  >
-                    <Text style={{ color: c.text, fontFamily: ty.body.familySemibold, fontSize: ty.sizes.sm }}>
-                      {item.exerciseName}
-                    </Text>
-                    <Text style={{ color: c.textMuted, fontFamily: ty.body.family, fontSize: ty.sizes.xs, marginTop: 4 }}>
-                      {item.remainingSets} set{item.remainingSets === 1 ? '' : 's'} remaining
-                    </Text>
-                  </View>
-                ))}
-              </ScrollView>
-            ) : (
-              <Text style={{ color: c.textMuted, fontFamily: ty.body.family, fontSize: ty.sizes.sm, marginBottom: s.md }}>
-                All planned work is logged. Finish the session and route cleanly into the summary.
-              </Text>
-            )}
+              {props.isPaused ? (
+                <View
+                  style={{
+                    borderRadius: r.lg,
+                    backgroundColor: `${c.warning}14`,
+                    borderWidth: 1,
+                    borderColor: `${c.warning}35`,
+                    padding: s.md,
+                    marginBottom: s.md,
+                  }}
+                >
+                  <Text style={{ color: c.warning, fontFamily: ty.body.familySemibold, fontSize: ty.sizes.sm }}>
+                    Resume the session timer before finishing.
+                  </Text>
+                </View>
+              ) : null}
+
+              {props.viewModel.incompleteItems.length > 0 ? (
+                <View style={{ gap: s.sm }}>
+                  {props.viewModel.incompleteItems.map((item) => (
+                    <View
+                      key={item.exerciseId}
+                      style={{
+                        borderRadius: r.lg,
+                        padding: s.md,
+                        backgroundColor: c.surface2,
+                      }}
+                    >
+                      <Text style={{ color: c.text, fontFamily: ty.body.familySemibold, fontSize: ty.sizes.sm }}>
+                        {item.exerciseName}
+                      </Text>
+                      <Text style={{ color: c.textMuted, fontFamily: ty.body.family, fontSize: ty.sizes.xs, marginTop: 4 }}>
+                        {item.remainingSets} set{item.remainingSets === 1 ? '' : 's'} remaining
+                      </Text>
+                    </View>
+                  ))}
+                </View>
+              ) : (
+                <Text style={{ color: c.textMuted, fontFamily: ty.body.family, fontSize: ty.sizes.sm }}>
+                  All planned work is logged. Finish the session and route cleanly into the summary.
+                </Text>
+              )}
+            </ScrollView>
 
             <View style={{ flexDirection: 'row', gap: s.sm, marginTop: s.lg }}>
               <Pressable

@@ -77,9 +77,10 @@ export default function TabLayout() {
 
   const activeTabSegment = segments[1];
   const activeNestedSegment = segments[2];
-  const hideQuickAddFab =
+  const isNestedWorkoutRoute =
     activeTabSegment === 'workout' &&
     !!activeNestedSegment;
+  const hideQuickAddFab = isNestedWorkoutRoute;
 
   useEffect(() => {
     if (hideQuickAddFab && isQuickAddOpen) {
@@ -126,6 +127,7 @@ export default function TabLayout() {
             left: 0,
             right: 0,
             elevation: 0,
+            display: isNestedWorkoutRoute ? 'none' : 'flex',
           },
           tabBarLabelStyle: {
             fontFamily: 'Sora_500Medium',

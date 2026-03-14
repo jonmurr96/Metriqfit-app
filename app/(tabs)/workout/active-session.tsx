@@ -147,7 +147,7 @@ export default function ActiveSessionScreen() {
   const { c, s, ty, r } = useTokens();
   const router = useRouter();
   const insets = useSafeAreaInsets();
-  const tabBarHeight = 70 + insets.bottom;
+  const bottomOverlayOffset = insets.bottom;
   const { loading: authLoading } = useAuth();
 
   const { data: session, isLoading } = useActiveSession();
@@ -704,7 +704,7 @@ export default function ActiveSessionScreen() {
         <ScrollView
           contentContainerStyle={{
             paddingHorizontal: s.lg,
-            paddingBottom: tabBarHeight + (restTimerState ? 164 : 32),
+            paddingBottom: bottomOverlayOffset + (restTimerState ? 176 : 72),
           }}
         >
           <ExerciseCommandStrip
@@ -825,7 +825,7 @@ export default function ActiveSessionScreen() {
         visible={Boolean(restTimerState && restTimerState.remainingSeconds > 0)}
         remainingSeconds={restTimerState?.remainingSeconds ?? 0}
         exerciseName={currentExercise.exercise.name}
-        bottomOffset={tabBarHeight}
+        bottomOffset={bottomOverlayOffset}
         showNextExercise={showNextExerciseInRestDock}
         onAddThirtySeconds={() => addSeconds(30)}
         onSkip={() => {
@@ -840,6 +840,8 @@ export default function ActiveSessionScreen() {
       <FinishWorkoutSheet
         visible={showFinishSheet}
         viewModel={finishViewModel}
+        bottomInset={insets.bottom}
+        topInset={insets.top}
         isPaused={isPaused}
         isSubmitting={finishSessionMutation.isPending}
         onClose={() => setShowFinishSheet(false)}
@@ -899,7 +901,7 @@ export default function ActiveSessionScreen() {
               </Pressable>
             </View>
 
-            <ScrollView contentContainerStyle={{ paddingHorizontal: s.lg, paddingBottom: 100, gap: s.sm }}>
+            <ScrollView contentContainerStyle={{ paddingHorizontal: s.lg, paddingBottom: insets.bottom + s.xl, gap: s.sm }}>
               {exercises.map((exercise, index) => {
                 const queueRows = buildExerciseSetRows({
                   exercise: {
@@ -1061,7 +1063,7 @@ export default function ActiveSessionScreen() {
               />
             </View>
 
-            <ScrollView contentContainerStyle={{ paddingHorizontal: s.lg, paddingBottom: 100, gap: s.sm }}>
+            <ScrollView contentContainerStyle={{ paddingHorizontal: s.lg, paddingBottom: insets.bottom + s.xl, gap: s.sm }}>
               {swapOptions.map((item) => (
                 <Pressable
                   key={item.id}
