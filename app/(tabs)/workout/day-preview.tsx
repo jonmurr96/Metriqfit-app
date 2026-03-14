@@ -100,7 +100,7 @@ export default function DayPreviewScreen() {
       {/* Content */}
       <ScrollView
         style={styles.scrollView}
-        contentContainerStyle={{ padding: s.lg, paddingBottom: insets.bottom + 100 }}
+        contentContainerStyle={{ padding: s.lg, paddingBottom: s.xl }}
       >
         {/* Day Info */}
         <View
@@ -226,7 +226,7 @@ export default function DayPreviewScreen() {
           {
             backgroundColor: c.bg,
             paddingHorizontal: s.lg,
-            paddingBottom: insets.bottom + 90, // Add extra padding to clear Tab Bar
+            paddingBottom: insets.bottom + s.md,
             paddingTop: s.lg,
             borderTopWidth: 1,
             borderTopColor: c.border,
@@ -308,10 +308,7 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   footer: {
-    position: 'absolute',
-    bottom: 0,
-    left: 0,
-    right: 0,
+    width: '100%',
   },
   startButton: {
     paddingVertical: 16,

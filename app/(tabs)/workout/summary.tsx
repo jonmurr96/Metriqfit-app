@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect } from 'react';
 import { StyleSheet, View, Text, ScrollView, Pressable, Dimensions } from 'react-native';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -13,7 +13,7 @@ import { useSessionDetails } from '../../../hooks/useWorkout';
 const { width } = Dimensions.get('window');
 
 export default function WorkoutSummaryScreen() {
-  const { c, s, ty, r, glass, animation } = useTokens();
+  const { c, s, ty, r } = useTokens();
   const router = useRouter();
   const insets = useSafeAreaInsets();
   const params = useLocalSearchParams();
@@ -97,7 +97,7 @@ export default function WorkoutSummaryScreen() {
             style={StyleSheet.absoluteFill}
         />
         
-        <ScrollView contentContainerStyle={{ paddingBottom: 100 }}>
+        <ScrollView style={{ flex: 1 }} contentContainerStyle={{ paddingBottom: s.xl }}>
             {/* Header / Success Animation Area */}
             <View style={{ height: 300, justifyContent: 'center', alignItems: 'center' }}>
                  <MotiView
@@ -232,13 +232,11 @@ export default function WorkoutSummaryScreen() {
 
         </ScrollView>
 
-        {/* Done Button */}
         <View style={{ 
-            position: 'absolute', 
-            bottom: 0, left: 0, right: 0, 
-            padding: s.lg, 
+            paddingHorizontal: s.lg, 
+            paddingTop: s.md,
             paddingBottom: insets.bottom + s.md,
-            backgroundColor: c.bg // or transparent with gradient
+            backgroundColor: c.bg
         }}>
             <Pressable
                 onPress={() => router.replace('/(tabs)/workout/workout-history')}
