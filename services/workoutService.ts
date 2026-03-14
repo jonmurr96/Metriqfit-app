@@ -17,8 +17,76 @@ import {
   buildMappingRowsFromV2Day,
   remediateDayExerciseMappings,
 } from '../lib/workout/programMappingEngine';
+import {
+  buildSessionExerciseSnapshotInsertAttempts,
+  buildSessionExerciseSnapshots,
+} from '../lib/workout/session-snapshot';
 import type { ProgramExercise } from '../lib/workout/programMappingRules';
 const db = supabase as any;
+
+async function insertSessionExercisesWithFallback(
+  rows: ReturnType<typeof buildSessionExerciseSnapshots>,
+) {
+  let lastError: unknown = null;
+
+  for (const attempt of buildSessionExerciseSnapshotInsertAttempts(rows)) {
+    const { error } = await supabase
+      .from('session_exercises')
+      .insert(attempt);
+
+    if (!error) {
+      return;
+    }
+
+    lastError = error;
+  }
+
+  throw lastError;
+}
+
+async function loadSessionExerciseSnapshotRows(input: {
+  sessionId: string;
+  planDayId?: string | null;
+  templateDayId?: string | null;
+}) {
+  if (input.planDayId) {
+    const { data: planExercises, error: planError } = await supabase
+      .from('user_workout_plan_exercises')
+      .select('*')
+      .eq('plan_day_id', input.planDayId)
+      .order('order_index');
+
+    if (planError) {
+      throw planError;
+    }
+
+    return buildSessionExerciseSnapshots({
+      sessionId: input.sessionId,
+      source: 'plan',
+      exercises: planExercises || [],
+    });
+  }
+
+  if (input.templateDayId) {
+    const { data: templateExercises, error: templateError } = await supabase
+      .from('workout_template_exercises')
+      .select('*')
+      .eq('template_day_id', input.templateDayId)
+      .order('order_index');
+
+    if (templateError) {
+      throw templateError;
+    }
+
+    return buildSessionExerciseSnapshots({
+      sessionId: input.sessionId,
+      source: 'template',
+      exercises: templateExercises || [],
+    });
+  }
+
+  return [];
+}
 
 // ============================================================================
 // Types
@@ -698,51 +766,19 @@ export async function startSession(
   if (!session) throw new Error('Failed to create session');
 
   // 2. Fetch exercises to copy
-  let exercisesToCopy: any[] = [];
-
-  if (planDayId) {
-    // Fetch from plan day
-    const { data: planExercises, error: planError } = await supabase
-      .from('user_workout_plan_exercises')
-      .select('*')
-      .eq('plan_day_id', planDayId)
-      .order('order_index');
-
-    if (!planError && planExercises) {
-      exercisesToCopy = planExercises.map(ex => ({
-        session_id: session.id,
-        exercise_id: ex.exercise_id,
-        order_index: ex.order_index,
-        notes: ex.notes,
-      }));
-    }
-  } else if (templateDayId) {
-    // Fetch from template day
-    const { data: templateExercises, error: templateError } = await supabase
-      .from('workout_template_exercises')
-      .select('*')
-      .eq('template_day_id', templateDayId)
-      .order('order_index');
-
-    if (!templateError && templateExercises) {
-      exercisesToCopy = templateExercises.map(ex => ({
-        session_id: session.id,
-        exercise_id: ex.exercise_id,
-        order_index: ex.order_index,
-        notes: ex.notes,
-      }));
-    }
-  }
+  const exercisesToCopy = await loadSessionExerciseSnapshotRows({
+    sessionId: session.id,
+    planDayId,
+    templateDayId,
+  });
 
   // 3. Insert session exercises
   if (exercisesToCopy.length > 0) {
-    const { error: copyError } = await supabase
-      .from('session_exercises')
-      .insert(exercisesToCopy);
-
-    if (copyError) {
+    try {
+      await insertSessionExercisesWithFallback(exercisesToCopy);
+    } catch (copyError) {
       console.error('Failed to copy exercises:', copyError);
-      // We don't throw here to at least return the session, but it's bad.
+      // We don't throw here so the session can still exist, but callers should treat it as degraded.
     }
   }
 
@@ -753,7 +789,7 @@ export async function startSession(
 /**
  * Get active workout session (if any)
  */
-export async function getActiveSession(userId: string): Promise<WorkoutSessionWithDetails | null> {
+async function getActiveSessionInternal(userId: string, allowRepair: boolean): Promise<WorkoutSessionWithDetails | null> {
   const { data, error } = await supabase
     .from('workout_sessions')
     .select(
@@ -776,6 +812,27 @@ export async function getActiveSession(userId: string): Promise<WorkoutSessionWi
 
   if (!data) return null;
 
+  if (allowRepair && (data.exercises || []).length === 0 && (data.plan_day_id || data.template_day_id)) {
+    try {
+      const snapshotRows = await loadSessionExerciseSnapshotRows({
+        sessionId: data.id,
+        planDayId: data.plan_day_id,
+        templateDayId: data.template_day_id,
+      });
+
+      if (snapshotRows.length > 0) {
+        await insertSessionExercisesWithFallback(snapshotRows);
+
+        const repairedSession = await getActiveSessionInternal(userId, false);
+        if (repairedSession) {
+          return repairedSession;
+        }
+      }
+    } catch (repairError) {
+      console.warn('Failed to repair empty active session', repairError);
+    }
+  }
+
   // Sort exercises by order_index and sets by set_number
   const sortedData = {
     ...data,
@@ -788,6 +845,10 @@ export async function getActiveSession(userId: string): Promise<WorkoutSessionWi
   };
 
   return sortedData as WorkoutSessionWithDetails;
+}
+
+export async function getActiveSession(userId: string): Promise<WorkoutSessionWithDetails | null> {
+  return getActiveSessionInternal(userId, true);
 }
 
 /**
@@ -866,8 +927,8 @@ export async function logSet(
       session_exercise_id: sessionExerciseId,
       set_number: setNumber,
       reps,
-      weight_lb: weightLb || null,
-      rpe: rpe || null,
+      weight_lb: weightLb === undefined ? null : weightLb,
+      rpe: rpe === undefined ? null : rpe,
       is_warmup: isWarmup,
       logged_at: new Date().toISOString(),
     })
@@ -931,10 +992,9 @@ export async function deleteSet(setId: string): Promise<void> {
  * Let's try adding `updateSetTarget` that updates `sets_target`. If it fails, we know why.
  */
 export async function updateSetTarget(sessionExerciseId: string, target: number): Promise<void> {
-  // Try to update sets_target column
   const { error } = await supabase
     .from('session_exercises')
-    .update({ sets_target: target } as any) // Cast to any in case types are loose, but ideally strict
+    .update({ sets_target: target })
     .eq('id', sessionExerciseId);
 
   if (error) throw error;

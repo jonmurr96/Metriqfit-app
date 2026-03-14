@@ -8,14 +8,16 @@ export type WorkoutQuickAccessItem = {
   label: string;
   icon: string;
   onPress: () => void;
+  active?: boolean;
 };
 
 type Props = {
   items: WorkoutQuickAccessItem[];
   delayBase?: number;
+  size?: number;
 };
 
-export function WorkoutQuickAccessRow({ items, delayBase = 120 }: Props) {
+export function WorkoutQuickAccessRow({ items, delayBase = 120, size = 72 }: Props) {
   const { s } = useTokens();
 
   return (
@@ -26,8 +28,9 @@ export function WorkoutQuickAccessRow({ items, delayBase = 120 }: Props) {
           icon={item.icon}
           label={item.label}
           onPress={item.onPress}
-          size={72}
+          size={size}
           delay={delayBase + index * 70}
+          active={item.active}
         />
       ))}
     </View>

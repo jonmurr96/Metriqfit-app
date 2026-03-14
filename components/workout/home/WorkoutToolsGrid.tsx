@@ -13,9 +13,10 @@ export type WorkoutToolTile = {
 
 type Props = {
   items: WorkoutToolTile[];
+  title?: string;
 };
 
-export function WorkoutToolsGrid({ items }: Props) {
+export function WorkoutToolsGrid({ items, title = 'TOOLS' }: Props) {
   const { c, s, ty, r } = useTokens();
 
   return (
@@ -29,7 +30,7 @@ export function WorkoutToolsGrid({ items }: Props) {
           marginBottom: s.sm,
         }}
       >
-        TOOLS
+        {title}
       </Text>
 
       <View style={{ flexDirection: 'row', flexWrap: 'wrap', marginHorizontal: -s.xs }}>

@@ -653,6 +653,12 @@ export interface Database {
           exercise_id: string
           order_index: number
           notes: string | null
+          sets_target: number
+          reps_min: number | null
+          reps_max: number | null
+          rest_seconds: number | null
+          plan_exercise_id: string | null
+          technique_snapshot_json: Json
           created_at: string
         }
         Insert: {
@@ -661,6 +667,12 @@ export interface Database {
           exercise_id: string
           order_index: number
           notes?: string | null
+          sets_target?: number
+          reps_min?: number | null
+          reps_max?: number | null
+          rest_seconds?: number | null
+          plan_exercise_id?: string | null
+          technique_snapshot_json?: Json
           created_at?: string
         }
         Update: {
@@ -669,6 +681,12 @@ export interface Database {
           exercise_id?: string
           order_index?: number
           notes?: string | null
+          sets_target?: number
+          reps_min?: number | null
+          reps_max?: number | null
+          rest_seconds?: number | null
+          plan_exercise_id?: string | null
+          technique_snapshot_json?: Json
           created_at?: string
         }
         Relationships: [
@@ -682,6 +700,12 @@ export interface Database {
             foreignKeyName: "session_exercises_exercise_id_fkey"
             columns: ["exercise_id"]
             referencedRelation: "exercises"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "session_exercises_plan_exercise_id_fkey"
+            columns: ["plan_exercise_id"]
+            referencedRelation: "user_workout_plan_exercises"
             referencedColumns: ["id"]
           }
         ]

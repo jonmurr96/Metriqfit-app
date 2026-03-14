@@ -130,6 +130,42 @@ export function trackWorkoutInsightRendered(properties?: Record<string, any>) {
   trackEvent('workout_insight_rendered', properties);
 }
 
+export function trackWorkoutHomeHeroRendered(properties?: Record<string, any>) {
+  trackEvent('workout_home_hero_rendered', properties);
+}
+
+export function trackWorkoutHomeHeroTapped(properties?: Record<string, any>) {
+  trackEvent('workout_home_hero_tapped', properties);
+}
+
+export function trackWorkoutHomeResumeTapped(properties?: Record<string, any>) {
+  trackEvent('workout_home_resume_tapped', properties);
+}
+
+export function trackWorkoutTomorrowPreviewTapped(properties?: Record<string, any>) {
+  trackEvent('workout_tomorrow_preview_tapped', properties);
+}
+
+export function trackWorkoutRecommendationRendered(properties?: Record<string, any>) {
+  trackEvent('workout_recommendation_rendered', properties);
+}
+
+export function trackWorkoutRecommendationAccepted(properties?: Record<string, any>) {
+  trackEvent('workout_recommendation_accepted', properties);
+}
+
+export function trackWorkoutRecommendationRejected(properties?: Record<string, any>) {
+  trackEvent('workout_recommendation_rejected', properties);
+}
+
+export function trackWorkoutRecommendationReviewTapped(properties?: Record<string, any>) {
+  trackEvent('workout_recommendation_review_tapped', properties);
+}
+
+export function trackWorkoutSecondaryUtilityTapped(properties?: Record<string, any>) {
+  trackEvent('workout_secondary_utility_tapped', properties);
+}
+
 export function trackWorkoutNoteCreated(properties?: Record<string, any>) {
   trackEvent('workout_note_created', properties);
 }
@@ -140,6 +176,50 @@ export function trackWorkoutNoteUpdated(properties?: Record<string, any>) {
 
 export function trackWorkoutNoteDeleted(properties?: Record<string, any>) {
   trackEvent('workout_note_deleted', properties);
+}
+
+export function trackWorkoutSetLogged(properties?: Record<string, any>) {
+  trackEvent('workout_set_logged', properties);
+}
+
+export function trackWorkoutSetRepeatLastUsed(properties?: Record<string, any>) {
+  trackEvent('workout_set_repeat_last_used', properties);
+}
+
+export function trackWorkoutSetRepeatPlusFiveUsed(properties?: Record<string, any>) {
+  trackEvent('workout_set_repeat_plus_five_used', properties);
+}
+
+export function trackWorkoutSetDeleted(properties?: Record<string, any>) {
+  trackEvent('workout_set_deleted', properties);
+}
+
+export function trackWorkoutSetEdited(properties?: Record<string, any>) {
+  trackEvent('workout_set_edited', properties);
+}
+
+export function trackWorkoutRestTimerStarted(properties?: Record<string, any>) {
+  trackEvent('workout_rest_timer_started', properties);
+}
+
+export function trackWorkoutRestTimerSkipped(properties?: Record<string, any>) {
+  trackEvent('workout_rest_timer_skipped', properties);
+}
+
+export function trackWorkoutNextExerciseTapped(properties?: Record<string, any>) {
+  trackEvent('workout_next_exercise_tapped', properties);
+}
+
+export function trackWorkoutFinishSheetOpened(properties?: Record<string, any>) {
+  trackEvent('workout_finish_sheet_opened', properties);
+}
+
+export function trackWorkoutFinishConfirmed(properties?: Record<string, any>) {
+  trackEvent('workout_finish_confirmed', properties);
+}
+
+export function trackWorkoutFinishEarlyConfirmed(properties?: Record<string, any>) {
+  trackEvent('workout_finish_early_confirmed', properties);
 }
 
 // Nutrition Analytics

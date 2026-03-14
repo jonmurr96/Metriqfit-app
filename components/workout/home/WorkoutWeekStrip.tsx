@@ -10,7 +10,7 @@ export type WorkoutWeekDayItem = {
   isToday: boolean;
   isSelected: boolean;
   sessionType: 'workout' | 'rest' | 'active_recovery' | 'conditioning' | null;
-  status: 'planned' | 'completed' | 'missed' | null;
+  status: 'planned' | 'completed' | 'missed' | 'rescheduled' | 'skipped' | null;
   onPress: () => void;
 };
 
@@ -25,6 +25,7 @@ export function WorkoutWeekStrip({ days }: Props) {
     if (day.sessionType !== 'workout') return c.border;
     if (day.status === 'completed') return c.success;
     if (day.status === 'missed') return c.error || '#ef4444';
+    if (day.status === 'skipped') return `${c.textMuted}88`;
     return c.primary;
   };
 
