@@ -107,6 +107,7 @@ export default function DayPreviewScreen() {
           style={[
             styles.dayInfo,
             {
+              position: 'relative',
               backgroundColor: c.surface,
               borderRadius: r.lg,
               padding: s.xl,
@@ -116,8 +117,8 @@ export default function DayPreviewScreen() {
             },
           ]}
         >
-          <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start' }}>
-            <View>
+          <View style={{ paddingRight: 'is_completed' in day && day.is_completed ? 104 : 0 }}>
+            <View style={{ minWidth: 0 }}>
               <Text style={{ color: c.primary, fontFamily: ty.body.familySemibold, fontSize: ty.sizes.xs, letterSpacing: 1 }}>
                 {day.day_number ? `DAY ${day.day_number}` : 'WORKOUT'}
               </Text>
@@ -128,14 +129,24 @@ export default function DayPreviewScreen() {
                 {day.focus ? `${day.focus} • ` : ''}{exercises.length} exercises
               </Text>
             </View>
-            {'is_completed' in day && day.is_completed && (
-              <View style={{ backgroundColor: c.success, paddingHorizontal: 8, paddingVertical: 4, borderRadius: r.sm }}>
-                <Text style={{ color: c.bg, fontFamily: ty.body.familySemibold, fontSize: ty.sizes.xs }}>
-                  Completed
-                </Text>
-              </View>
-            )}
           </View>
+          {'is_completed' in day && day.is_completed && (
+            <View
+              style={{
+                position: 'absolute',
+                top: s.lg,
+                right: s.lg,
+                backgroundColor: c.success,
+                paddingHorizontal: 8,
+                paddingVertical: 4,
+                borderRadius: r.sm,
+              }}
+            >
+              <Text style={{ color: c.bg, fontFamily: ty.body.familySemibold, fontSize: ty.sizes.xs }}>
+                Completed
+              </Text>
+            </View>
+          )}
         </View>
 
         {/* Exercise List */}
