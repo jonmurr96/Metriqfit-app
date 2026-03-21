@@ -8,12 +8,13 @@ import type { WorkoutDashboardPrimaryHeroState } from '../../../lib/workout/dash
 
 type Props = {
   state: WorkoutDashboardPrimaryHeroState;
+  contextLabel?: string | null;
   onPrimaryPress: () => void;
   onSecondaryPress?: () => void;
   disabled?: boolean;
 };
 
-export function WorkoutPrimaryHeroCard({ state, onPrimaryPress, onSecondaryPress, disabled = false }: Props) {
+export function WorkoutPrimaryHeroCard({ state, contextLabel, onPrimaryPress, onSecondaryPress, disabled = false }: Props) {
   const { c, s, ty, r } = useTokens();
 
   const tone = {
@@ -110,6 +111,18 @@ export function WorkoutPrimaryHeroCard({ state, onPrimaryPress, onSecondaryPress
             >
               {state.subtitle}
             </Text>
+
+            {contextLabel ? (
+              <Text
+                style={{
+                  color: c.primary,
+                  fontFamily: ty.mono.family,
+                  fontSize: ty.sizes.xs,
+                }}
+              >
+                {contextLabel}
+              </Text>
+            ) : null}
           </View>
 
           <View

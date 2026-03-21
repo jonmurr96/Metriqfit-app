@@ -14,6 +14,7 @@ import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useTokens } from '../../lib/theme';
 import { TabBarIcon } from '../../components/navigation/TabBarIcon';
+import { MacroInlineSummary } from '../../components/nutrition/MacroInlineSummary';
 import {
   useActiveNutritionPlan,
   useNutritionPlanDay,
@@ -466,9 +467,16 @@ export default function EditNutritionPlanScreen() {
                         <Text style={{ color: c.text, fontFamily: ty.body.familySemibold }}>
                           {slotLabel(meal.meal_slot)}: {src?.name || meal.name}
                         </Text>
-                        <Text style={{ color: c.textMuted, fontFamily: ty.body.family, fontSize: 12, marginTop: 2 }}>
-                          {Math.round(calories)} kcal • P {Math.round(protein)}g • C {Math.round(carbs)}g • F {Math.round(fat)}g
-                        </Text>
+                        <MacroInlineSummary
+                          size="sm"
+                          style={{ marginTop: 4 }}
+                          items={[
+                            { macro: 'calories', value: Math.round(calories), unit: ' kcal' },
+                            { macro: 'protein', value: Math.round(protein), unit: 'g' },
+                            { macro: 'carbs', value: Math.round(carbs), unit: 'g' },
+                            { macro: 'fat', value: Math.round(fat), unit: 'g' },
+                          ]}
+                        />
                       </View>
                       <Pressable
                         style={[styles.editMealButton, { borderColor: c.primary, borderRadius: r.pill }]}

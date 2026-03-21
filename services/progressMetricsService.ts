@@ -1,10 +1,21 @@
 import { supabase } from "../lib/supabase";
+import {
+  bucketTrendSeries,
+  buildProgressRecordSummary,
+  buildProgressSummary,
+  getProgressRangeConfig,
+  type ProgressRangeOption,
+  type ProgressRecordSummaryOutput,
+  type ProgressSummaryOutput,
+  type ProgressSummaryStatus,
+} from "../lib/progress/progress-insights";
 import { getDailyTotals, getNutritionStats } from "./nutritionService";
 import { getPrepCoachState, type PrepCoachState } from "./prepCoachService";
 import { getConsistencyHistory, getLatestConsistency, getTodayWorkoutScheduleEntry } from "./planService";
 import { getUserPRs, getWorkoutStats } from "./workoutService";
 
 export type ProgressTimeframe = "week" | "month" | "year";
+export type { ProgressRangeOption, ProgressSummaryStatus };
 
 export type MetricQualityFlag = {
   key: "weight_data" | "bodyfat_data" | "consistency_data" | "workout_data";
@@ -46,6 +57,10 @@ export interface AdherenceMetrics {
   nutritionHitRate: number;
   nutritionHitDays: number;
   timeframeDays: number;
+  macroConsistencyScore: number;
+  proteinPercent: number;
+  carbsPercent: number;
+  fatPercent: number;
 }
 
 export interface PerformanceMetrics {
@@ -59,11 +74,32 @@ export interface PerformanceMetrics {
 }
 
 export interface ProgressSnapshot {
+  range: ProgressRangeOption;
   timeframe: ProgressTimeframe;
   generatedAt: string;
   bodyComp: BodyCompMetrics;
   adherence: AdherenceMetrics;
   performance: PerformanceMetrics;
+  summary: ProgressSummaryOutput;
+  recordSummary: {
+    latestPrExercise: string | null;
+    latestPrValue: number | null;
+    latestPrUnit: string | null;
+    latestPrDate: string | null;
+    prCount30d: number;
+  };
+  trainingSummary: {
+    sessionsThisRange: number;
+    sessionsPerWeek: number;
+    volumeChangePercent: number | null;
+    avgDurationMinutes: number;
+  };
+  bodySummary: {
+    weightTrendDirection: "down" | "up" | "flat" | "unknown";
+    weightTrendConfidence: "high" | "medium" | "low";
+    bodyFatAvailability: "none" | "partial" | "good";
+    forecastReadiness: "ready" | "limited" | "not_ready";
+  };
   dataFreshness: {
     weightLastLoggedAt: string | null;
     consistencyLastLoggedAt: string | null;
@@ -80,6 +116,46 @@ export interface ProgressSnapshot {
   } | null;
   qualityFlags: MetricQualityFlag[];
 }
+
+export interface ProgressTrendEvent {
+  id: string;
+  exercise: string;
+  date: string;
+  estimated1Rm: number;
+}
+
+export interface ProgressTrendSnapshot {
+  range: ProgressRangeOption;
+  timeframe: ProgressTimeframe;
+  generatedAt: string;
+  weightSeries: TrendPoint[];
+  consistencySeries: TrendPoint[];
+  calorieSeries: TrendPoint[];
+  volumeSeries: TrendPoint[];
+  sessionSeries: TrendPoint[];
+  prEvents: ProgressTrendEvent[];
+  qualityFlags: MetricQualityFlag[];
+  trainingSummary: {
+    sessionsThisRange: number;
+    sessionsPerWeek: number;
+    volumeChangePercent: number | null;
+    avgDurationMinutes: number;
+  };
+  adherenceSummary: {
+    consistencyAverage: number;
+    nutritionHitRate: number;
+    calorieTarget: number;
+    proteinTarget: number;
+  };
+  bodySummary: {
+    weightDeltaKg: number;
+    weightChangePercent: number;
+    bodyFatChange: number | null;
+    circumferenceDelta: CircumferenceDelta;
+  };
+}
+
+export type ProgressRecordSummary = ProgressRecordSummaryOutput;
 
 export interface HomeSnapshot {
   generatedAt: string;
@@ -121,18 +197,25 @@ type TargetsRow = {
   water_ml: number;
 } | null;
 
+type WorkoutSessionTrendRow = {
+  id: string;
+  started_at: string;
+  duration_seconds: number | null;
+  exercises: {
+    sets: {
+      reps: number | null;
+      weight_lb: number | null;
+      is_warmup: boolean | null;
+    }[];
+  }[];
+};
+
 function clamp(n: number, min: number, max: number) {
   return Math.max(min, Math.min(max, n));
 }
 
 function round1(n: number) {
   return Math.round(n * 10) / 10;
-}
-
-function getTimeframeDays(timeframe: ProgressTimeframe): number {
-  if (timeframe === "week") return 7;
-  if (timeframe === "month") return 30;
-  return 365;
 }
 
 function toIsoDate(date: Date) {
@@ -299,16 +382,119 @@ async function getLatestWorkoutTimestamp(userId: string): Promise<string | null>
   return data?.started_at || null;
 }
 
+async function getWorkoutSessionsInRange(
+  userId: string,
+  startIso: string,
+  endIso: string,
+): Promise<WorkoutSessionTrendRow[]> {
+  const { data, error } = await supabase
+    .from("workout_sessions")
+    .select(`
+      id,
+      started_at,
+      duration_seconds,
+      exercises:session_exercises(
+        sets:workout_sets(reps, weight_lb, is_warmup)
+      )
+    `)
+    .eq("user_id", userId)
+    .gte("started_at", startIso)
+    .lte("started_at", endIso)
+    .not("finished_at", "is", null)
+    .order("started_at", { ascending: true });
+
+  if (error) throw error;
+  return (data || []) as WorkoutSessionTrendRow[];
+}
+
+function computeSessionVolume(session: WorkoutSessionTrendRow) {
+  return Math.round(
+    session.exercises.reduce((sessionSum, exercise) => {
+      return sessionSum + exercise.sets.reduce((setSum, set) => {
+        if (set.is_warmup) return setSum;
+        const reps = Number(set.reps || 0);
+        const weight = Number(set.weight_lb || 0);
+        return setSum + (reps * weight);
+      }, 0);
+    }, 0),
+  );
+}
+
+function computePercentChangeFromSeries(values: number[]) {
+  if (values.length < 2) return null;
+  const midpoint = Math.ceil(values.length / 2);
+  const firstHalf = values.slice(0, midpoint);
+  const secondHalf = values.slice(midpoint);
+  const firstAvg = firstHalf.reduce((sum, value) => sum + value, 0) / Math.max(1, firstHalf.length);
+  const secondAvg = secondHalf.reduce((sum, value) => sum + value, 0) / Math.max(1, secondHalf.length);
+  if (firstAvg <= 0) {
+    return secondAvg > 0 ? 100 : 0;
+  }
+  return round1(((secondAvg - firstAvg) / firstAvg) * 100);
+}
+
+function scoreTargetCloseness(actual: number, target: number) {
+  if (target <= 0) return 0;
+  return Math.round(clamp(100 - (Math.abs(actual - target) / target) * 100, 0, 100));
+}
+
+function resolveWeightTrendDirection(changePercent: number): "down" | "up" | "flat" | "unknown" {
+  if (!Number.isFinite(changePercent)) return "unknown";
+  if (Math.abs(changePercent) < 0.25) return "flat";
+  return changePercent < 0 ? "down" : "up";
+}
+
+function resolveWeightTrendConfidence(score: number): "high" | "medium" | "low" {
+  if (score >= 80) return "high";
+  if (score >= 55) return "medium";
+  return "low";
+}
+
+function resolveBodyFatAvailability(entries: number) {
+  if (entries <= 0) return "none" as const;
+  if (entries === 1) return "partial" as const;
+  return "good" as const;
+}
+
+function resolveForecastReadiness(weightEntries: number, bodyFatEntries: number, hasGoalBenchmark: boolean) {
+  if (!hasGoalBenchmark || weightEntries < 2) return "not_ready" as const;
+  if (weightEntries >= 3 || bodyFatEntries >= 2) return "ready" as const;
+  return "limited" as const;
+}
+
+function buildDailyDateKeys(startDate: string, days: number) {
+  return Array.from({ length: days }, (_, idx) => {
+    const date = new Date(startDate);
+    date.setDate(date.getDate() + idx);
+    return toIsoDate(date);
+  });
+}
+
+function mapWorkoutDailySeries(sessions: WorkoutSessionTrendRow[]) {
+  const dailyVolume = new Map<string, number>();
+  const dailySessions = new Map<string, number>();
+
+  sessions.forEach((session) => {
+    const key = toIsoDate(new Date(session.started_at));
+    dailyVolume.set(key, (dailyVolume.get(key) || 0) + computeSessionVolume(session));
+    dailySessions.set(key, (dailySessions.get(key) || 0) + 1);
+  });
+
+  return { dailyVolume, dailySessions };
+}
+
 export async function getProgressSnapshot(
   userId: string,
-  timeframe: ProgressTimeframe,
+  range: ProgressRangeOption,
 ): Promise<ProgressSnapshot> {
-  const days = getTimeframeDays(timeframe);
+  const rangeConfig = getProgressRangeConfig(range);
+  const timeframe = rangeConfig.timeframe;
+  const days = rangeConfig.days;
   const { startDate, endDate } = getDateRange(days);
   const startIso = `${startDate}T00:00:00.000Z`;
   const endIso = `${endDate}T23:59:59.999Z`;
 
-  const [measurements, consistencyHistory, targets, nutritionStats, workoutStats, prs, streak, onboardingPayload, latestWorkoutAt] = await Promise.all([
+  const [measurements, consistencyHistory, targets, nutritionStats, workoutStats, prs, streak, onboardingPayload, latestWorkoutAt, workoutSessions] = await Promise.all([
     getMeasurementsInRange(userId, startDate, endDate),
     getConsistencyHistory(userId, days),
     getTargets(userId),
@@ -318,6 +504,7 @@ export async function getProgressSnapshot(
     getUserStreak(userId),
     getOnboardingPayload(userId),
     getLatestWorkoutTimestamp(userId),
+    getWorkoutSessionsInRange(userId, startIso, endIso),
   ]);
 
   const newestMeasurement = measurements[0] || null;
@@ -370,11 +557,32 @@ export async function getProgressSnapshot(
     return acc + (caloriesInBand && proteinHit ? 1 : 0);
   }, 0);
   const nutritionHitRate = Math.round((nutritionHits / Math.max(1, days)) * 100);
+  const proteinPercent = Math.round(dailyDates.reduce((sum, date) => {
+    const day = nutritionStats[date] || { protein: 0 };
+    return sum + scoreTargetCloseness(day.protein || 0, Math.max(1, Number(targets?.protein_g || 150)));
+  }, 0) / Math.max(1, days));
+  const carbsPercent = Math.round(dailyDates.reduce((sum, date) => {
+    const day = nutritionStats[date] || { carbs: 0 };
+    return sum + scoreTargetCloseness(day.carbs || 0, Math.max(1, Number(targets?.carbs_g || 200)));
+  }, 0) / Math.max(1, days));
+  const fatPercent = Math.round(dailyDates.reduce((sum, date) => {
+    const day = nutritionStats[date] || { fat: 0 };
+    return sum + scoreTargetCloseness(day.fat || 0, Math.max(1, Number(targets?.fat_g || 70)));
+  }, 0) / Math.max(1, days));
+  const macroConsistencyScore = Math.round((proteinPercent + carbsPercent + fatPercent) / 3);
 
   const last30PrCount = prs.filter((pr) => {
     const achievedAt = Date.parse(pr.achieved_at as string);
     return Number.isFinite(achievedAt) && achievedAt >= (Date.now() - 30 * 24 * 60 * 60 * 1000);
   }).length;
+  const { dailyVolume } = mapWorkoutDailySeries(workoutSessions);
+  const volumeSeries = bucketTrendSeries(
+    range,
+    Array.from(dailyVolume.entries()).map(([date, value]) => ({ date, value })),
+    "sum",
+  );
+  const volumeChangePercent = computePercentChangeFromSeries(volumeSeries.map((point) => point.value));
+  const progressRecordSummary = buildProgressRecordSummary(prs);
 
   const qualityFlags: MetricQualityFlag[] = [
     measurements.length === 0
@@ -494,6 +702,7 @@ export async function getProgressSnapshot(
   })();
 
   return {
+    range,
     timeframe,
     generatedAt: new Date().toISOString(),
     bodyComp: {
@@ -515,6 +724,10 @@ export async function getProgressSnapshot(
       nutritionHitRate,
       nutritionHitDays: nutritionHits,
       timeframeDays: days,
+      macroConsistencyScore,
+      proteinPercent,
+      carbsPercent,
+      fatPercent,
     },
     performance: {
       sessions: workoutStats.totalSessions,
@@ -524,6 +737,41 @@ export async function getProgressSnapshot(
       avgDurationMinutes: workoutStats.avgDurationMinutes,
       sessionsPerWeek: workoutStats.sessionsPerWeek,
       prVelocity30d: last30PrCount,
+    },
+    summary: buildProgressSummary({
+      goalBenchmarkStatus: goalBenchmark?.status || null,
+      consistencyAverage: round1(consistencyAverage),
+      weightChangePercent: weightChangePct,
+      sessionsPerWeek: workoutStats.sessionsPerWeek,
+      volumeChangePercent,
+      prCount30d: last30PrCount,
+      qualityFlags,
+      dataFreshness: {
+        weightLastLoggedAt: newestMeasurement?.logged_at || null,
+        consistencyLastLoggedAt: consistencyHistory.length
+          ? `${consistencyHistory[consistencyHistory.length - 1].log_date}T00:00:00.000Z`
+          : null,
+        workoutLastSessionAt: latestWorkoutAt,
+      },
+    }),
+    recordSummary: {
+      latestPrExercise: progressRecordSummary.highlight?.exercise || null,
+      latestPrValue: progressRecordSummary.highlight?.value || null,
+      latestPrUnit: progressRecordSummary.highlight?.unit || null,
+      latestPrDate: progressRecordSummary.highlight?.date || null,
+      prCount30d: last30PrCount,
+    },
+    trainingSummary: {
+      sessionsThisRange: workoutStats.totalSessions,
+      sessionsPerWeek: workoutStats.sessionsPerWeek,
+      volumeChangePercent,
+      avgDurationMinutes: workoutStats.avgDurationMinutes,
+    },
+    bodySummary: {
+      weightTrendDirection: resolveWeightTrendDirection(weightChangePct),
+      weightTrendConfidence: resolveWeightTrendConfidence(buildWeightQualityScore(measurements, days)),
+      bodyFatAvailability: resolveBodyFatAvailability(bodyFatSeries.length),
+      forecastReadiness: resolveForecastReadiness(measurements.length, bodyFatSeries.length, !!goalBenchmark),
     },
     dataFreshness: {
       weightLastLoggedAt: newestMeasurement?.logged_at || null,
@@ -535,6 +783,142 @@ export async function getProgressSnapshot(
     goalBenchmark,
     qualityFlags,
   };
+}
+
+export async function getProgressTrends(
+  userId: string,
+  range: ProgressRangeOption,
+): Promise<ProgressTrendSnapshot> {
+  const rangeConfig = getProgressRangeConfig(range);
+  const days = rangeConfig.days;
+  const timeframe = rangeConfig.timeframe;
+  const { startDate, endDate } = getDateRange(days);
+  const startIso = `${startDate}T00:00:00.000Z`;
+  const endIso = `${endDate}T23:59:59.999Z`;
+
+  const [measurements, consistencyHistory, targets, nutritionStats, workoutSessions, prs] = await Promise.all([
+    getMeasurementsInRange(userId, startDate, endDate),
+    getConsistencyHistory(userId, days),
+    getTargets(userId),
+    getNutritionStats(userId, startIso, endIso),
+    getWorkoutSessionsInRange(userId, startIso, endIso),
+    getUserPRs(userId),
+  ]);
+
+  const dailyDates = buildDailyDateKeys(startDate, days);
+  const dailyCalories = dailyDates.map((date) => ({ date, value: Number(nutritionStats[date]?.calories || 0) }));
+  const dailyConsistency = consistencyHistory.map((row) => ({ date: row.log_date, value: Number(row.overall_score || 0) }));
+  const dailyWeights = measurements.map((row) => ({ date: row.logged_at.split("T")[0], value: round1(row.weight_kg) }));
+  const { dailyVolume, dailySessions } = mapWorkoutDailySeries(workoutSessions);
+  const dailyVolumePoints = Array.from(dailyVolume.entries()).map(([date, value]) => ({ date, value }));
+  const dailySessionPoints = Array.from(dailySessions.entries()).map(([date, value]) => ({ date, value }));
+  const filteredPrs = prs.filter((pr) => {
+    const achievedAt = Date.parse(pr.achieved_at as string);
+    return Number.isFinite(achievedAt) && achievedAt >= Date.parse(startIso) && achievedAt <= Date.parse(endIso);
+  });
+
+  const calorieTarget = Math.max(1, Number(targets?.calories || 2000));
+  const proteinTarget = Math.max(1, Number(targets?.protein_g || 150));
+  const nutritionHitRate = Math.round(dailyDates.reduce((sum, date) => {
+    const day = nutritionStats[date] || { calories: 0, protein: 0 };
+    const caloriesInBand = day.calories >= calorieTarget * 0.9 && day.calories <= calorieTarget * 1.1;
+    const proteinHit = day.protein >= proteinTarget * 0.9;
+    return sum + (caloriesInBand && proteinHit ? 1 : 0);
+  }, 0) / Math.max(1, dailyDates.length) * 100);
+
+  const weightSeries = bucketTrendSeries(range, dailyWeights, "average");
+  const consistencySeries = bucketTrendSeries(range, dailyConsistency, "average");
+  const calorieSeries = bucketTrendSeries(range, dailyCalories, "average");
+  const volumeSeries = bucketTrendSeries(range, dailyVolumePoints, "sum");
+  const sessionSeries = bucketTrendSeries(range, dailySessionPoints, "sum");
+
+  const weightValues = measurements.map((row) => row.weight_kg);
+  const newestMeasurement = measurements[0] || null;
+  const oldestMeasurement = measurements.length ? measurements[measurements.length - 1] : null;
+  const bodyFatSeries = measurements.filter((entry) => entry.body_fat_percentage != null);
+
+  const qualityFlags: MetricQualityFlag[] = [
+    measurements.length < 2
+      ? { key: "weight_data", status: measurements.length === 0 ? "missing" : "warn", message: "Weight trend is using sparse check-ins." }
+      : { key: "weight_data", status: "good", message: "Weight trend is ready." },
+    consistencyHistory.length < 3
+      ? { key: "consistency_data", status: consistencyHistory.length === 0 ? "missing" : "warn", message: "Consistency trend is still stabilizing." }
+      : { key: "consistency_data", status: "good", message: "Consistency trend is ready." },
+    workoutSessions.length === 0
+      ? { key: "workout_data", status: "missing", message: "No completed sessions in this range." }
+      : { key: "workout_data", status: "good", message: "Training trend has session data." },
+    bodyFatSeries.length < 2
+      ? { key: "bodyfat_data", status: bodyFatSeries.length === 0 ? "missing" : "warn", message: "Body-fat trend is limited." }
+      : { key: "bodyfat_data", status: "good", message: "Body-fat trend is ready." },
+  ];
+
+  return {
+    range,
+    timeframe,
+    generatedAt: new Date().toISOString(),
+    weightSeries,
+    consistencySeries,
+    calorieSeries,
+    volumeSeries,
+    sessionSeries,
+    prEvents: filteredPrs
+      .sort((a, b) => Date.parse(b.achieved_at as string) - Date.parse(a.achieved_at as string))
+      .slice(0, 6)
+      .map((record) => ({
+        id: record.id,
+        exercise: record.exercise?.name || "Unknown Exercise",
+        date: record.achieved_at as string,
+        estimated1Rm: Number(record.estimated_1rm || 0),
+      })),
+    qualityFlags,
+    trainingSummary: {
+      sessionsThisRange: workoutSessions.length,
+      sessionsPerWeek: round1((workoutSessions.length / Math.max(1, days)) * 7),
+      volumeChangePercent: computePercentChangeFromSeries(volumeSeries.map((point) => point.value)),
+      avgDurationMinutes: workoutSessions.length
+        ? Math.round(workoutSessions.reduce((sum, session) => sum + Number(session.duration_seconds || 0), 0) / workoutSessions.length / 60)
+        : 0,
+    },
+    adherenceSummary: {
+      consistencyAverage: consistencySeries.length
+        ? round1(consistencySeries.reduce((sum, point) => sum + point.value, 0) / consistencySeries.length)
+        : 0,
+      nutritionHitRate,
+      calorieTarget,
+      proteinTarget,
+    },
+    bodySummary: {
+      weightDeltaKg: newestMeasurement && oldestMeasurement
+        ? round1(newestMeasurement.weight_kg - oldestMeasurement.weight_kg)
+        : 0,
+      weightChangePercent: weightValues.length >= 2 && oldestMeasurement
+        ? percentChange(newestMeasurement?.weight_kg || 0, oldestMeasurement.weight_kg)
+        : 0,
+      bodyFatChange: bodyFatSeries.length > 1 && bodyFatSeries[bodyFatSeries.length - 1].body_fat_percentage != null
+        ? round1((bodyFatSeries[0].body_fat_percentage as number) - (bodyFatSeries[bodyFatSeries.length - 1].body_fat_percentage as number))
+        : null,
+      circumferenceDelta: computeCircDelta(newestMeasurement, oldestMeasurement),
+    },
+  };
+}
+
+export async function getProgressRecordSummary(
+  userId: string,
+  range: "90d" | "all" = "90d",
+): Promise<ProgressRecordSummary> {
+  const prs = await getUserPRs(userId);
+  const cutoff = range === "all"
+    ? null
+    : Date.now() - 90 * 24 * 60 * 60 * 1000;
+
+  const filtered = cutoff == null
+    ? prs
+    : prs.filter((record) => {
+        const achievedAt = Date.parse(record.achieved_at as string);
+        return Number.isFinite(achievedAt) && achievedAt >= cutoff;
+      });
+
+  return buildProgressRecordSummary(filtered);
 }
 
 export async function getHomeSnapshot(userId: string): Promise<HomeSnapshot> {

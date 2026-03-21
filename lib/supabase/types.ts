@@ -56,6 +56,7 @@ export interface Database {
         Row: {
           id: string
           user_id: string
+          thread_id: string | null
           role: 'user' | 'assistant' | 'system'
           content: string
           context_snapshot: Json | null
@@ -63,11 +64,19 @@ export interface Database {
           tokens_input: number | null
           tokens_output: number | null
           model: string | null
+          intent_mode: string | null
+          intent_confidence: number | null
+          tool_calls_json: Json | null
+          web_used: boolean
+          approval_required: boolean
+          proposal_id: string | null
+          receipt_id: string | null
           created_at: string
         }
         Insert: {
           id?: string
           user_id: string
+          thread_id?: string | null
           role: 'user' | 'assistant' | 'system'
           content: string
           context_snapshot?: Json | null
@@ -75,11 +84,19 @@ export interface Database {
           tokens_input?: number | null
           tokens_output?: number | null
           model?: string | null
+          intent_mode?: string | null
+          intent_confidence?: number | null
+          tool_calls_json?: Json | null
+          web_used?: boolean
+          approval_required?: boolean
+          proposal_id?: string | null
+          receipt_id?: string | null
           created_at?: string
         }
         Update: {
           id?: string
           user_id?: string
+          thread_id?: string | null
           role?: 'user' | 'assistant' | 'system'
           content?: string
           context_snapshot?: Json | null
@@ -87,11 +104,289 @@ export interface Database {
           tokens_input?: number | null
           tokens_output?: number | null
           model?: string | null
+          intent_mode?: string | null
+          intent_confidence?: number | null
+          tool_calls_json?: Json | null
+          web_used?: boolean
+          approval_required?: boolean
+          proposal_id?: string | null
+          receipt_id?: string | null
           created_at?: string
         }
         Relationships: [
           {
+            foreignKeyName: "ai_coach_messages_proposal_id_fkey"
+            columns: ["proposal_id"]
+            referencedRelation: "ai_coach_action_proposals"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "ai_coach_messages_receipt_id_fkey"
+            columns: ["receipt_id"]
+            referencedRelation: "ai_coach_tool_receipts"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "ai_coach_messages_thread_id_fkey"
+            columns: ["thread_id"]
+            referencedRelation: "ai_coach_threads"
+            referencedColumns: ["id"]
+          },
+          {
             foreignKeyName: "ai_coach_messages_user_id_fkey"
+            columns: ["user_id"]
+            referencedRelation: "users"
+            referencedColumns: ["id"]
+          }
+        ]
+      }
+      ai_coach_threads: {
+        Row: {
+          id: string
+          user_id: string
+          title: string
+          title_source: 'auto' | 'user' | 'model'
+          last_message_preview: string | null
+          last_intent_mode: string | null
+          created_at: string
+          updated_at: string
+          archived_at: string | null
+        }
+        Insert: {
+          id?: string
+          user_id: string
+          title?: string
+          title_source?: 'auto' | 'user' | 'model'
+          last_message_preview?: string | null
+          last_intent_mode?: string | null
+          created_at?: string
+          updated_at?: string
+          archived_at?: string | null
+        }
+        Update: {
+          id?: string
+          user_id?: string
+          title?: string
+          title_source?: 'auto' | 'user' | 'model'
+          last_message_preview?: string | null
+          last_intent_mode?: string | null
+          created_at?: string
+          updated_at?: string
+          archived_at?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "ai_coach_threads_user_id_fkey"
+            columns: ["user_id"]
+            referencedRelation: "users"
+            referencedColumns: ["id"]
+          }
+        ]
+      }
+      ai_coach_action_proposals: {
+        Row: {
+          id: string
+          user_id: string
+          thread_id: string
+          source_message_id: string | null
+          tool_name: string
+          tool_input_json: Json
+          risk_level: 'low' | 'medium' | 'high'
+          status: 'pending' | 'approved' | 'rejected' | 'executed' | 'failed' | 'expired'
+          summary: string
+          receipt_json: Json | null
+          created_at: string
+          updated_at: string
+          approved_at: string | null
+          rejected_at: string | null
+          executed_at: string | null
+        }
+        Insert: {
+          id?: string
+          user_id: string
+          thread_id: string
+          source_message_id?: string | null
+          tool_name: string
+          tool_input_json?: Json
+          risk_level: 'low' | 'medium' | 'high'
+          status?: 'pending' | 'approved' | 'rejected' | 'executed' | 'failed' | 'expired'
+          summary: string
+          receipt_json?: Json | null
+          created_at?: string
+          updated_at?: string
+          approved_at?: string | null
+          rejected_at?: string | null
+          executed_at?: string | null
+        }
+        Update: {
+          id?: string
+          user_id?: string
+          thread_id?: string
+          source_message_id?: string | null
+          tool_name?: string
+          tool_input_json?: Json
+          risk_level?: 'low' | 'medium' | 'high'
+          status?: 'pending' | 'approved' | 'rejected' | 'executed' | 'failed' | 'expired'
+          summary?: string
+          receipt_json?: Json | null
+          created_at?: string
+          updated_at?: string
+          approved_at?: string | null
+          rejected_at?: string | null
+          executed_at?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "ai_coach_action_proposals_source_message_id_fkey"
+            columns: ["source_message_id"]
+            referencedRelation: "ai_coach_messages"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "ai_coach_action_proposals_thread_id_fkey"
+            columns: ["thread_id"]
+            referencedRelation: "ai_coach_threads"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "ai_coach_action_proposals_user_id_fkey"
+            columns: ["user_id"]
+            referencedRelation: "users"
+            referencedColumns: ["id"]
+          }
+        ]
+      }
+      ai_coach_tool_receipts: {
+        Row: {
+          id: string
+          user_id: string
+          thread_id: string
+          proposal_id: string | null
+          tool_name: string
+          mutation_level: 'none' | 'low' | 'medium' | 'high'
+          summary: string
+          metadata_json: Json | null
+          created_at: string
+        }
+        Insert: {
+          id?: string
+          user_id: string
+          thread_id: string
+          proposal_id?: string | null
+          tool_name: string
+          mutation_level: 'none' | 'low' | 'medium' | 'high'
+          summary: string
+          metadata_json?: Json | null
+          created_at?: string
+        }
+        Update: {
+          id?: string
+          user_id?: string
+          thread_id?: string
+          proposal_id?: string | null
+          tool_name?: string
+          mutation_level?: 'none' | 'low' | 'medium' | 'high'
+          summary?: string
+          metadata_json?: Json | null
+          created_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "ai_coach_tool_receipts_proposal_id_fkey"
+            columns: ["proposal_id"]
+            referencedRelation: "ai_coach_action_proposals"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "ai_coach_tool_receipts_thread_id_fkey"
+            columns: ["thread_id"]
+            referencedRelation: "ai_coach_threads"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "ai_coach_tool_receipts_user_id_fkey"
+            columns: ["user_id"]
+            referencedRelation: "users"
+            referencedColumns: ["id"]
+          }
+        ]
+      }
+      ai_coach_memory_items: {
+        Row: {
+          id: string
+          user_id: string
+          source_message_id: string | null
+          thread_id: string | null
+          proposal_id: string | null
+          memory_type: 'goal' | 'constraint' | 'preference' | 'commitment' | 'summary' | 'intervention'
+          title: string
+          body: string
+          status: 'active' | 'resolved' | 'dismissed'
+          priority: number
+          metadata_json: Json | null
+          origin_type: 'derived' | 'conversation' | 'tool' | 'profile'
+          scope: 'global' | 'nutrition' | 'workout' | 'settings' | 'conversation'
+          created_at: string
+          updated_at: string
+          resolved_at: string | null
+        }
+        Insert: {
+          id?: string
+          user_id: string
+          source_message_id?: string | null
+          thread_id?: string | null
+          proposal_id?: string | null
+          memory_type: 'goal' | 'constraint' | 'preference' | 'commitment' | 'summary' | 'intervention'
+          title: string
+          body: string
+          status?: 'active' | 'resolved' | 'dismissed'
+          priority?: number
+          metadata_json?: Json | null
+          origin_type?: 'derived' | 'conversation' | 'tool' | 'profile'
+          scope?: 'global' | 'nutrition' | 'workout' | 'settings' | 'conversation'
+          created_at?: string
+          updated_at?: string
+          resolved_at?: string | null
+        }
+        Update: {
+          id?: string
+          user_id?: string
+          source_message_id?: string | null
+          thread_id?: string | null
+          proposal_id?: string | null
+          memory_type?: 'goal' | 'constraint' | 'preference' | 'commitment' | 'summary' | 'intervention'
+          title?: string
+          body?: string
+          status?: 'active' | 'resolved' | 'dismissed'
+          priority?: number
+          metadata_json?: Json | null
+          origin_type?: 'derived' | 'conversation' | 'tool' | 'profile'
+          scope?: 'global' | 'nutrition' | 'workout' | 'settings' | 'conversation'
+          created_at?: string
+          updated_at?: string
+          resolved_at?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "ai_coach_memory_items_proposal_id_fkey"
+            columns: ["proposal_id"]
+            referencedRelation: "ai_coach_action_proposals"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "ai_coach_memory_items_source_message_id_fkey"
+            columns: ["source_message_id"]
+            referencedRelation: "ai_coach_messages"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "ai_coach_memory_items_thread_id_fkey"
+            columns: ["thread_id"]
+            referencedRelation: "ai_coach_threads"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "ai_coach_memory_items_user_id_fkey"
             columns: ["user_id"]
             referencedRelation: "users"
             referencedColumns: ["id"]
@@ -278,6 +573,7 @@ export interface Database {
           source: 'internal' | 'usda_fdc' | 'openfoodfacts' | 'manual'
           image_url: string | null
           is_verified: boolean
+          created_by_user_id: string | null
           created_at: string
           updated_at: string
         }
@@ -299,6 +595,7 @@ export interface Database {
           source?: 'internal' | 'usda_fdc' | 'openfoodfacts' | 'manual'
           image_url?: string | null
           is_verified?: boolean
+          created_by_user_id?: string | null
           created_at?: string
           updated_at?: string
         }
@@ -320,10 +617,18 @@ export interface Database {
           source?: 'internal' | 'usda_fdc' | 'openfoodfacts' | 'manual'
           image_url?: string | null
           is_verified?: boolean
+          created_by_user_id?: string | null
           created_at?: string
           updated_at?: string
         }
-        Relationships: []
+        Relationships: [
+          {
+            foreignKeyName: "food_items_created_by_user_id_fkey"
+            columns: ["created_by_user_id"]
+            referencedRelation: "users"
+            referencedColumns: ["id"]
+          }
+        ]
       }
       meal_log_items: {
         Row: {
@@ -1541,6 +1846,8 @@ export interface Database {
           id: string
           user_id: string
           generation_run_id: string | null
+          lifecycle_state: string
+          replaces_plan_id: string | null
           version: number
           is_active: boolean
           name: string
@@ -1555,6 +1862,8 @@ export interface Database {
           id?: string
           user_id: string
           generation_run_id?: string | null
+          lifecycle_state?: string
+          replaces_plan_id?: string | null
           version?: number
           is_active?: boolean
           name: string
@@ -1569,6 +1878,8 @@ export interface Database {
           id?: string
           user_id?: string
           generation_run_id?: string | null
+          lifecycle_state?: string
+          replaces_plan_id?: string | null
           version?: number
           is_active?: boolean
           name?: string
@@ -1590,6 +1901,12 @@ export interface Database {
             foreignKeyName: "user_nutrition_plans_generation_run_id_fkey"
             columns: ["generation_run_id"]
             referencedRelation: "plan_generation_runs"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "user_nutrition_plans_replaces_plan_id_fkey"
+            columns: ["replaces_plan_id"]
+            referencedRelation: "user_nutrition_plans"
             referencedColumns: ["id"]
           }
         ]
@@ -1801,6 +2118,8 @@ export interface Database {
           scheduled_date: string | null
           name: string
           focus: string | null
+          day_type: string
+          estimated_duration_min: number | null
           is_completed: boolean
           completed_at: string | null
           session_id: string | null
@@ -1813,6 +2132,8 @@ export interface Database {
           scheduled_date?: string | null
           name: string
           focus?: string | null
+          day_type?: string
+          estimated_duration_min?: number | null
           is_completed?: boolean
           completed_at?: string | null
           session_id?: string | null
@@ -1825,6 +2146,8 @@ export interface Database {
           scheduled_date?: string | null
           name?: string
           focus?: string | null
+          day_type?: string
+          estimated_duration_min?: number | null
           is_completed?: boolean
           completed_at?: string | null
           session_id?: string | null
@@ -1979,6 +2302,15 @@ export interface Database {
           user_id: string
           template_id: string | null
           generation_run_id: string | null
+          source_model: string
+          program_template_v2_id: string | null
+          program_family_key: string | null
+          progression_model: string | null
+          training_style_tags: string[]
+          goal_tags: string[]
+          weekly_layout_json: Json | null
+          lifecycle_state: string
+          replaces_plan_id: string | null
           version: number
           is_active: boolean
           name: string
@@ -1996,6 +2328,15 @@ export interface Database {
           user_id: string
           template_id?: string | null
           generation_run_id?: string | null
+          source_model?: string
+          program_template_v2_id?: string | null
+          program_family_key?: string | null
+          progression_model?: string | null
+          training_style_tags?: string[]
+          goal_tags?: string[]
+          weekly_layout_json?: Json | null
+          lifecycle_state?: string
+          replaces_plan_id?: string | null
           version?: number
           is_active?: boolean
           name: string
@@ -2013,6 +2354,15 @@ export interface Database {
           user_id?: string
           template_id?: string | null
           generation_run_id?: string | null
+          source_model?: string
+          program_template_v2_id?: string | null
+          program_family_key?: string | null
+          progression_model?: string | null
+          training_style_tags?: string[]
+          goal_tags?: string[]
+          weekly_layout_json?: Json | null
+          lifecycle_state?: string
+          replaces_plan_id?: string | null
           version?: number
           is_active?: boolean
           name?: string
@@ -2036,6 +2386,18 @@ export interface Database {
             foreignKeyName: "user_workout_plans_template_id_fkey"
             columns: ["template_id"]
             referencedRelation: "workout_templates"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "user_workout_plans_program_template_v2_id_fkey"
+            columns: ["program_template_v2_id"]
+            referencedRelation: "workout_program_templates_v2"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "user_workout_plans_replaces_plan_id_fkey"
+            columns: ["replaces_plan_id"]
+            referencedRelation: "user_workout_plans"
             referencedColumns: ["id"]
           },
           {
@@ -2329,6 +2691,12 @@ export interface Database {
       [_ in never]: never
     }
     Functions: {
+      apply_workout_plan_preview: {
+        Args: {
+          preview_plan_id: string
+        }
+        Returns: string
+      }
       calculate_estimated_1rm: {
         Args: {
           weight: number
@@ -2341,6 +2709,12 @@ export interface Database {
           p_user_id: string
           p_usage_type: string
           p_is_elite?: boolean
+        }
+        Returns: boolean
+      }
+      discard_workout_plan_preview: {
+        Args: {
+          preview_plan_id: string
         }
         Returns: boolean
       }

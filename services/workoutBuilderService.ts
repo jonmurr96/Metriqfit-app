@@ -5,6 +5,11 @@ import {
   remediateDayExerciseMappings,
 } from '../lib/workout/programMappingEngine';
 import type { ProgramExercise } from '../lib/workout/programMappingRules';
+import {
+  normalizeWeeklyLayout,
+  sortFamilyRecords,
+  type WeeklyLayoutAssignment,
+} from '../lib/workout/program-catalog';
 
 const db = supabase as any;
 
@@ -67,6 +72,12 @@ export type TemplateExerciseV2 = {
     primary_muscle: string | null;
     pattern: string | null;
     difficulty: string | null;
+    video_url?: string | null;
+    gif_url?: string | null;
+    image_url?: string | null;
+    poster_url?: string | null;
+    has_media?: boolean;
+    source_provider?: string | null;
   };
 };
 
@@ -127,6 +138,13 @@ export type UserPlanBlockExercise = {
     id: string;
     name: string;
     category: string;
+    primary_muscle?: string | null;
+    video_url?: string | null;
+    gif_url?: string | null;
+    image_url?: string | null;
+    poster_url?: string | null;
+    has_media?: boolean;
+    source_provider?: string | null;
   };
 };
 
@@ -143,21 +161,182 @@ function startOfWeek(date: Date) {
   return d;
 }
 
-function workoutDaysForFrequency(freq: number) {
-  const all = ['mon', 'tue', 'wed', 'thu', 'fri', 'sat', 'sun'];
-  const days = Math.max(1, Math.min(7, Number(freq || 3)));
-  const step = all.length / days;
-  const selected: string[] = [];
-  for (let i = 0; i < days; i += 1) {
-    const day = all[Math.floor(i * step)];
-    if (!selected.includes(day)) selected.push(day);
+async function loadPreferredDaysOff(userId: string): Promise<string[]> {
+  const { data, error } = await db
+    .from('onboarding_answers')
+    .select('answers')
+    .eq('user_id', userId)
+    .maybeSingle();
+
+  if (error) {
+    console.warn('Failed to load onboarding answers for workout layout seed', error);
+    return [];
   }
-  while (selected.length < days) {
-    const next = all.find((d) => !selected.includes(d));
-    if (!next) break;
-    selected.push(next);
+
+  return Array.isArray(data?.answers?.preferred_days_off)
+    ? (data.answers.preferred_days_off as string[])
+    : [];
+}
+
+async function insertWorkoutPlanWithFallback(payload: Record<string, any>) {
+  const attempts = [
+    payload,
+    {
+      user_id: payload.user_id,
+      generation_run_id: payload.generation_run_id,
+      template_id: payload.template_id,
+      version: payload.version,
+      is_active: payload.is_active,
+      name: payload.name,
+      description: payload.description,
+      start_date: payload.start_date,
+      total_weeks: payload.total_weeks,
+      days_per_week: payload.days_per_week,
+    },
+  ];
+
+  let lastError: any = null;
+  for (const attempt of attempts) {
+    const { data, error } = await db
+      .from('user_workout_plans')
+      .insert(attempt)
+      .select('id')
+      .single();
+
+    if (!error && data) {
+      return data;
+    }
+
+    lastError = error;
   }
-  return selected;
+
+  throw new Error(lastError?.message || 'Failed to create workout plan');
+}
+
+async function insertWorkoutPlanDayWithFallback(payload: Record<string, any>) {
+  const attempts = [
+    payload,
+    {
+      plan_id: payload.plan_id,
+      day_number: payload.day_number,
+      name: payload.name,
+      focus: payload.focus,
+    },
+  ];
+
+  let lastError: any = null;
+  for (const attempt of attempts) {
+    const { data, error } = await db
+      .from('user_workout_plan_days')
+      .insert(attempt)
+      .select('id')
+      .single();
+
+    if (!error && data) {
+      return data;
+    }
+
+    lastError = error;
+  }
+
+  throw new Error(lastError?.message || 'Failed to create workout plan day');
+}
+
+function getWeekdayKey(date: Date) {
+  return ['sun', 'mon', 'tue', 'wed', 'thu', 'fri', 'sat'][date.getDay()];
+}
+
+async function seedScheduleForPlan(input: {
+  planId: string;
+  daysPerWeek: number;
+  planDays: Array<{ id: string; dayType?: string | null }>;
+  weeklyLayout?: WeeklyLayoutAssignment[] | null;
+  preferredDaysOff?: string[] | null;
+  replaceExisting?: boolean;
+}) {
+  const weeklyLayout = normalizeWeeklyLayout(
+    input.weeklyLayout || null,
+    input.planDays,
+    input.daysPerWeek,
+    input.preferredDaysOff,
+  );
+
+  const { data: existingRows, error: existingError } = await db
+    .from('user_workout_plan_schedule')
+    .select('id, scheduled_date, status')
+    .eq('plan_id', input.planId)
+    .order('scheduled_date', { ascending: true });
+
+  if (existingError) {
+    throw new Error(existingError.message || 'Failed to load workout schedule');
+  }
+
+  if ((existingRows || []).length > 0 && !input.replaceExisting) {
+    return weeklyLayout;
+  }
+
+  const completedDates = new Set(
+    (existingRows || [])
+      .filter((row: any) => row.status === 'completed')
+      .map((row: any) => row.scheduled_date),
+  );
+
+  if ((existingRows || []).length > 0 && input.replaceExisting) {
+    const deletableIds = (existingRows || [])
+      .filter((row: any) => row.status !== 'completed')
+      .map((row: any) => row.id);
+
+    if (deletableIds.length) {
+      const { error: deleteError } = await db
+        .from('user_workout_plan_schedule')
+        .delete()
+        .in('id', deletableIds);
+
+      if (deleteError) {
+        throw new Error(deleteError.message || 'Failed to rebuild workout schedule');
+      }
+    }
+  }
+
+  const layoutByWeekday = new Map(weeklyLayout.map((entry) => [entry.weekday, entry]));
+  const weekStart = startOfWeek(new Date());
+
+  for (let offset = 0; offset < 28; offset += 1) {
+    const date = new Date(weekStart);
+    date.setDate(weekStart.getDate() + offset);
+    const dateKey = toDateString(date);
+    if (completedDates.has(dateKey)) {
+      continue;
+    }
+
+    const weekday = getWeekdayKey(date);
+    const entry = layoutByWeekday.get(weekday as WeeklyLayoutAssignment['weekday']);
+    const payload = entry
+      ? {
+        plan_id: input.planId,
+        plan_day_id: entry.planDayId,
+        scheduled_date: dateKey,
+        session_type: entry.sessionType,
+        status: 'planned',
+      }
+      : {
+        plan_id: input.planId,
+        plan_day_id: null,
+        scheduled_date: dateKey,
+        session_type: 'rest',
+        status: 'planned',
+      };
+
+    const { error: insertError } = await db
+      .from('user_workout_plan_schedule')
+      .insert(payload);
+
+    if (insertError) {
+      throw new Error(insertError.message || 'Failed to insert schedule row');
+    }
+  }
+
+  return weeklyLayout;
 }
 
 async function loadProgramExercisePool(): Promise<ProgramExercise[]> {
@@ -260,37 +439,6 @@ function remediateTemplateForClone(
   };
 }
 
-async function seedScheduleForPlan(planId: string, daysPerWeek: number, planDayIds: string[]) {
-  const { data: existing } = await db
-    .from('user_workout_plan_schedule')
-    .select('id')
-    .eq('plan_id', planId)
-    .limit(1);
-
-  if ((existing || []).length > 0) return;
-
-  const allowed = workoutDaysForFrequency(daysPerWeek);
-  const weekStart = startOfWeek(new Date());
-  let workoutIndex = 0;
-
-  for (let offset = 0; offset < 28; offset += 1) {
-    const date = new Date(weekStart);
-    date.setDate(weekStart.getDate() + offset);
-    const weekday = ['sun', 'mon', 'tue', 'wed', 'thu', 'fri', 'sat'][date.getDay()];
-    const isWorkout = allowed.includes(weekday);
-
-    await db.from('user_workout_plan_schedule').insert({
-      plan_id: planId,
-      plan_day_id: isWorkout ? planDayIds[workoutIndex % planDayIds.length] : null,
-      scheduled_date: toDateString(date),
-      session_type: isWorkout ? 'workout' : 'rest',
-      status: 'planned',
-    });
-
-    if (isWorkout) workoutIndex += 1;
-  }
-}
-
 export async function getProgramFamilies(): Promise<WorkoutProgramFamily[]> {
   const { data, error } = await db
     .from('workout_program_families')
@@ -299,7 +447,7 @@ export async function getProgramFamilies(): Promise<WorkoutProgramFamily[]> {
     .order('display_name', { ascending: true });
 
   if (error) throw new Error(error.message || 'Failed to load workout program families');
-  return (data || []) as WorkoutProgramFamily[];
+  return sortFamilyRecords((data || []) as WorkoutProgramFamily[]);
 }
 
 export async function getProgramsByFamily(familyKey?: string): Promise<WorkoutProgramTemplateV2[]> {
@@ -331,7 +479,7 @@ export async function getProgramTemplateV2(templateId: string): Promise<WorkoutT
           *,
           exercises:workout_program_block_exercises_v2(
             *,
-            exercise:exercises(id,external_id,name,category,equipment_required,primary_muscle,pattern,difficulty)
+            exercise:exercises(id,external_id,name,category,equipment_required,primary_muscle,pattern,difficulty,video_url,gif_url,image_url,poster_url,has_media,source_provider)
           )
         )
       )
@@ -371,6 +519,7 @@ export async function createPlanFromTemplateV2(
 ): Promise<{ planId: string }> {
   const templateRaw = await getProgramTemplateV2(templateId);
   const exercisePool = await loadProgramExercisePool();
+  const preferredDaysOff = await loadPreferredDaysOff(userId);
   const { template, changedRows } = remediateTemplateForClone(templateRaw, exercisePool);
 
   if (changedRows > 0) {
@@ -395,45 +544,39 @@ export async function createPlanFromTemplateV2(
       .eq('is_active', true);
   }
 
-  const { data: plan, error: planError } = await db
-    .from('user_workout_plans')
-    .insert({
-      user_id: userId,
-      generation_run_id: null,
-      version: Number(maxVersion?.version || 0) + 1,
-      is_active: options?.activate !== false,
-      name: options?.name || template.name,
-      description: options?.description || template.description,
-      start_date: toDateString(new Date()),
-      total_weeks: template.duration_weeks,
-      days_per_week: template.days_per_week,
-    })
-    .select('id')
-    .single();
+  const plan = await insertWorkoutPlanWithFallback({
+    user_id: userId,
+    generation_run_id: null,
+    version: Number(maxVersion?.version || 0) + 1,
+    is_active: options?.activate !== false,
+    source_model: 'v2_template',
+    program_template_v2_id: template.id,
+    program_family_key: template.family?.external_key || null,
+    progression_model: template.progression_model || null,
+    training_style_tags: template.training_style_tags || [],
+    goal_tags: template.goal_tags || [],
+    weekly_layout_json: null,
+    name: options?.name || template.name,
+    description: options?.description || template.description,
+    start_date: toDateString(new Date()),
+    total_weeks: template.duration_weeks,
+    days_per_week: template.days_per_week,
+  });
 
-  if (planError || !plan) throw new Error(planError?.message || 'Failed to create plan from template');
-
-  const dayMap = new Map<string, string>();
-  const planDayIds: string[] = [];
+  const planDays: Array<{ id: string; dayType: string | null }> = [];
 
   for (const day of template.days || []) {
-    const { data: planDay, error: dayError } = await db
-      .from('user_workout_plan_days')
-      .insert({
-        plan_id: plan.id,
-        day_number: day.sequence_index,
-        name: day.name,
-        focus: day.focus,
-      })
-      .select('id')
-      .single();
+    const planDay = await insertWorkoutPlanDayWithFallback({
+      plan_id: plan.id,
+      day_number: day.sequence_index,
+      name: day.name,
+      focus: day.focus,
+      day_type: day.day_type || 'workout',
+      estimated_duration_min: day.estimated_duration_min || null,
+    });
 
-    if (dayError || !planDay) throw new Error(dayError?.message || 'Failed to create plan day');
+    planDays.push({ id: planDay.id, dayType: day.day_type || 'workout' });
 
-    dayMap.set(day.id, planDay.id);
-    planDayIds.push(planDay.id);
-
-    const blockMap = new Map<string, string>();
     for (const block of day.blocks || []) {
       const { data: insertedBlock, error: blockError } = await db
         .from('user_workout_plan_blocks')
@@ -449,7 +592,6 @@ export async function createPlanFromTemplateV2(
         .single();
 
       if (blockError || !insertedBlock) throw new Error(blockError?.message || 'Failed to create plan block');
-      blockMap.set(block.id, insertedBlock.id);
 
       for (const ex of block.exercises || []) {
         const { error: exError } = await db
@@ -482,7 +624,18 @@ export async function createPlanFromTemplateV2(
     }
   }
 
-  await seedScheduleForPlan(plan.id, template.days_per_week, planDayIds);
+  const weeklyLayout = await seedScheduleForPlan({
+    planId: plan.id,
+    daysPerWeek: template.days_per_week,
+    planDays,
+    preferredDaysOff,
+  });
+
+  await db
+    .from('user_workout_plans')
+    .update({ weekly_layout_json: weeklyLayout })
+    .eq('id', plan.id);
+
   return { planId: plan.id };
 }
 
@@ -512,41 +665,39 @@ export async function createCustomWorkoutProgram(
   }
 
   const days = Math.max(2, Math.min(6, Number(input.daysPerWeek || 4)));
+  const preferredDaysOff = await loadPreferredDaysOff(userId);
 
-  const { data: plan, error: planError } = await db
-    .from('user_workout_plans')
-    .insert({
-      user_id: userId,
-      generation_run_id: null,
-      version: Number(maxVersion?.version || 0) + 1,
-      is_active: input.activate !== false,
-      name: input.name,
-      description: input.description || 'Custom workout plan',
-      start_date: toDateString(new Date()),
-      total_weeks: 8,
-      days_per_week: days,
-    })
-    .select('id')
-    .single();
+  const plan = await insertWorkoutPlanWithFallback({
+    user_id: userId,
+    generation_run_id: null,
+    version: Number(maxVersion?.version || 0) + 1,
+    is_active: input.activate !== false,
+    source_model: 'custom_builder',
+    program_template_v2_id: null,
+    program_family_key: null,
+    progression_model: null,
+    training_style_tags: [],
+    goal_tags: [],
+    weekly_layout_json: null,
+    name: input.name,
+    description: input.description || 'Custom workout plan',
+    start_date: toDateString(new Date()),
+    total_weeks: 8,
+    days_per_week: days,
+  });
 
-  if (planError || !plan) throw new Error(planError?.message || 'Failed to create custom plan');
-
-  const planDayIds: string[] = [];
+  const planDays: Array<{ id: string; dayType: string | null }> = [];
 
   for (let i = 1; i <= days; i += 1) {
-    const { data: day, error: dayError } = await db
-      .from('user_workout_plan_days')
-      .insert({
-        plan_id: plan.id,
-        day_number: i,
-        name: `Day ${i}`,
-        focus: 'Custom focus',
-      })
-      .select('id')
-      .single();
-
-    if (dayError || !day) throw new Error(dayError?.message || 'Failed to create custom day');
-    planDayIds.push(day.id);
+    const day = await insertWorkoutPlanDayWithFallback({
+      plan_id: plan.id,
+      day_number: i,
+      name: `Day ${i}`,
+      focus: 'Custom focus',
+      day_type: 'workout',
+      estimated_duration_min: 60,
+    });
+    planDays.push({ id: day.id, dayType: 'workout' });
 
     await db.from('user_workout_plan_blocks').insert({
       plan_day_id: day.id,
@@ -558,7 +709,18 @@ export async function createCustomWorkoutProgram(
     });
   }
 
-  await seedScheduleForPlan(plan.id, days, planDayIds);
+  const weeklyLayout = await seedScheduleForPlan({
+    planId: plan.id,
+    daysPerWeek: days,
+    planDays,
+    preferredDaysOff,
+  });
+
+  await db
+    .from('user_workout_plans')
+    .update({ weekly_layout_json: weeklyLayout })
+    .eq('id', plan.id);
+
   return { planId: plan.id };
 }
 
@@ -576,7 +738,7 @@ export async function getPlanDayBlocks(planDayId: string): Promise<{
 
   const { data: exercises, error: exercisesError } = await db
     .from('user_workout_plan_exercises')
-    .select('*, exercise:exercises(id,name,category)')
+    .select('*, exercise:exercises(id,name,category,primary_muscle,video_url,gif_url,image_url,poster_url,has_media,source_provider)')
     .eq('plan_day_id', planDayId)
     .order('order_index', { ascending: true });
 
@@ -735,6 +897,12 @@ export async function updateBlockExercise(
     rest_seconds: number;
     tempo: string | null;
     technique_type: string | null;
+    rir_target_min: number | null;
+    rir_target_max: number | null;
+    rpe_target_min: number | null;
+    rpe_target_max: number | null;
+    pause_seconds: number | null;
+    set_style: string | null;
     user_notes: string | null;
   }>,
 ): Promise<void> {
@@ -744,8 +912,8 @@ export async function updateBlockExercise(
       ...updates,
       is_user_modified: true,
       technique_config_json: updates.technique_type ? { updatedByBuilder: true } : undefined,
-      set_style: updates.technique_type === 'drop_set' ? 'pyramid' : undefined,
-      pause_seconds: updates.technique_type === 'pause_reps' ? 2 : undefined,
+      set_style: updates.set_style ?? (updates.technique_type === 'drop_set' ? 'pyramid' : undefined),
+      pause_seconds: updates.pause_seconds ?? (updates.technique_type === 'pause_reps' ? 2 : undefined),
     })
     .eq('id', planExerciseId);
 
@@ -759,6 +927,176 @@ export async function removeBlockExercise(planExerciseId: string): Promise<void>
     .eq('id', planExerciseId);
 
   if (error) throw new Error(error.message || 'Failed to remove exercise');
+}
+
+export async function addWorkoutPlanDay(
+  planId: string,
+  input: {
+    name?: string;
+    focus?: string | null;
+    dayType?: string;
+    estimatedDurationMin?: number | null;
+  },
+): Promise<{ id: string }> {
+  const { data: lastDay } = await db
+    .from('user_workout_plan_days')
+    .select('day_number')
+    .eq('plan_id', planId)
+    .order('day_number', { ascending: false })
+    .limit(1)
+    .maybeSingle();
+
+  const created = await insertWorkoutPlanDayWithFallback({
+    plan_id: planId,
+    day_number: Number(lastDay?.day_number || 0) + 1,
+    name: input.name || `Day ${Number(lastDay?.day_number || 0) + 1}`,
+    focus: input.focus || null,
+    day_type: input.dayType || 'workout',
+    estimated_duration_min: input.estimatedDurationMin ?? 60,
+  });
+
+  return { id: created.id };
+}
+
+export async function updateWorkoutPlanDay(
+  planDayId: string,
+  updates: Partial<{
+    name: string;
+    focus: string | null;
+    day_type: string;
+    estimated_duration_min: number | null;
+  }>,
+): Promise<void> {
+  const { error } = await db
+    .from('user_workout_plan_days')
+    .update(updates)
+    .eq('id', planDayId);
+
+  if (error) throw new Error(error.message || 'Failed to update workout day');
+}
+
+export async function removeWorkoutPlanDay(planDayId: string): Promise<void> {
+  const { data: day, error: dayError } = await db
+    .from('user_workout_plan_days')
+    .select('id, plan_id, day_number')
+    .eq('id', planDayId)
+    .maybeSingle();
+
+  if (dayError || !day) throw new Error(dayError?.message || 'Workout day not found');
+
+  const { error: deleteError } = await db
+    .from('user_workout_plan_days')
+    .delete()
+    .eq('id', planDayId);
+
+  if (deleteError) throw new Error(deleteError.message || 'Failed to remove workout day');
+
+  const { data: remainingDays } = await db
+    .from('user_workout_plan_days')
+    .select('id, day_number')
+    .eq('plan_id', day.plan_id)
+    .order('day_number', { ascending: true });
+
+  for (const [index, currentDay] of (remainingDays || []).entries()) {
+    await db
+      .from('user_workout_plan_days')
+      .update({ day_number: index + 1 })
+      .eq('id', currentDay.id);
+  }
+}
+
+export async function moveWorkoutPlanDay(
+  planId: string,
+  planDayId: string,
+  direction: 'up' | 'down',
+): Promise<void> {
+  const { data: days, error } = await db
+    .from('user_workout_plan_days')
+    .select('id, day_number')
+    .eq('plan_id', planId)
+    .order('day_number', { ascending: true });
+
+  if (error) throw new Error(error.message || 'Failed to load workout days');
+
+  const currentIndex = (days || []).findIndex((day: any) => day.id === planDayId);
+  if (currentIndex < 0) throw new Error('Workout day not found');
+
+  const targetIndex = direction === 'up' ? currentIndex - 1 : currentIndex + 1;
+  if (targetIndex < 0 || targetIndex >= (days || []).length) return;
+
+  const current = (days || [])[currentIndex];
+  const target = (days || [])[targetIndex];
+
+  await db.from('user_workout_plan_days').update({ day_number: -1 }).eq('id', current.id);
+  await db.from('user_workout_plan_days').update({ day_number: current.day_number }).eq('id', target.id);
+  await db.from('user_workout_plan_days').update({ day_number: target.day_number }).eq('id', current.id);
+}
+
+export async function movePlanDayBlock(blockId: string, direction: 'up' | 'down'): Promise<void> {
+  const { data: current, error: currentError } = await db
+    .from('user_workout_plan_blocks')
+    .select('id, plan_day_id, order_index')
+    .eq('id', blockId)
+    .maybeSingle();
+
+  if (currentError || !current) throw new Error(currentError?.message || 'Block not found');
+
+  const targetOrder = direction === 'up'
+    ? Number(current.order_index) - 1
+    : Number(current.order_index) + 1;
+
+  const { data: sibling, error: siblingError } = await db
+    .from('user_workout_plan_blocks')
+    .select('id, order_index')
+    .eq('plan_day_id', current.plan_day_id)
+    .eq('order_index', targetOrder)
+    .maybeSingle();
+
+  if (siblingError) throw new Error(siblingError.message || 'Failed to move block');
+  if (!sibling) return;
+
+  await db.from('user_workout_plan_blocks').update({ order_index: -1 }).eq('id', current.id);
+  await db.from('user_workout_plan_blocks').update({ order_index: current.order_index }).eq('id', sibling.id);
+  await db.from('user_workout_plan_blocks').update({ order_index: sibling.order_index }).eq('id', current.id);
+}
+
+export async function movePlanDayExercise(
+  planDayId: string,
+  planExerciseId: string,
+  direction: 'up' | 'down',
+): Promise<void> {
+  const { data: exercises, error } = await db
+    .from('user_workout_plan_exercises')
+    .select('id, order_index')
+    .eq('plan_day_id', planDayId)
+    .order('order_index', { ascending: true });
+
+  if (error) throw new Error(error.message || 'Failed to load plan exercises');
+
+  const currentIndex = (exercises || []).findIndex((exercise: any) => exercise.id === planExerciseId);
+  if (currentIndex < 0) throw new Error('Plan exercise not found');
+
+  const targetIndex = direction === 'up' ? currentIndex - 1 : currentIndex + 1;
+  if (targetIndex < 0 || targetIndex >= (exercises || []).length) return;
+
+  const current = (exercises || [])[currentIndex];
+  const target = (exercises || [])[targetIndex];
+
+  await db.from('user_workout_plan_exercises').update({ order_index: -1 }).eq('id', current.id);
+  await db.from('user_workout_plan_exercises').update({ order_index: current.order_index }).eq('id', target.id);
+  await db.from('user_workout_plan_exercises').update({ order_index: target.order_index }).eq('id', current.id);
+}
+
+export async function saveWorkoutPlanWeeklyLayout(
+  planId: string,
+  layout: WeeklyLayoutAssignment[],
+): Promise<void> {
+  const { error } = await db
+    .from('user_workout_plans')
+    .update({ weekly_layout_json: layout })
+    .eq('id', planId);
+
+  if (error) throw new Error(error.message || 'Failed to save weekly layout');
 }
 
 export async function publishWorkoutProgram(userId: string, planId: string): Promise<void> {
@@ -780,15 +1118,26 @@ export async function publishWorkoutProgram(userId: string, planId: string): Pro
 
   const { data: dayRows } = await db
     .from('user_workout_plan_days')
-    .select('id')
+    .select('id, day_type')
     .eq('plan_id', planId)
     .order('day_number', { ascending: true });
 
   const { data: plan } = await db
     .from('user_workout_plans')
-    .select('days_per_week')
+    .select('days_per_week, weekly_layout_json')
     .eq('id', planId)
     .maybeSingle();
 
-  await seedScheduleForPlan(planId, Number(plan?.days_per_week || 3), (dayRows || []).map((d: any) => d.id));
+  const weeklyLayout = await seedScheduleForPlan({
+    planId,
+    daysPerWeek: Number(plan?.days_per_week || 3),
+    planDays: (dayRows || []).map((day: any) => ({
+      id: day.id,
+      dayType: day.day_type || 'workout',
+    })),
+    weeklyLayout: Array.isArray(plan?.weekly_layout_json) ? plan.weekly_layout_json : null,
+    replaceExisting: true,
+  });
+
+  await saveWorkoutPlanWeeklyLayout(planId, weeklyLayout);
 }

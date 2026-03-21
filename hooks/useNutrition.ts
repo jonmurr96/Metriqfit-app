@@ -7,26 +7,40 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useAuth } from '../lib/auth/AuthProvider';
 import {
   searchFoods,
+  searchFoodCatalog,
+  searchExternalFoods,
+  upsertExternalFoodItem,
   getFoodById,
   getFoodByBarcode,
+  getFavoriteFoods,
+  getFavoriteFoodIds,
+  addFavoriteFood,
+  removeFavoriteFood,
   logFood,
+  logPlannedMeal,
   getDailyTotals,
   getDailyMeals,
   deleteMealLogItem,
   copyDayMeals,
-  type FoodItem,
-  type MealLogItem,
-  type DailyNutritionTotals,
+  type ExternalFoodSearchResult,
+  type FavoriteFood,
+  type FoodCatalogSearchResult,
   type MealSlot,
+  type LogPlannedMealResult,
 } from '../services/nutritionService';
+import { nutritionDashboardKeys } from './useNutritionDashboard';
 
 // Query Keys
 export const nutritionKeys = {
   all: ['nutrition'] as const,
   foods: () => [...nutritionKeys.all, 'foods'] as const,
   foodSearch: (query: string) => [...nutritionKeys.foods(), 'search', query] as const,
+  externalFoodSearch: (query: string) => [...nutritionKeys.foods(), 'external-search', query] as const,
+  foodCatalogSearch: (query: string) => [...nutritionKeys.foods(), 'catalog-search', query] as const,
   foodById: (id: string) => [...nutritionKeys.foods(), id] as const,
   foodByBarcode: (barcode: string) => [...nutritionKeys.foods(), 'barcode', barcode] as const,
+  favoriteFoods: (userId: string, query: string) => [...nutritionKeys.foods(), 'favorites', userId, query] as const,
+  favoriteFoodIds: (userId: string, idsKey: string) => [...nutritionKeys.foods(), 'favorite-ids', userId, idsKey] as const,
   dailyTotals: (userId: string, date: string) => [...nutritionKeys.all, 'totals', userId, date] as const,
   dailyMeals: (userId: string, date: string) => [...nutritionKeys.all, 'meals', userId, date] as const,
 };
@@ -40,6 +54,24 @@ export function useSearchFoods(query: string, options?: { enabled?: boolean }) {
     queryFn: () => searchFoods(query),
     enabled: query.length >= 2 && (options?.enabled ?? true),
     staleTime: 5 * 60 * 1000, // 5 minutes
+  });
+}
+
+export function useSearchExternalFoods(query: string, options?: { enabled?: boolean }) {
+  return useQuery<ExternalFoodSearchResult[]>({
+    queryKey: nutritionKeys.externalFoodSearch(query),
+    queryFn: ({ signal }) => searchExternalFoods(query, 10, signal),
+    enabled: query.length >= 3 && (options?.enabled ?? true),
+    staleTime: 5 * 60 * 1000,
+  });
+}
+
+export function useFoodCatalogSearch(query: string, options?: { enabled?: boolean }) {
+  return useQuery<FoodCatalogSearchResult[]>({
+    queryKey: nutritionKeys.foodCatalogSearch(query),
+    queryFn: () => searchFoodCatalog(query),
+    enabled: query.length >= 2 && (options?.enabled ?? true),
+    staleTime: 5 * 60 * 1000,
   });
 }
 
@@ -64,6 +96,29 @@ export function useFoodByBarcode(barcode: string, options?: { enabled?: boolean 
     queryFn: () => getFoodByBarcode(barcode),
     enabled: !!barcode && (options?.enabled ?? true),
     staleTime: 10 * 60 * 1000,
+  });
+}
+
+export function useFavoriteFoods(query = '', options?: { enabled?: boolean }) {
+  const { user } = useAuth();
+
+  return useQuery<FavoriteFood[]>({
+    queryKey: nutritionKeys.favoriteFoods(user?.id || '', query.trim().toLowerCase()),
+    queryFn: () => getFavoriteFoods(user!.id, query),
+    enabled: !!user && (options?.enabled ?? true),
+    staleTime: 60 * 1000,
+  });
+}
+
+export function useFavoriteFoodIds(foodIds?: string[], options?: { enabled?: boolean }) {
+  const { user } = useAuth();
+  const idsKey = (foodIds || []).slice().sort().join(',');
+
+  return useQuery<string[]>({
+    queryKey: nutritionKeys.favoriteFoodIds(user?.id || '', idsKey),
+    queryFn: () => getFavoriteFoodIds(user!.id, foodIds),
+    enabled: !!user && (options?.enabled ?? true),
+    staleTime: 60 * 1000,
   });
 }
 
@@ -115,7 +170,13 @@ export function useLogFood() {
       mealSlot: MealSlot;
       grams: number;
       date?: string;
-    }) => logFood(user!.id, foodItemId, mealSlot, grams),
+    }) => logFood(
+      user!.id,
+      foodItemId,
+      mealSlot,
+      grams,
+      date ? new Date(`${date}T12:00:00`) : undefined,
+    ),
     onSuccess: (_, variables) => {
       const targetDate = variables.date || new Date().toISOString().split('T')[0];
       // Invalidate daily totals and meals
@@ -125,6 +186,109 @@ export function useLogFood() {
       queryClient.invalidateQueries({
         queryKey: nutritionKeys.dailyMeals(user!.id, targetDate),
       });
+      queryClient.invalidateQueries({
+        queryKey: nutritionDashboardKeys.today(user!.id, targetDate),
+      });
+    },
+  });
+}
+
+export function useAddFavoriteFood() {
+  const { user } = useAuth();
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: (foodItemId: string) => addFavoriteFood(user!.id, foodItemId),
+    onSuccess: () => {
+      queryClient.invalidateQueries({
+        queryKey: [...nutritionKeys.foods(), 'favorites'],
+      });
+      queryClient.invalidateQueries({
+        queryKey: [...nutritionKeys.foods(), 'favorite-ids'],
+      });
+    },
+  });
+}
+
+export function useRemoveFavoriteFood() {
+  const { user } = useAuth();
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: (foodItemId: string) => removeFavoriteFood(user!.id, foodItemId),
+    onSuccess: () => {
+      queryClient.invalidateQueries({
+        queryKey: [...nutritionKeys.foods(), 'favorites'],
+      });
+      queryClient.invalidateQueries({
+        queryKey: [...nutritionKeys.foods(), 'favorite-ids'],
+      });
+    },
+  });
+}
+
+export function useToggleFavoriteFood() {
+  const addFavoriteMutation = useAddFavoriteFood();
+  const removeFavoriteMutation = useRemoveFavoriteFood();
+
+  return useMutation({
+    mutationFn: async ({
+      foodItemId,
+      isFavorite,
+    }: {
+      foodItemId: string;
+      isFavorite: boolean;
+    }) => {
+      if (isFavorite) {
+        await removeFavoriteMutation.mutateAsync(foodItemId);
+        return false;
+      }
+
+      await addFavoriteMutation.mutateAsync(foodItemId);
+      return true;
+    },
+  });
+}
+
+export function useImportExternalFoodItem() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: upsertExternalFoodItem,
+    onSuccess: (food) => {
+      queryClient.invalidateQueries({
+        queryKey: nutritionKeys.foods(),
+      });
+      queryClient.setQueryData(nutritionKeys.foodById(food.id), food);
+    },
+  });
+}
+
+export function useLogPlannedMeal() {
+  const { user } = useAuth();
+  const queryClient = useQueryClient();
+
+  return useMutation<
+    LogPlannedMealResult,
+    Error,
+    { planMealId: string; date?: string }
+  >({
+    mutationFn: ({ planMealId, date }) =>
+      logPlannedMeal(user!.id, {
+        planMealId,
+        date,
+      }),
+    onSuccess: (_, variables) => {
+      const targetDate = variables.date || new Date().toISOString().split('T')[0];
+      queryClient.invalidateQueries({
+        queryKey: nutritionKeys.dailyTotals(user!.id, targetDate),
+      });
+      queryClient.invalidateQueries({
+        queryKey: nutritionKeys.dailyMeals(user!.id, targetDate),
+      });
+      queryClient.invalidateQueries({
+        queryKey: nutritionDashboardKeys.today(user!.id, targetDate),
+      });
     },
   });
 }
@@ -133,7 +297,6 @@ export function useLogFood() {
  * Delete meal log item mutation
  */
 export function useDeleteMealLogItem() {
-  const { user } = useAuth();
   const queryClient = useQueryClient();
 
   return useMutation({
@@ -142,6 +305,9 @@ export function useDeleteMealLogItem() {
       // Invalidate all daily queries since we don't know which date
       queryClient.invalidateQueries({
         queryKey: nutritionKeys.all,
+      });
+      queryClient.invalidateQueries({
+        queryKey: nutritionDashboardKeys.all,
       });
     },
   });
@@ -183,6 +349,9 @@ export function useCopyMeals() {
       });
       queryClient.invalidateQueries({
         queryKey: nutritionKeys.dailyMeals(user!.id, variables.toDate),
+      });
+      queryClient.invalidateQueries({
+        queryKey: nutritionDashboardKeys.today(user!.id, variables.toDate),
       });
     },
   });

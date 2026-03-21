@@ -2,7 +2,6 @@ import React, { useEffect, useMemo, useState } from 'react';
 import {
   ActivityIndicator,
   Alert,
-  Image,
   KeyboardAvoidingView,
   Platform,
   Pressable,
@@ -14,11 +13,11 @@ import {
 } from 'react-native';
 import { useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { AnimatePresence, MotiView } from 'moti';
 import { LinearGradient } from 'expo-linear-gradient';
 import * as Haptics from 'expo-haptics';
 import { Ionicons } from '@expo/vector-icons';
-import { Video, ResizeMode } from 'expo-av';
 import { activateKeepAwakeAsync, deactivateKeepAwake } from 'expo-keep-awake';
 
 import { useTokens } from '../../../lib/theme';
@@ -30,6 +29,8 @@ import { ExerciseCommandStrip } from '../../../components/workout/session/Exerci
 import { SetLogList } from '../../../components/workout/session/SetLogList';
 import { RestTimerDock } from '../../../components/workout/session/RestTimerDock';
 import { FinishWorkoutSheet } from '../../../components/workout/session/FinishWorkoutSheet';
+import { ExerciseMediaHero } from '../../../components/workout/media/ExerciseMediaHero';
+import { ExerciseMediaPreview } from '../../../components/workout/media/ExerciseMediaPreview';
 import {
   buildExerciseSetRows,
   buildFinishWorkoutViewModel,
@@ -55,6 +56,9 @@ import {
 import { useMarkDayCompleted } from '../../../hooks/usePlan';
 import { useAuth } from '../../../lib/auth/AuthProvider';
 import {
+  trackActiveSessionMediaCollapsed,
+  trackActiveSessionMediaExpanded,
+  trackExerciseMediaPreviewExpanded,
   trackWorkoutFinishConfirmed,
   trackWorkoutFinishEarlyConfirmed,
   trackWorkoutFinishSheetOpened,
@@ -168,6 +172,7 @@ export default function ActiveSessionScreen() {
   const [showInfo, setShowInfo] = useState(false);
   const [showSwap, setShowSwap] = useState(false);
   const [showFinishSheet, setShowFinishSheet] = useState(false);
+  const [showExercisePreview, setShowExercisePreview] = useState(true);
   const [swapSearch, setSwapSearch] = useState('');
   const [exerciseNoteDraft, setExerciseNoteDraft] = useState('');
   const [sessionNoteDraft, setSessionNoteDraft] = useState('');
@@ -225,6 +230,31 @@ export default function ActiveSessionScreen() {
 
     setSessionNoteDraft(session.notes ?? '');
   }, [session?.id, session?.notes]);
+
+  useEffect(() => {
+    if (!session?.id) {
+      return;
+    }
+
+    const storageKey = `workout-session-media:${session.id}`;
+    let cancelled = false;
+
+    AsyncStorage.getItem(storageKey)
+      .then((value) => {
+        if (!cancelled) {
+          setShowExercisePreview(value !== '0');
+        }
+      })
+      .catch(() => {
+        if (!cancelled) {
+          setShowExercisePreview(true);
+        }
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [session?.id]);
 
   useEffect(() => {
     if (exercises.length === 0) {
@@ -315,6 +345,31 @@ export default function ActiveSessionScreen() {
     currentExercise?.exercise?.instruction_steps,
     currentExercise?.exercise?.instructions,
   );
+
+  const toggleExercisePreview = async () => {
+    if (!session?.id) {
+      return;
+    }
+
+    const nextValue = !showExercisePreview;
+    setShowExercisePreview(nextValue);
+    if (nextValue) {
+      trackActiveSessionMediaExpanded({
+        session_id: session.id,
+        exercise_id: currentExercise?.exercise?.id,
+      });
+    } else {
+      trackActiveSessionMediaCollapsed({
+        session_id: session.id,
+        exercise_id: currentExercise?.exercise?.id,
+      });
+    }
+    try {
+      await AsyncStorage.setItem(`workout-session-media:${session.id}`, nextValue ? '1' : '0');
+    } catch {
+      // Ignore local persistence failures here; preview state still updates in memory.
+    }
+  };
 
   const isFinalExercise = activeExerciseIndex >= exercises.length - 1;
   const showNextExerciseInRestDock =
@@ -726,6 +781,56 @@ export default function ActiveSessionScreen() {
             onOpenSwap={() => setShowSwap(true)}
           />
 
+          <GlassCard intensity="medium" style={{ marginTop: s.md }}>
+            <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: showExercisePreview ? s.sm : 0 }}>
+              <View style={{ flex: 1, paddingRight: s.sm }}>
+                <Text style={{ color: c.textMuted, fontFamily: ty.body.familySemibold, fontSize: ty.sizes.xs }}>
+                  CURRENT EXERCISE PREVIEW
+                </Text>
+                <Text style={{ color: c.text, fontFamily: ty.body.familySemibold, fontSize: ty.sizes.sm, marginTop: 4 }}>
+                  {currentExercise.exercise.name}
+                </Text>
+                <Text style={{ color: c.textMuted, fontFamily: ty.body.family, fontSize: ty.sizes.xs, marginTop: 2 }}>
+                  {currentExercise.exercise.primary_muscle || 'Unknown muscle'} • tap preview for full details
+                </Text>
+              </View>
+              <Pressable onPress={toggleExercisePreview} style={{ padding: 6 }}>
+                <Ionicons
+                  name={showExercisePreview ? 'chevron-up' : 'chevron-down'}
+                  size={20}
+                  color={c.textMuted}
+                />
+              </Pressable>
+            </View>
+            {showExercisePreview ? (
+              <Pressable
+                onPress={() => {
+                  trackExerciseMediaPreviewExpanded({
+                    source: 'active_session',
+                    exercise_id: currentExercise.exercise.id,
+                    session_id: session.id,
+                  });
+                  setShowInfo(true);
+                }}
+              >
+                <ExerciseMediaPreview
+                  exerciseId={currentExercise.exercise.id}
+                  videoUrl={currentExercise.exercise.video_url}
+                  gifUrl={currentExercise.exercise.gif_url}
+                  imageUrl={currentExercise.exercise.image_url}
+                  posterUrl={currentExercise.exercise.poster_url}
+                  hasMedia={currentExercise.exercise.has_media}
+                  autoplay
+                  fit="contain"
+                  height={148}
+                  label={currentExercise.exercise.category || currentExercise.exercise.primary_muscle || 'Exercise demo'}
+                  analyticsSource="active_session"
+                  analyticsExerciseId={currentExercise.exercise.id}
+                />
+              </Pressable>
+            ) : null}
+          </GlassCard>
+
           <SetLogList
             rows={currentExerciseRows.rows}
             exerciseComplete={currentExerciseRows.exerciseComplete}
@@ -989,21 +1094,18 @@ export default function ActiveSessionScreen() {
                   {currentExercise.exercise.primary_muscle || 'Unknown'}
                 </Text>
 
-                {currentExercise.exercise.video_url ? (
-                  <Video
-                    source={{ uri: currentExercise.exercise.video_url }}
-                    style={{ width: '100%', height: 160, borderRadius: r.lg, backgroundColor: c.surface2, marginBottom: s.md }}
-                    useNativeControls
-                    resizeMode={ResizeMode.COVER}
-                    isLooping
+                <View style={{ marginBottom: s.md }}>
+                  <ExerciseMediaHero
+                    exerciseId={currentExercise.exercise.id}
+                    videoUrl={currentExercise.exercise.video_url}
+                    gifUrl={currentExercise.exercise.gif_url}
+                    imageUrl={currentExercise.exercise.image_url}
+                    posterUrl={currentExercise.exercise.poster_url}
+                    hasMedia={currentExercise.exercise.has_media}
+                    height={160}
+                    fit="contain"
                   />
-                ) : currentExercise.exercise.gif_url ? (
-                  <Image
-                    source={{ uri: currentExercise.exercise.gif_url }}
-                    style={{ width: '100%', height: 160, borderRadius: r.lg, backgroundColor: c.surface2, marginBottom: s.md }}
-                    resizeMode="cover"
-                  />
-                ) : null}
+                </View>
 
                 <Text style={{ color: c.textMuted, marginBottom: s.xs, textTransform: 'uppercase', fontSize: 12 }}>
                   Instructions

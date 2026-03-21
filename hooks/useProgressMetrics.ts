@@ -2,28 +2,36 @@ import { useQuery } from "@tanstack/react-query";
 import { useAuth } from "../lib/auth/AuthProvider";
 import {
   getHomeSnapshot,
+  getProgressRecordSummary,
   getProgressSnapshot,
+  getProgressTrends,
   getWeeklyActivityStatus,
   type DailyActivityStatus,
   type HomeSnapshot,
+  type ProgressRangeOption,
+  type ProgressRecordSummary,
   type ProgressSnapshot,
-  type ProgressTimeframe,
+  type ProgressTrendSnapshot,
 } from "../services/progressMetricsService";
 
 export const progressMetricKeys = {
   all: ["progress-metrics"] as const,
-  progress: (userId: string, timeframe: ProgressTimeframe) =>
-    [...progressMetricKeys.all, "progress", userId, timeframe] as const,
+  progress: (userId: string, range: ProgressRangeOption) =>
+    [...progressMetricKeys.all, "progress", userId, range] as const,
   home: (userId: string) => [...progressMetricKeys.all, "home", userId] as const,
   weeklyActivity: (userId: string) => [...progressMetricKeys.all, "weekly-activity", userId] as const,
+  trends: (userId: string, range: ProgressRangeOption) =>
+    [...progressMetricKeys.all, "trends", userId, range] as const,
+  records: (userId: string, range: "90d" | "all") =>
+    [...progressMetricKeys.all, "records", userId, range] as const,
 };
 
-export function useProgressSnapshot(timeframe: ProgressTimeframe) {
+export function useProgressSnapshot(range: ProgressRangeOption) {
   const { user } = useAuth();
 
   return useQuery<ProgressSnapshot>({
-    queryKey: progressMetricKeys.progress(user?.id || "", timeframe),
-    queryFn: () => getProgressSnapshot(user!.id, timeframe),
+    queryKey: progressMetricKeys.progress(user?.id || "", range),
+    queryFn: () => getProgressSnapshot(user!.id, range),
     enabled: !!user,
     staleTime: 60 * 1000,
   });
@@ -51,4 +59,33 @@ export function useWeeklyActivity() {
   });
 }
 
-export type { ProgressTimeframe, ProgressSnapshot, HomeSnapshot, DailyActivityStatus };
+export function useProgressTrends(range: ProgressRangeOption) {
+  const { user } = useAuth();
+
+  return useQuery<ProgressTrendSnapshot>({
+    queryKey: progressMetricKeys.trends(user?.id || "", range),
+    queryFn: () => getProgressTrends(user!.id, range),
+    enabled: !!user,
+    staleTime: 60 * 1000,
+  });
+}
+
+export function useProgressRecordSummary(range: "90d" | "all" = "90d") {
+  const { user } = useAuth();
+
+  return useQuery<ProgressRecordSummary>({
+    queryKey: progressMetricKeys.records(user?.id || "", range),
+    queryFn: () => getProgressRecordSummary(user!.id, range),
+    enabled: !!user,
+    staleTime: 60 * 1000,
+  });
+}
+
+export type {
+  ProgressRangeOption,
+  ProgressSnapshot,
+  ProgressTrendSnapshot,
+  ProgressRecordSummary,
+  HomeSnapshot,
+  DailyActivityStatus,
+};

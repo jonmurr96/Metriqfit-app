@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { StyleSheet, View, Text, Pressable, ScrollView, Image, Modal, TouchableOpacity } from 'react-native';
+import { StyleSheet, View, Text, Pressable, ScrollView, Modal, TouchableOpacity } from 'react-native';
 import { useRouter, useLocalSearchParams } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useTokens } from '../../../lib/theme';
@@ -10,7 +10,7 @@ import { useQuery } from '@tanstack/react-query';
 import { getExerciseById } from '../../../services/workoutService';
 import { Ionicons } from '@expo/vector-icons';
 import { PlateCalculator } from '../../../components/tools/PlateCalculator';
-import { Video, ResizeMode } from 'expo-av';
+import { ExerciseMediaHero } from '../../../components/workout/media/ExerciseMediaHero';
 
 function normalizeInstructionSteps(raw: unknown, legacyInstructions?: string | null): string[] {
     if (Array.isArray(raw)) {
@@ -25,11 +25,43 @@ function normalizeInstructionSteps(raw: unknown, legacyInstructions?: string | n
     return [];
 }
 
+function MetaRow({
+    label,
+    value,
+    muted,
+    c,
+    ty,
+}: {
+    label: string;
+    value: string;
+    muted?: boolean;
+    c: { textMuted: string; text: string };
+    ty: { body: { family: string; familySemibold: string } };
+}) {
+    return (
+        <View>
+            <Text style={{ color: c.textMuted, marginBottom: 4, fontFamily: ty.body.family }}>
+                {label}
+            </Text>
+            <Text
+                style={{
+                    color: muted ? c.textMuted : c.text,
+                    fontFamily: ty.body.familySemibold,
+                    lineHeight: 24,
+                    flexWrap: 'wrap',
+                }}
+            >
+                {value}
+            </Text>
+        </View>
+    );
+}
+
 export default function ExerciseDetailScreen() {
-    const { c, s, ty, r } = useTokens();
+    const { c, s, ty } = useTokens();
     const router = useRouter();
     const insets = useSafeAreaInsets();
-    const { id } = useLocalSearchParams();
+    const { id } = useLocalSearchParams<{ id?: string; source?: string }>();
     const exerciseId = id as string;
 
     const [activeTab, setActiveTab] = useState<'about' | 'history'>('history');
@@ -107,45 +139,41 @@ export default function ExerciseDetailScreen() {
                 {activeTab === 'about' ? (
                     <View>
                         <GlassCard style={{ marginBottom: s.lg, overflow: 'hidden' }}>
-                            {exercise.video_url ? (
-                                <Video
-                                    source={{ uri: exercise.video_url }}
-                                    style={{ width: '100%', height: 210, borderRadius: 12, backgroundColor: c.surface2 }}
-                                    useNativeControls
-                                    resizeMode={ResizeMode.COVER}
-                                    isLooping
-                                />
-                            ) : exercise.gif_url ? (
-                                <Image
-                                    source={{ uri: exercise.gif_url }}
-                                    style={{ width: '100%', height: 210, borderRadius: 12, backgroundColor: c.surface2 }}
-                                    resizeMode="cover"
-                                />
-                            ) : (
-                                <View
-                                    style={{
-                                        width: '100%',
-                                        height: 150,
-                                        borderRadius: 12,
-                                        backgroundColor: c.surface2,
-                                        alignItems: 'center',
-                                        justifyContent: 'center',
-                                        paddingHorizontal: 20,
-                                    }}
-                                >
-                                    <Text style={{ color: c.textMuted, textAlign: 'center' }}>
-                                        No media available for this exercise yet.
-                                    </Text>
-                                </View>
-                            )}
+                            <ExerciseMediaHero
+                                exerciseId={exercise.id}
+                                videoUrl={exercise.video_url}
+                                gifUrl={exercise.gif_url}
+                                imageUrl={exercise.image_url}
+                                posterUrl={exercise.poster_url}
+                                hasMedia={exercise.has_media}
+                                height={240}
+                                autoplay
+                                fit="contain"
+                            />
                         </GlassCard>
 
-                        {/* About Content */}
                         <GlassCard style={{ marginBottom: s.lg }}>
-                            <Text style={{ color: c.textMuted, marginBottom: 4 }}>Primary Muscle</Text>
-                            <Text style={{ color: c.text, fontFamily: ty.heading.family, fontSize: 18, textTransform: 'capitalize' }}>
-                                {exercise.primary_muscle || 'Unknown'}
+                            <Text style={{ color: c.text, fontFamily: ty.heading.familySemibold, marginBottom: 10 }}>
+                                Quick Reference
                             </Text>
+                            <View style={{ gap: 12 }}>
+                                <MetaRow label="Category" value={exercise.category || 'Unknown'} c={c} ty={ty} />
+                                <MetaRow label="Primary Muscle" value={exercise.primary_muscle || 'Unknown'} c={c} ty={ty} />
+                                <MetaRow
+                                    label="Equipment"
+                                    value={(exercise.equipment_required || []).join(', ') || 'None listed'}
+                                    muted={!exercise.equipment_required?.length}
+                                    c={c}
+                                    ty={ty}
+                                />
+                                <MetaRow label="Source" value={exercise.source_provider || 'Internal'} muted={!exercise.source_provider} c={c} ty={ty} />
+                                <MetaRow
+                                    label="Library Status"
+                                    value={exercise.is_reference_only ? 'Reference only' : 'Program exercise'}
+                                    c={c}
+                                    ty={ty}
+                                />
+                            </View>
                         </GlassCard>
 
                         <GlassCard>

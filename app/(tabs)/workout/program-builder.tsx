@@ -1,6 +1,6 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { ActivityIndicator, Alert, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
-import { useRouter } from 'expo-router';
+import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useTokens } from '../../../lib/theme';
 import { TabBarIcon } from '../../../components/navigation/TabBarIcon';
@@ -11,10 +11,16 @@ import {
   useWorkoutProgramsByFamily,
 } from '../../../hooks/useWorkoutBuilder';
 import { useActiveWorkoutPlan } from '../../../hooks/usePlan';
+import {
+  trackWorkoutPlanBuilderOpenedFromMyPlan,
+  trackWorkoutProgramFamilySelected,
+  trackWorkoutProgramTemplateCloned,
+} from '../../../lib/analytics';
 
 export default function ProgramBuilderScreen() {
   const { c, s, ty, r } = useTokens();
   const router = useRouter();
+  const params = useLocalSearchParams<{ entry?: string }>();
   const insets = useSafeAreaInsets();
   const [family, setFamily] = useState<string | undefined>(undefined);
   const [name, setName] = useState('');
@@ -31,6 +37,15 @@ export default function ProgramBuilderScreen() {
     if (!family) return 'All families';
     return families.find((f) => f.external_key === family)?.display_name || 'All families';
   }, [family, families]);
+
+  useEffect(() => {
+    if (params.entry === 'my_plan') {
+      trackWorkoutPlanBuilderOpenedFromMyPlan({
+        source: 'my_plan',
+        active_plan_id: activePlan?.id || null,
+      });
+    }
+  }, [activePlan?.id, params.entry]);
 
   const handleCreateCustom = async () => {
     const freq = Number(daysPerWeek);
@@ -59,11 +74,25 @@ export default function ProgramBuilderScreen() {
   const handleCloneTemplate = async (templateId: string, templateName: string) => {
     try {
       const result = await createFromTemplate.mutateAsync({ templateId, activate: true });
+      trackWorkoutProgramTemplateCloned({
+        source: 'program_builder',
+        program_id: templateId,
+        template_name: templateName,
+        family_key: family || 'all',
+      });
       Alert.alert('Plan ready', `${templateName} is now active and ready to edit.`);
       router.push({ pathname: '/(tabs)/workout/program-builder-day', params: { planId: result.planId } });
     } catch (error: any) {
       Alert.alert('Failed to clone template', error.message || 'Try again.');
     }
+  };
+
+  const selectFamily = (nextFamily?: string) => {
+    setFamily(nextFamily);
+    trackWorkoutProgramFamilySelected({
+      source: 'program_builder',
+      family_key: nextFamily || 'all',
+    });
   };
 
   return (
@@ -80,7 +109,10 @@ export default function ProgramBuilderScreen() {
         <View style={{ backgroundColor: c.surface, borderRadius: r.lg, borderWidth: 1, borderColor: c.border, padding: s.lg }}>
           <Text style={{ color: c.text, fontFamily: ty.heading.familySemibold, fontSize: ty.sizes.lg }}>Create Custom Program</Text>
           <Text style={{ color: c.textMuted, fontFamily: ty.body.family, fontSize: ty.sizes.sm, marginTop: s.xs }}>
-            Build from scratch and publish directly to your active plan.
+            Build a plan from scratch or clone a family template.
+          </Text>
+          <Text style={{ color: c.textMuted, fontFamily: ty.body.family, fontSize: ty.sizes.xs, marginTop: s.xs }}>
+            Changes here create a new active plan version.
           </Text>
 
           <TextInput
@@ -135,7 +167,7 @@ export default function ProgramBuilderScreen() {
           </Text>
           <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 8, marginTop: s.sm }}>
             <Pressable
-              onPress={() => setFamily(undefined)}
+              onPress={() => selectFamily(undefined)}
               style={[styles.chip, { backgroundColor: !family ? c.primary : c.surface2, borderColor: !family ? c.primary : c.border, borderRadius: r.pill }]}
             >
               <Text style={{ color: !family ? c.bg : c.textMuted, fontFamily: ty.body.familySemibold, fontSize: ty.sizes.xs }}>All</Text>
@@ -143,7 +175,7 @@ export default function ProgramBuilderScreen() {
             {(families || []).map((item) => (
               <Pressable
                 key={item.id}
-                onPress={() => setFamily(item.external_key)}
+                onPress={() => selectFamily(item.external_key)}
                 style={[
                   styles.chip,
                   {
@@ -183,6 +215,25 @@ export default function ProgramBuilderScreen() {
                   {(template.description || 'Structured program template') + ` • ${template.days_per_week} days/week`}
                 </Text>
                 <View style={{ flexDirection: 'row', gap: 8, marginTop: s.sm, flexWrap: 'wrap' }}>
+                  {template.family?.display_name ? (
+                    <View style={{ backgroundColor: `${c.primary}18`, borderRadius: r.pill, paddingHorizontal: 8, paddingVertical: 4 }}>
+                      <Text style={{ color: c.primary, fontFamily: ty.body.familySemibold, fontSize: ty.sizes.xs }}>
+                        {template.family.display_name}
+                      </Text>
+                    </View>
+                  ) : null}
+                  {template.progression_model ? (
+                    <View style={{ backgroundColor: c.surface2, borderRadius: r.pill, paddingHorizontal: 8, paddingVertical: 4 }}>
+                      <Text style={{ color: c.textMuted, fontFamily: ty.mono.family, fontSize: ty.sizes.xs }}>
+                        {template.progression_model.replaceAll('_', ' ')}
+                      </Text>
+                    </View>
+                  ) : null}
+                  {(template.training_style_tags || []).slice(0, 2).map((tag) => (
+                    <View key={`${template.id}-style-${tag}`} style={{ backgroundColor: c.surface2, borderRadius: r.pill, paddingHorizontal: 8, paddingVertical: 4 }}>
+                      <Text style={{ color: c.textMuted, fontFamily: ty.mono.family, fontSize: ty.sizes.xs }}>{tag}</Text>
+                    </View>
+                  ))}
                   {(template.goal_tags || []).slice(0, 4).map((tag) => (
                     <View key={`${template.id}-${tag}`} style={{ backgroundColor: c.surface2, borderRadius: r.pill, paddingHorizontal: 8, paddingVertical: 4 }}>
                       <Text style={{ color: c.textMuted, fontFamily: ty.mono.family, fontSize: ty.sizes.xs }}>{tag}</Text>

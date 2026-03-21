@@ -88,9 +88,10 @@ export async function scanBarcode(
         carbs_per_100g: lookupResult.carbs_g_100g || 0,
         fat_per_100g: lookupResult.fat_g_100g || 0,
         serving_size_g: 100,
-        serving_size_description: '100g',
+        serving_description: '100g',
         category: 'packaged',
-        source: lookupResult.source,
+        source: 'manual',
+        created_by_user_id: userId,
       })
       .select()
       .single();

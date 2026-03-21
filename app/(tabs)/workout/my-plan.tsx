@@ -4,7 +4,7 @@
  * and monthly date-based schedule summary.
  */
 
-import { useState, useCallback, useMemo } from 'react';
+import { useState, useCallback, useEffect, useMemo, useRef } from 'react';
 import {
   StyleSheet,
   View,
@@ -21,11 +21,15 @@ import { useTokens } from '../../../lib/theme';
 import { TabBarIcon } from '../../../components/navigation/TabBarIcon';
 import {
   useActiveWorkoutPlan,
+  useRepairWorkoutPlanPreview,
   useWorkoutPlanHistory,
-  useTriggerPlanGeneration,
+  useWorkoutPlanCoherence,
+  useWorkoutPlanPreview,
   useReactivatePlan,
   useWorkoutSchedule,
 } from '../../../hooks/usePlan';
+import {
+} from '../../../lib/analytics';
 
 function toDateString(date: Date) {
   return date.toISOString().split('T')[0];
@@ -46,6 +50,8 @@ export default function MyWorkoutPlanScreen() {
   const insets = useSafeAreaInsets();
 
   const [showHistory, setShowHistory] = useState(false);
+  const [repairDismissed, setRepairDismissed] = useState(false);
+  const autoRepairRequestedForPlan = useRef<string | null>(null);
 
   const {
     data: workoutPlan,
@@ -54,9 +60,16 @@ export default function MyWorkoutPlanScreen() {
     refetch,
   } = useActiveWorkoutPlan();
 
+  const { data: coherenceReport } = useWorkoutPlanCoherence(workoutPlan?.id, {
+    enabled: !!workoutPlan?.id,
+  });
+  const { data: repairPreview } = useWorkoutPlanPreview(workoutPlan?.id, {
+    enabled: !!workoutPlan?.id,
+  });
+
   const { data: planHistory } = useWorkoutPlanHistory();
-  const regenerateMutation = useTriggerPlanGeneration();
   const reactivateMutation = useReactivatePlan();
+  const repairPreviewMutation = useRepairWorkoutPlanPreview();
 
   const bounds = useMemo(() => monthBounds(new Date()), []);
   const { data: monthlySchedule, isLoading: scheduleLoading } = useWorkoutSchedule(bounds.start, bounds.end, {
@@ -67,32 +80,54 @@ export default function MyWorkoutPlanScreen() {
     refetch();
   }, [refetch]);
 
-  const handleRegenerate = () => {
-    Alert.alert(
-      'Regenerate Workout Plan',
-      'Create a new monthly schedule and training split from your onboarding profile.',
-      [
-        { text: 'Cancel', style: 'cancel' },
-        {
-          text: 'Regenerate',
-          style: 'destructive',
-          onPress: async () => {
-            try {
-              await regenerateMutation.mutateAsync({
-                planType: 'workout',
-                options: {
-                  generation_horizon_days: { workout: 28 },
-                },
-              });
-              Alert.alert('Success', 'Your workout plan has been regenerated.');
-            } catch (error: any) {
-              Alert.alert('Error', error.message || 'Failed to regenerate plan');
-            }
-          },
-        },
-      ],
-    );
-  };
+  useEffect(() => {
+    if (!workoutPlan?.id) {
+      autoRepairRequestedForPlan.current = null;
+      return;
+    }
+
+    if (!coherenceReport?.hasHardViolations || !coherenceReport.canRepair) {
+      return;
+    }
+
+    if (repairPreview?.id || repairPreviewMutation.isPending) {
+      return;
+    }
+
+    if (autoRepairRequestedForPlan.current === workoutPlan.id) {
+      return;
+    }
+
+    autoRepairRequestedForPlan.current = workoutPlan.id;
+    repairPreviewMutation.mutate(workoutPlan.id, {
+      onError: () => {
+        autoRepairRequestedForPlan.current = null;
+      },
+    });
+  }, [
+    coherenceReport?.canRepair,
+    coherenceReport?.hasHardViolations,
+    repairPreview?.id,
+    repairPreviewMutation,
+    repairPreviewMutation.isPending,
+    workoutPlan?.id,
+  ]);
+
+  const handleOpenRegeneration = useCallback(() => {
+    router.push('/(tabs)/workout/regenerate-plan');
+  }, [router]);
+
+  const handleOpenBuilder = useCallback(() => {
+    router.push({ pathname: '/(tabs)/workout/program-builder', params: { entry: 'my_plan' } });
+  }, [router]);
+
+  const handleOpenImport = useCallback(() => {
+    router.push({ pathname: '/(tabs)/workout/import-plan', params: { entry: 'my_plan' } });
+  }, [router]);
+
+  const handleOpenRepairPreview = useCallback(() => {
+    router.push({ pathname: '/(tabs)/workout/regenerate-plan', params: { mode: 'repair' } });
+  }, [router]);
 
   const handleReactivatePlan = (planId: string, version: number) => {
     Alert.alert(
@@ -123,6 +158,11 @@ export default function MyWorkoutPlanScreen() {
     const completed = rows.filter((row) => row.status === 'completed').length;
     return { plannedWorkouts, restDays, recoveryDays, completed };
   }, [monthlySchedule]);
+
+  const shouldShowRepairBanner = !!workoutPlan
+    && !!coherenceReport?.hasHardViolations
+    && coherenceReport.canRepair
+    && !repairDismissed;
 
   if (isLoading) {
     return (
@@ -163,21 +203,37 @@ export default function MyWorkoutPlanScreen() {
               No Workout Plan Yet
             </Text>
             <Text style={{ color: c.textMuted, fontFamily: ty.body.family, fontSize: ty.sizes.md, marginTop: s.sm, textAlign: 'center' }}>
-              Generate a monthly workout schedule from your onboarding profile.
+              Generate with AI, build manually, or import a plan from another app or coach.
             </Text>
-            <Pressable
-              style={[styles.generateButton, { backgroundColor: c.primary, borderRadius: r.md, marginTop: s.xl }]}
-              onPress={handleRegenerate}
-              disabled={regenerateMutation.isPending}
-            >
-              {regenerateMutation.isPending ? (
-                <ActivityIndicator color={c.bg} size="small" />
-              ) : (
+            <View style={{ width: '100%', gap: s.sm, marginTop: s.xl }}>
+              <Pressable
+                style={[styles.generateButton, { backgroundColor: c.primary, borderRadius: r.md }]}
+                onPress={handleOpenRegeneration}
+              >
                 <Text style={{ color: c.bg, fontFamily: ty.body.familySemibold, fontSize: ty.sizes.md }}>
-                  Generate Workout Plan
+                  Generate with AI
                 </Text>
-              )}
-            </Pressable>
+              </Pressable>
+              <Text style={{ color: c.textMuted, fontFamily: ty.body.family, fontSize: ty.sizes.xs, textAlign: 'center' }}>
+                AI will ask what is not working before building your first plan.
+              </Text>
+              <Pressable
+                style={[styles.secondaryActionButton, { borderColor: c.border, backgroundColor: c.surface2, borderRadius: r.md }]}
+                onPress={handleOpenBuilder}
+              >
+                <Text style={{ color: c.text, fontFamily: ty.body.familySemibold, fontSize: ty.sizes.sm }}>
+                  Build Manually
+                </Text>
+              </Pressable>
+              <Pressable
+                style={[styles.secondaryActionButton, { borderColor: c.border, backgroundColor: c.surface2, borderRadius: r.md }]}
+                onPress={handleOpenImport}
+              >
+                <Text style={{ color: c.text, fontFamily: ty.body.familySemibold, fontSize: ty.sizes.sm }}>
+                  Import Existing Plan
+                </Text>
+              </Pressable>
+            </View>
           </View>
         </View>
       </View>
@@ -218,6 +274,38 @@ export default function MyWorkoutPlanScreen() {
               <Text style={{ color: c.textMuted, fontFamily: ty.body.family, fontSize: ty.sizes.sm, marginTop: s.xs }}>
                 {workoutPlan.days_per_week} days/week • {workoutPlan.total_weeks ? `${workoutPlan.total_weeks} weeks` : 'Ongoing'}
               </Text>
+              <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginTop: s.sm }}>
+                {workoutPlan.programMeta?.programFamilyKey ? (
+                  <View style={[styles.badge, { backgroundColor: c.surface2, borderRadius: r.sm }]}>
+                    <Text style={{ color: c.text, fontFamily: ty.body.familySemibold, fontSize: ty.sizes.xs }}>
+                      {workoutPlan.programMeta.programFamilyKey.replaceAll('_', ' ')}
+                    </Text>
+                  </View>
+                ) : null}
+                {workoutPlan.programMeta?.progressionModel ? (
+                  <View style={[styles.badge, { backgroundColor: c.surface2, borderRadius: r.sm }]}>
+                    <Text style={{ color: c.text, fontFamily: ty.body.familySemibold, fontSize: ty.sizes.xs }}>
+                      {workoutPlan.programMeta.progressionModel.replaceAll('_', ' ')}
+                    </Text>
+                  </View>
+                ) : null}
+                <View style={[styles.badge, { backgroundColor: c.surface2, borderRadius: r.sm }]}>
+                  <Text style={{ color: c.text, fontFamily: ty.body.familySemibold, fontSize: ty.sizes.xs }}>
+                    {workoutPlan.programMeta?.sourceModel === 'custom_builder'
+                      ? 'Custom'
+                      : workoutPlan.programMeta?.sourceModel === 'v2_template'
+                        ? 'Template'
+                        : workoutPlan.programMeta?.sourceModel === 'legacy_template'
+                          ? 'Legacy'
+                          : 'Generated'}
+                  </Text>
+                </View>
+              </View>
+              {workoutPlan.weeklyLayoutSummary ? (
+                <Text style={{ color: c.textMuted, fontFamily: ty.body.family, fontSize: ty.sizes.xs, marginTop: s.sm }}>
+                  Weekly layout: {workoutPlan.weeklyLayoutSummary}
+                </Text>
+              ) : null}
             </View>
             <View style={[styles.badge, { backgroundColor: workoutPlan.is_active ? c.success : c.surface2, borderRadius: r.sm }]}> 
               <Text style={{ color: c.text, fontFamily: ty.body.familySemibold, fontSize: ty.sizes.xs }}>
@@ -226,6 +314,69 @@ export default function MyWorkoutPlanScreen() {
             </View>
           </View>
         </View>
+
+        {shouldShowRepairBanner ? (
+          <View
+            style={[
+              styles.planCard,
+              {
+                backgroundColor: `${c.warning || '#f59e0b'}12`,
+                borderRadius: r.lg,
+                padding: s.lg,
+                marginBottom: s.lg,
+                borderWidth: 1,
+                borderColor: `${c.warning || '#f59e0b'}55`,
+                gap: s.sm,
+              },
+            ]}
+          >
+            <Text style={{ color: c.text, fontFamily: ty.heading.familySemibold, fontSize: ty.sizes.md }}>
+              This plan has exercises that do not match their workout days.
+            </Text>
+            <Text style={{ color: c.textMuted, fontFamily: ty.body.family, fontSize: ty.sizes.sm }}>
+              Review a repair preview before starting these workouts so each day matches its intended focus.
+            </Text>
+            {repairPreviewMutation.isPending ? (
+              <Text style={{ color: c.textMuted, fontFamily: ty.body.family, fontSize: ty.sizes.xs }}>
+                Building a repair preview now...
+              </Text>
+            ) : null}
+            <View style={{ flexDirection: 'row', gap: s.sm }}>
+              <Pressable
+                style={[
+                  styles.secondaryActionButton,
+                  {
+                    flex: 1,
+                    borderColor: c.primary,
+                    backgroundColor: c.primary,
+                    borderRadius: r.md,
+                  },
+                ]}
+                onPress={handleOpenRepairPreview}
+              >
+                <Text style={{ color: c.bg, fontFamily: ty.body.familySemibold, fontSize: ty.sizes.sm }}>
+                  Review Repair Preview
+                </Text>
+              </Pressable>
+              <Pressable
+                style={[
+                  styles.secondaryActionButton,
+                  {
+                    flex: 1,
+                    borderColor: c.border,
+                    backgroundColor: c.surface,
+                    borderRadius: r.md,
+                  },
+                ]}
+                onPress={() => setRepairDismissed(true)}
+              >
+                <Text style={{ color: c.text, fontFamily: ty.body.familySemibold, fontSize: ty.sizes.sm }}>
+                  Keep Current Plan For Now
+                </Text>
+              </Pressable>
+            </View>
+          </View>
+        ) : null}
 
         {showHistory ? (
           <View>
@@ -354,35 +505,68 @@ export default function MyWorkoutPlanScreen() {
           </View>
         )}
 
-        <Pressable
-          style={[
-            styles.regenerateButton,
-            {
-              backgroundColor: c.surface,
-              borderRadius: r.md,
-              marginTop: s.xl,
-              borderWidth: 1,
-              borderColor: c.primary,
-            },
-          ]}
-          onPress={handleRegenerate}
-          disabled={regenerateMutation.isPending}
-        >
-          {regenerateMutation.isPending ? (
-            <ActivityIndicator color={c.primary} size="small" />
-          ) : (
-            <>
-              <TabBarIcon name="sparkles" color={c.primary} size={18} />
-              <Text style={{ color: c.primary, fontFamily: ty.body.familySemibold, fontSize: ty.sizes.md, marginLeft: s.sm }}>
-                Regenerate with AI
-              </Text>
-            </>
-          )}
-        </Pressable>
+        <View style={{ marginTop: s.xl, gap: s.sm }}>
+          <Pressable
+            style={[
+              styles.regenerateButton,
+              {
+                backgroundColor: c.surface,
+                borderRadius: r.md,
+                borderWidth: 1,
+                borderColor: c.primary,
+              },
+            ]}
+            onPress={handleOpenRegeneration}
+          >
+            <TabBarIcon name="sparkles" color={c.primary} size={18} />
+            <Text style={{ color: c.primary, fontFamily: ty.body.familySemibold, fontSize: ty.sizes.md, marginLeft: s.sm }}>
+              Regenerate with AI
+            </Text>
+          </Pressable>
 
-        <Text style={{ color: c.textMuted, fontFamily: ty.mono.family, fontSize: ty.sizes.xs, textAlign: 'center', marginTop: s.sm }}>
-          Free: 1/hour • Elite: 3/hour
-        </Text>
+          <Text style={{ color: c.textMuted, fontFamily: ty.body.family, fontSize: ty.sizes.xs, textAlign: 'center' }}>
+            AI will ask what is not working before building a replacement preview.
+          </Text>
+
+          <View style={{ flexDirection: 'row', gap: s.sm }}>
+            <Pressable
+              style={[
+                styles.secondaryActionButton,
+                {
+                  flex: 1,
+                  borderColor: c.border,
+                  backgroundColor: c.surface2,
+                  borderRadius: r.md,
+                },
+              ]}
+              onPress={handleOpenBuilder}
+            >
+              <Text style={{ color: c.text, fontFamily: ty.body.familySemibold, fontSize: ty.sizes.sm }}>
+                Build Manually
+              </Text>
+            </Pressable>
+            <Pressable
+              style={[
+                styles.secondaryActionButton,
+                {
+                  flex: 1,
+                  borderColor: c.border,
+                  backgroundColor: c.surface2,
+                  borderRadius: r.md,
+                },
+              ]}
+              onPress={handleOpenImport}
+            >
+              <Text style={{ color: c.text, fontFamily: ty.body.familySemibold, fontSize: ty.sizes.sm }}>
+                Import Existing Plan
+              </Text>
+            </Pressable>
+          </View>
+
+          <Text style={{ color: c.textMuted, fontFamily: ty.mono.family, fontSize: ty.sizes.xs, textAlign: 'center', marginTop: s.xs }}>
+            Free: 1/hour • Elite: 3/hour
+          </Text>
+        </View>
       </ScrollView>
     </View>
   );
@@ -426,6 +610,12 @@ const styles = StyleSheet.create({
     paddingVertical: 16,
     paddingHorizontal: 32,
     alignItems: 'center',
+  },
+  secondaryActionButton: {
+    borderWidth: 1,
+    paddingVertical: 14,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   planCard: {},
   badge: {

@@ -1,3 +1,4 @@
+/* eslint-disable import/no-unresolved */
 import { serve } from "https://deno.land/std@0.224.0/http/server.ts";
 import { createClient, type SupabaseClient } from "https://esm.sh/@supabase/supabase-js@2.49.1";
 import {
@@ -11,6 +12,12 @@ import {
   type MappingViolationType,
 } from "../../../lib/workout/programMappingEngine.ts";
 import { type ProgramExercise } from "../../../lib/workout/programMappingRules.ts";
+import {
+  auditPlanDaysForRepair,
+  buildTemplateContextCatalog as buildSharedTemplateContextCatalog,
+  copyPlanWithRemediation as copyPlanWithSharedRemediation,
+  inferPlanTemplateContext as inferSharedPlanTemplateContext,
+} from "../../../lib/workout/active-plan-coherence-repair.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -830,7 +837,7 @@ async function loadActivePlans(
 ) {
   let query = supabase
     .from("user_workout_plans")
-    .select("id,user_id,name,description,start_date,end_date,days_per_week,total_weeks,current_week,template_id,generation_run_id,version,is_active")
+    .select("id,user_id,name,description,start_date,end_date,days_per_week,total_weeks,current_week,template_id,generation_run_id,version,is_active,source_model,program_template_v2_id,program_family_key,progression_model,training_style_tags,goal_tags,weekly_layout_json,lifecycle_state,replaces_plan_id")
     .eq("is_active", true)
     .order("id", { ascending: true })
     .limit(batchSize);
@@ -882,7 +889,16 @@ async function loadPlanDaysAndExercises(supabase: SupabaseClient, planId: string
         rpe_target_min,
         rpe_target_max,
         pause_seconds,
-        exercise:exercises(id,external_id,name,category,equipment_required,primary_muscle,pattern,difficulty)
+        exercise:exercises!user_workout_plan_exercises_exercise_id_fkey(
+          id,
+          external_id,
+          name,
+          category,
+          equipment_required,
+          primary_muscle,
+          pattern,
+          difficulty
+        )
       )
     `,
     )
@@ -1274,7 +1290,7 @@ async function runActivePlanOperation(
   },
 ): Promise<OperationResult> {
   const plans = await loadActivePlans(supabase, input.cursor, input.batchSize);
-  const templateCatalog = await buildTemplateContextCatalog(supabase);
+  const templateCatalog = await buildSharedTemplateContextCatalog(supabase);
 
   const apiViolations: any[] = [];
   const aggregateDayAudits: DayAuditResult[] = [];
@@ -1289,6 +1305,11 @@ async function runActivePlanOperation(
   for (const plan of plans) {
     processed += 1;
     nextCursor = plan.id;
+
+    if (!["generated", "v2_template", "legacy_template"].includes(String(plan.source_model || "generated"))) {
+      skipped += 1;
+      continue;
+    }
 
     let dayPayload: { days: any[]; blocks: any[] };
     let schedule: any[];
@@ -1314,12 +1335,12 @@ async function runActivePlanOperation(
     }
 
     const dayNames = stableSortBy(dayPayload.days, (day) => day.day_number).map((day) => day.name);
-    const inferredContext = inferPlanTemplateContext(plan, dayNames, templateCatalog);
+    const inferredContext = inferSharedPlanTemplateContext(plan, dayNames, templateCatalog);
 
-    const audit = auditPlanDays({
+    const audit = auditPlanDaysForRepair({
       plan,
       days: dayPayload.days,
-      familyKey: inferredContext.familyKey,
+      familyKey: plan.program_family_key || inferredContext.familyKey,
       templateEquipment: inferredContext.equipment,
       exercisePool: input.exercisePool,
     });
@@ -1365,7 +1386,7 @@ async function runActivePlanOperation(
       continue;
     }
 
-    const migration = await copyPlanWithRemediation({
+    const migration = await copyPlanWithSharedRemediation({
       supabase,
       plan,
       days: dayPayload.days,
@@ -1374,6 +1395,8 @@ async function runActivePlanOperation(
       remediationsByDayId: audit.remediations,
       dryRun: input.dryRun,
       jobId: input.jobId,
+      mode: "activate",
+      programFamilyKey: plan.program_family_key || inferredContext.familyKey || null,
     });
 
     if (!migration.success) {

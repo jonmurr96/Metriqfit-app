@@ -2,6 +2,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useAuth } from '../lib/auth/AuthProvider';
 import {
   addBlockExercise,
+  addWorkoutPlanDay,
   addPlanDayBlock,
   createCustomWorkoutProgram,
   createPlanFromTemplateV2,
@@ -9,10 +10,16 @@ import {
   getProgramFamilies,
   getProgramsByFamily,
   getProgramTemplateV2,
+  movePlanDayBlock,
+  movePlanDayExercise,
+  moveWorkoutPlanDay,
   publishWorkoutProgram,
   removeBlockExercise,
+  removeWorkoutPlanDay,
   removePlanDayBlock,
+  saveWorkoutPlanWeeklyLayout,
   updateBlockExercise,
+  updateWorkoutPlanDay,
   updatePlanDayBlock,
 } from '../services/workoutBuilderService';
 
@@ -53,6 +60,65 @@ export function usePlanDayBlocks(planDayId?: string) {
     queryKey: workoutBuilderKeys.day(planDayId || ''),
     queryFn: () => getPlanDayBlocks(planDayId || ''),
     enabled: !!planDayId,
+  });
+}
+
+export function useAddWorkoutPlanDay() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (input: {
+      planId: string;
+      name?: string;
+      focus?: string | null;
+      dayType?: string;
+      estimatedDurationMin?: number | null;
+    }) => addWorkoutPlanDay(input.planId, input),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['plan'] });
+      queryClient.invalidateQueries({ queryKey: workoutBuilderKeys.all });
+    },
+  });
+}
+
+export function useUpdateWorkoutPlanDay() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (input: {
+      planDayId: string;
+      updates: Partial<{
+        name: string;
+        focus: string | null;
+        day_type: string;
+        estimated_duration_min: number | null;
+      }>;
+    }) => updateWorkoutPlanDay(input.planDayId, input.updates),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['plan'] });
+      queryClient.invalidateQueries({ queryKey: workoutBuilderKeys.all });
+    },
+  });
+}
+
+export function useRemoveWorkoutPlanDay() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: removeWorkoutPlanDay,
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['plan'] });
+      queryClient.invalidateQueries({ queryKey: workoutBuilderKeys.all });
+    },
+  });
+}
+
+export function useMoveWorkoutPlanDay() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (input: { planId: string; planDayId: string; direction: 'up' | 'down' }) =>
+      moveWorkoutPlanDay(input.planId, input.planDayId, input.direction),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['plan'] });
+      queryClient.invalidateQueries({ queryKey: workoutBuilderKeys.all });
+    },
   });
 }
 
@@ -141,6 +207,30 @@ export function useRemovePlanDayBlock() {
   });
 }
 
+export function useMovePlanDayBlock() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (input: { blockId: string; direction: 'up' | 'down' }) =>
+      movePlanDayBlock(input.blockId, input.direction),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['plan'] });
+      queryClient.invalidateQueries({ queryKey: workoutBuilderKeys.all });
+    },
+  });
+}
+
+export function useMovePlanDayExercise() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (input: { planDayId: string; planExerciseId: string; direction: 'up' | 'down' }) =>
+      movePlanDayExercise(input.planDayId, input.planExerciseId, input.direction),
+    onSuccess: (_, vars) => {
+      queryClient.invalidateQueries({ queryKey: workoutBuilderKeys.day(vars.planDayId) });
+      queryClient.invalidateQueries({ queryKey: ['plan'] });
+    },
+  });
+}
+
 export function useAddBlockExercise() {
   const queryClient = useQueryClient();
   return useMutation({
@@ -178,6 +268,12 @@ export function useUpdateBlockExercise() {
         rest_seconds: number;
         tempo: string | null;
         technique_type: string | null;
+        rir_target_min: number | null;
+        rir_target_max: number | null;
+        rpe_target_min: number | null;
+        rpe_target_max: number | null;
+        pause_seconds: number | null;
+        set_style: string | null;
         user_notes: string | null;
       }>;
       planDayId?: string;
@@ -213,6 +309,18 @@ export function usePublishWorkoutProgram() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['plan'] });
       queryClient.invalidateQueries({ queryKey: ['workout'] });
+      queryClient.invalidateQueries({ queryKey: workoutBuilderKeys.all });
+    },
+  });
+}
+
+export function useSaveWorkoutPlanWeeklyLayout() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (input: { planId: string; layout: Parameters<typeof saveWorkoutPlanWeeklyLayout>[1] }) =>
+      saveWorkoutPlanWeeklyLayout(input.planId, input.layout),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['plan'] });
       queryClient.invalidateQueries({ queryKey: workoutBuilderKeys.all });
     },
   });

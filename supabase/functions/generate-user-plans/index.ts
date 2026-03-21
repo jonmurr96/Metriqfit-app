@@ -1,3 +1,4 @@
+/* eslint-disable import/no-unresolved */
 import { serve } from "https://deno.land/std@0.224.0/http/server.ts";
 import { createClient, SupabaseClient } from "https://esm.sh/@supabase/supabase-js@2.49.1";
 import {
@@ -6,6 +7,20 @@ import {
   inferWorkoutFocusTags,
   type WorkoutFocusTag,
 } from "../../../lib/workout/programMappingRules.ts";
+import {
+  auditDayExerciseMappings,
+  remediateDayExerciseMappings,
+} from "../../../lib/workout/programMappingEngine.ts";
+import {
+  buildWeeklyLayout,
+  normalizeWeeklyLayout,
+  type WeeklyLayoutAssignment,
+} from "../../../lib/workout/program-catalog.ts";
+import { buildWorkoutPlanDiff, type WorkoutPlanComparable } from "../../../lib/workout/plan-regeneration-diff.ts";
+import {
+  selectExercisesForGeneratedSplitDay,
+  type GeneratedSplitDayDefinition,
+} from "../../../lib/workout/generated-split-selection.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -24,6 +39,101 @@ function jsonResponse(body: unknown, status = 200) {
 }
 
 type PlanType = "workout" | "nutrition" | "both";
+type GenerationMode = "initial" | "regenerate";
+type ActivationMode = "preview" | "activate";
+type NutritionMealSlot = "breakfast" | "lunch" | "dinner" | "snack";
+
+type WorkoutRegenerationReason =
+  | "not_seeing_results"
+  | "too_hard_to_recover"
+  | "sessions_too_long"
+  | "too_repetitive"
+  | "schedule_changed"
+  | "equipment_changed"
+  | "pain_or_discomfort"
+  | "want_different_split"
+  | "other";
+
+type WorkoutRegenerationRequest = {
+  current_plan_id?: string;
+  reason?: WorkoutRegenerationReason;
+  issue_flags?: string[];
+  free_text?: string;
+  days_per_week_override?: number | null;
+  preferred_split_family?: string | null;
+  progression_preference?: string | null;
+  session_duration_target_min?: number | null;
+  goal_emphasis?: string | null;
+  preferred_days_off?: string[];
+  equipment_access?: string | null;
+  injuries?: string[];
+  avoid_exercise_names?: string[];
+  keep_exercise_names?: string[];
+  keep_current_split?: boolean;
+  start_fresh?: boolean;
+};
+
+type NutritionRegenerationReason =
+  | "not_hitting_macros"
+  | "too_repetitive"
+  | "prep_takes_too_long"
+  | "budget_changed"
+  | "dietary_preferences_changed"
+  | "allergy_or_food_issue"
+  | "schedule_changed"
+  | "want_different_meals"
+  | "other";
+
+type NutritionRegenerationRequest = {
+  current_plan_id?: string;
+  reason?: NutritionRegenerationReason;
+  issue_flags?: string[];
+  meals_per_day_override?: number | null;
+  dietary_preference_override?: string | null;
+  allergies?: string[];
+  refused_foods?: string[];
+  prep_time_target_min?: number | null;
+  budget_limit?: number | null;
+  keep_meal_slots?: boolean;
+  start_fresh?: boolean;
+};
+
+type CurrentWorkoutPlanContext = {
+  planId: string;
+  familyKey: string | null;
+  progressionModel: string | null;
+  daysPerWeek: number;
+  weeklyLayout: WeeklyLayoutAssignment[];
+  comparablePlan: WorkoutPlanComparable;
+  adherenceSummary: {
+    completionRate28d: number;
+    missedSessions28d: number;
+    completedSessions28d: number;
+    avgLoggedDurationMin: number | null;
+    mostFrequentlySkippedDays: string[];
+  };
+};
+
+type CurrentNutritionPlanContext = {
+  planId: string;
+  mealSlots: NutritionMealSlot[];
+};
+
+type WorkoutGenerationConfig = {
+  generationMode: GenerationMode;
+  activationMode: ActivationMode;
+  currentPlanContext: CurrentWorkoutPlanContext | null;
+  workoutRegeneration: WorkoutRegenerationRequest | null;
+  sessionDurationTargetMin: number | null;
+  maxExercisesPerDay: number | null;
+  avoidExerciseTerms: string[];
+  keepExerciseTerms: string[];
+  excludeFamilyKey: string | null;
+  minorRefinement: boolean;
+};
+
+const WORKOUT_PREVIEW_NAME_PREFIX = "Preview · ";
+const NUTRITION_PREVIEW_NAME_PREFIX = "Preview · ";
 
 type OnboardingAnswers = {
   goal_type?: string;
@@ -100,16 +210,36 @@ type WorkoutDayTemplate = {
   restSeconds: number;
   tempo?: string;
   cue?: string;
+  primaryFocuses?: WorkoutFocusTag[];
+  supportFocuses?: WorkoutFocusTag[];
+  disallowedFocuses?: string[];
+  targetExercises?: number | null;
+  minExercises?: number | null;
+  minPrimaryExercises?: number | null;
+  maxSupportExercises?: number | null;
+  requiredCoverage?: WorkoutFocusTag[];
+  allowDuplicateMovementFamilies?: boolean;
 };
 
 type SplitDefinition = {
   key: string;
+  familyKey?: string | null;
   name: string;
   description: string;
   recommendedFor: "beginner" | "intermediate" | "advanced";
   frequency: number;
   days: WorkoutDayTemplate[];
 };
+
+class WorkoutGenerationValidationError extends Error {
+  warnings: string[];
+
+  constructor(message: string, warnings: string[] = []) {
+    super(message);
+    this.name = "WorkoutGenerationValidationError";
+    this.warnings = warnings;
+  }
+}
 
 type FoodCandidate = {
   key: string;
@@ -161,6 +291,30 @@ type MealAnchorSelection = {
   veggie: FoodCandidate;
 };
 
+type FoodRecord = UserContext["foods"][number];
+type FoodRecordLookupEntry = FoodRecord & {
+  normalizedName: string;
+  tokens: string[];
+};
+type FoodRecordLookup = {
+  exact: Map<string, FoodRecordLookupEntry>;
+  all: FoodRecordLookupEntry[];
+};
+
+const GENERATED_FOOD_NAME_ALIASES: Record<string, string[]> = {
+  "pea protein": ["plant protein powder pea"],
+  "cottage cheese": ["cottage cheese low fat", "cottage cheese full fat"],
+  "chicken breast": ["chicken breast skinless cooked", "rotisserie chicken breast"],
+  "rice cakes": ["rice cakes plain"],
+  almonds: ["almonds raw"],
+  "whole eggs": ["eggs whole cooked"],
+  tuna: ["tuna canned in water"],
+  walnuts: ["walnuts raw"],
+  "olive oil": ["olive oil extra virgin"],
+  "rolled oats": ["instant oats dry", "oatmeal cooked", "oats"],
+  banana: ["banana"],
+};
+
 type AllowedWorkoutDaysResult = {
   allowedDays: string[];
   resolvedDaysOff: string[];
@@ -174,6 +328,8 @@ type SelectedTemplate = {
   description: string | null;
   days_per_week: number;
   progression_model: string | null;
+  goal_tags: string[];
+  training_style_tags: string[];
   family_key: string | null;
   family_name: string | null;
   score: number;
@@ -215,7 +371,7 @@ type SelectedTemplate = {
   }>;
 };
 
-const SLOT_ORDER: Array<"breakfast" | "lunch" | "dinner" | "snack"> = [
+const SLOT_ORDER: NutritionMealSlot[] = [
   "breakfast",
   "lunch",
   "dinner",
@@ -228,6 +384,25 @@ const SLOT_RATIO: Record<string, number> = {
   dinner: 0.3,
   snack: 0.15,
 };
+
+function normalizeNutritionSlots(
+  slots: NutritionMealSlot[] | null | undefined,
+) {
+  const unique = Array.from(new Set((slots || []).filter(Boolean)));
+  const ordered = SLOT_ORDER.filter((slot) => unique.includes(slot));
+  return ordered.length ? ordered : [...SLOT_ORDER];
+}
+
+function buildNutritionSlotRatio(
+  slots: NutritionMealSlot[],
+) {
+  const normalizedSlots = normalizeNutritionSlots(slots);
+  const total = normalizedSlots.reduce((sum, slot) => sum + (SLOT_RATIO[slot] || 0), 0) || 1;
+  return normalizedSlots.reduce<Record<string, number>>((acc, slot) => {
+    acc[slot] = (SLOT_RATIO[slot] || 0) / total;
+    return acc;
+  }, {});
+}
 
 const DAYS: string[] = ["sun", "mon", "tue", "wed", "thu", "fri", "sat"];
 
@@ -271,6 +446,7 @@ const FOOD_LIBRARY: FoodCandidate[] = [
 const SPLIT_LIBRARY: SplitDefinition[] = [
   {
     key: "beginner-full-body-3",
+    familyKey: "full_body_beginner_3",
     name: "Full Body (3x/week)",
     description: "Simple full-body progression for beginners.",
     recommendedFor: "beginner",
@@ -283,6 +459,7 @@ const SPLIT_LIBRARY: SplitDefinition[] = [
   },
   {
     key: "beginner-upper-lower-4",
+    familyKey: "upper_lower_4",
     name: "Upper / Lower (4x/week)",
     description: "Alternating upper and lower sessions with forgiving volume.",
     recommendedFor: "beginner",
@@ -296,6 +473,7 @@ const SPLIT_LIBRARY: SplitDefinition[] = [
   },
   {
     key: "intermediate-phul-4",
+    familyKey: "phul_4",
     name: "PHUL (4 days)",
     description: "Power + hypertrophy upper/lower split.",
     recommendedFor: "intermediate",
@@ -309,6 +487,7 @@ const SPLIT_LIBRARY: SplitDefinition[] = [
   },
   {
     key: "intermediate-ppl-5",
+    familyKey: "ppl_ul_hybrid_5",
     name: "PPL + Upper/Lower Hybrid (5 days)",
     description: "Push/pull/legs plus upper/lower volume days.",
     recommendedFor: "intermediate",
@@ -323,6 +502,7 @@ const SPLIT_LIBRARY: SplitDefinition[] = [
   },
   {
     key: "advanced-conjugate-4",
+    familyKey: "conjugate_4",
     name: "Conjugate (4 days)",
     description: "Max effort and dynamic effort split for advanced lifters.",
     recommendedFor: "advanced",
@@ -336,6 +516,7 @@ const SPLIT_LIBRARY: SplitDefinition[] = [
   },
   {
     key: "minimalist-full-body-2",
+    familyKey: "minimalist_full_body_2",
     name: "Minimalist Full Body (2 days)",
     description: "Low-friction full body plan built for consistency.",
     recommendedFor: "beginner",
@@ -347,6 +528,7 @@ const SPLIT_LIBRARY: SplitDefinition[] = [
   },
   {
     key: "athletic-performance-5",
+    familyKey: "athletic_performance_5",
     name: "Athletic Performance (5 days)",
     description: "Strength, speed, and conditioning blend for athletic goals.",
     recommendedFor: "intermediate",
@@ -361,6 +543,7 @@ const SPLIT_LIBRARY: SplitDefinition[] = [
   },
   {
     key: "conditioning-hybrid-4",
+    familyKey: "conditioning_hybrid_4",
     name: "Conditioning Hybrid (4 days)",
     description: "Mixed resistance and metabolic conditioning.",
     recommendedFor: "intermediate",
@@ -374,6 +557,7 @@ const SPLIT_LIBRARY: SplitDefinition[] = [
   },
   {
     key: "calisthenics-foundation-4",
+    familyKey: "calisthenics_foundation_4",
     name: "Calisthenics Foundation (4 days)",
     description: "Bodyweight-focused progression for control and strength.",
     recommendedFor: "beginner",
@@ -387,6 +571,7 @@ const SPLIT_LIBRARY: SplitDefinition[] = [
   },
   {
     key: "rehab-resilience-3",
+    familyKey: "rehab_resilience_3",
     name: "Rehab & Resilience (3 days)",
     description: "Lower-intensity full body with control and mobility emphasis.",
     recommendedFor: "beginner",
@@ -399,6 +584,7 @@ const SPLIT_LIBRARY: SplitDefinition[] = [
   },
   {
     key: "advanced-powerbuilding-5",
+    familyKey: "powerbuilding_5",
     name: "Advanced Powerbuilding (5 days)",
     description: "Heavy compounds with high-volume hypertrophy sessions.",
     recommendedFor: "advanced",
@@ -422,6 +608,87 @@ function clamp(n: number, min: number, max: number) {
 
 function round1(n: number) {
   return Math.round(n * 10) / 10;
+}
+
+function normalizeGeneratedFoodLookupName(value: string | null | undefined) {
+  return normalizeToken(value || "");
+}
+
+function tokenizeGeneratedFoodLookupName(value: string | null | undefined) {
+  return normalizeGeneratedFoodLookupName(value)
+    .split(" ")
+    .filter(Boolean);
+}
+
+function buildFoodRecordLookup(foods: FoodRecord[]): FoodRecordLookup {
+  const exact = new Map<string, FoodRecordLookupEntry>();
+  const all: FoodRecordLookupEntry[] = [];
+
+  for (const food of foods) {
+    const normalizedName = normalizeGeneratedFoodLookupName(food.name);
+    if (!normalizedName) continue;
+
+    const entry: FoodRecordLookupEntry = {
+      ...food,
+      normalizedName,
+      tokens: tokenizeGeneratedFoodLookupName(food.name),
+    };
+
+    all.push(entry);
+
+    const current = exact.get(normalizedName);
+    if (!current) {
+      exact.set(normalizedName, entry);
+    }
+  }
+
+  return { exact, all };
+}
+
+function scoreFoodRecordLookupEntry(entry: FoodRecordLookupEntry, searchTokens: string[]) {
+  const matchedTokens = searchTokens.filter((token) => entry.tokens.includes(token)).length;
+  const coverage = searchTokens.length ? matchedTokens / searchTokens.length : 0;
+  const exactBoost = entry.normalizedName === searchTokens.join(" ") ? 4 : 0;
+  const prefixBoost = entry.normalizedName.startsWith(searchTokens.join(" ")) ? 2 : 0;
+
+  return (coverage * 100) + prefixBoost + exactBoost;
+}
+
+function findBestFoodRecordMatch(name: string, lookup: FoodRecordLookup): FoodRecord | null {
+  const normalizedName = normalizeGeneratedFoodLookupName(name);
+  if (!normalizedName) return null;
+
+  const exact = lookup.exact.get(normalizedName);
+  if (exact) return exact;
+
+  const searchPhrases = [normalizedName, ...(GENERATED_FOOD_NAME_ALIASES[normalizedName] || [])];
+  const phraseMatches = lookup.all.filter((entry) =>
+    searchPhrases.some((phrase) => {
+      const phraseTokens = tokenizeGeneratedFoodLookupName(phrase);
+      return phraseTokens.length > 0 && phraseTokens.every((token) => entry.tokens.includes(token));
+    }),
+  );
+
+  if (phraseMatches.length) {
+    return phraseMatches.sort((left, right) => {
+      const leftScore = scoreFoodRecordLookupEntry(left, tokenizeGeneratedFoodLookupName(searchPhrases[0]));
+      const rightScore = scoreFoodRecordLookupEntry(right, tokenizeGeneratedFoodLookupName(searchPhrases[0]));
+      if (rightScore !== leftScore) return rightScore - leftScore;
+      return left.name.length - right.name.length;
+    })[0];
+  }
+
+  const queryTokens = tokenizeGeneratedFoodLookupName(name);
+  const fuzzyMatches = lookup.all
+    .filter((entry) => queryTokens.length > 0 && queryTokens.every((token) => entry.tokens.includes(token)))
+    .sort((left, right) => {
+      const leftScore = scoreFoodRecordLookupEntry(left, queryTokens);
+      const rightScore = scoreFoodRecordLookupEntry(right, queryTokens);
+      if (rightScore !== leftScore) return rightScore - leftScore;
+      return left.name.length - right.name.length;
+    });
+
+  return fuzzyMatches[0] || null;
 }
 
 function deterministicPick<T>(items: T[], seed: number): T | null {
@@ -668,15 +935,29 @@ function chooseSplit(
   context: UserContext,
   splitOverride?: string | null,
   strictDaysMatch = true,
+  excludeSplitKey?: string | null,
 ): SplitDefinition {
   const targetDays = context.onboarding.training_days_per_week;
 
   if (splitOverride) {
-    const match = SPLIT_LIBRARY.find((split) => split.key === splitOverride || split.name.toLowerCase() === splitOverride.toLowerCase());
+    const normalizedOverride = normalizeToken(splitOverride);
+    const match = SPLIT_LIBRARY.find((split) =>
+      split.key === splitOverride
+      || split.name.toLowerCase() === splitOverride.toLowerCase()
+      || normalizeToken(split.familyKey || "") === normalizedOverride
+    );
     if (match) return adaptSplitToFrequency(match, targetDays);
   }
 
   let candidates = SPLIT_LIBRARY.slice();
+  if (excludeSplitKey) {
+    const normalizedExclude = normalizeToken(excludeSplitKey);
+    candidates = candidates.filter((split) =>
+      split.key !== excludeSplitKey
+      && normalizeToken(split.familyKey || "") !== normalizedExclude
+      && normalizeToken(split.key) !== normalizedExclude
+    );
+  }
   if (strictDaysMatch) {
     const exact = candidates.filter((split) => split.frequency === targetDays);
     if (exact.length) candidates = exact;
@@ -727,9 +1008,13 @@ function filterExercisesForConstraints(
   exercises: UserContext["exercises"],
   equipmentAccess: string,
   injuries: string[],
+  avoidExerciseTerms: string[] = [],
 ) {
   const equipmentFiltered = exercises.filter((exercise) => isEquipmentCompatible(exercise, equipmentAccess));
   const injuryFiltered = equipmentFiltered.filter((exercise) => isInjuryCompatible(exercise, injuries));
+  const preferenceFiltered = avoidExerciseTerms.length
+    ? injuryFiltered.filter((exercise) => !matchesNamePreference(exercise.name, avoidExerciseTerms))
+    : injuryFiltered;
   const warnings: string[] = [];
 
   if (!equipmentFiltered.length) {
@@ -742,12 +1027,17 @@ function filterExercisesForConstraints(
     return { exercises: equipmentFiltered, warnings };
   }
 
-  if (injuryFiltered.length < 25) {
+  if (avoidExerciseTerms.length && !preferenceFiltered.length) {
+    warnings.push("Avoided exercise preferences removed the full pool; falling back to injury-compatible matches.");
+    return { exercises: injuryFiltered, warnings };
+  }
+
+  if (preferenceFiltered.length < 25) {
     warnings.push("Limited exercise pool after equipment/injury filtering; variety may be reduced.");
   }
 
   return {
-    exercises: injuryFiltered,
+    exercises: preferenceFiltered,
     warnings,
   };
 }
@@ -876,6 +1166,7 @@ async function chooseTemplateFromCatalog(
     trainingStylePreferences?: string[];
     progressionPreference?: string | null;
     strictTemplateSource?: boolean;
+    excludeFamilyKey?: string | null;
   },
 ): Promise<{ template: SelectedTemplate | null; warnings: string[] }> {
   const warnings: string[] = [];
@@ -902,6 +1193,10 @@ async function chooseTemplateFromCatalog(
   }
 
   let candidates = (templates || []) as any[];
+  if (opts.excludeFamilyKey) {
+    const excluded = normalizeToken(opts.excludeFamilyKey);
+    candidates = candidates.filter((item) => normalizeToken(item.family?.external_key || "") !== excluded);
+  }
   if (opts.splitOverride) {
     const override = normalizeToken(opts.splitOverride);
     candidates = candidates.filter((item) =>
@@ -937,7 +1232,7 @@ async function chooseTemplateFromCatalog(
     .from("workout_program_templates_v2")
     .select(
       `
-      id,name,description,days_per_week,progression_model,
+      id,name,description,days_per_week,progression_model,goal_tags,training_style_tags,
       family:workout_program_families(external_key,display_name),
       days:workout_program_days_v2(
         id,sequence_index,day_type,name,focus,estimated_duration_min,
@@ -965,6 +1260,8 @@ async function chooseTemplateFromCatalog(
     description: fullTemplate.description,
     days_per_week: fullTemplate.days_per_week,
     progression_model: fullTemplate.progression_model,
+    goal_tags: fullTemplate.goal_tags || [],
+    training_style_tags: fullTemplate.training_style_tags || [],
     family_key: fullTemplate.family?.external_key || null,
     family_name: fullTemplate.family?.display_name || null,
     score: selected.score,
@@ -1035,6 +1332,11 @@ function pickExercisesForDay(
   exercisePools: ReturnType<typeof buildExercisePools>,
   fallbackExercises: UserContext["exercises"],
   daySeed: number,
+  options: {
+    maxExercises?: number | null;
+    avoidTerms?: string[];
+    keepTerms?: string[];
+  } = {},
 ): Array<{
   exercise_id: string;
   order_index: number;
@@ -1046,20 +1348,31 @@ function pickExercisesForDay(
   user_notes: string | null;
 }> {
   const selected: UserContext["exercises"] = [];
+  const maxExercises = Math.max(1, Math.min(7, Number(options.maxExercises || 6)));
+  const avoidTerms = options.avoidTerms || [];
+  const keepTerms = options.keepTerms || [];
   for (const [idx, tag] of day.tags.entries()) {
-    const pool = exercisePools[tag] || [];
-    const pick = deterministicPick(pool, daySeed + idx * 13);
+    const pool = (exercisePools[tag] || []).filter((exercise) => !matchesNamePreference(exercise.name, avoidTerms));
+    const preferredPool = keepTerms.length
+      ? pool.filter((exercise) => matchesNamePreference(exercise.name, keepTerms))
+      : [];
+    const pick = deterministicPick(preferredPool.length ? preferredPool : pool, daySeed + idx * 13);
     if (pick && !selected.some((s) => s.id === pick.id)) selected.push(pick);
   }
 
-  while (selected.length < 6) {
-    const fallback = deterministicPick(fallbackExercises, daySeed + selected.length * 7);
+  const fallbackPool = fallbackExercises.filter((exercise) => !matchesNamePreference(exercise.name, avoidTerms));
+
+  while (selected.length < maxExercises) {
+    const prioritized = keepTerms.length
+      ? fallbackPool.filter((exercise) => matchesNamePreference(exercise.name, keepTerms) && !selected.some((item) => item.id === exercise.id))
+      : [];
+    const fallback = deterministicPick(prioritized.length ? prioritized : fallbackPool, daySeed + selected.length * 7);
     if (!fallback) break;
     if (!selected.some((s) => s.id === fallback.id)) selected.push(fallback);
-    if (selected.length >= fallbackExercises.length) break;
+    if (selected.length >= fallbackPool.length) break;
   }
 
-  return selected.slice(0, 7).map((exercise, index) => ({
+  return selected.slice(0, maxExercises).map((exercise, index) => ({
     exercise_id: exercise.id,
     order_index: index,
     sets_target: day.sets,
@@ -1082,7 +1395,7 @@ function buildMealVariant(
   foods: FoodCandidate[],
   daySeed: number,
   variantIndex: number,
-  foodMap: Map<string, UserContext["foods"][number]>,
+  foodLookup: FoodRecordLookup,
   options?: {
     strictMacroMode?: boolean;
     anchors?: MealAnchorSelection;
@@ -1164,11 +1477,16 @@ function buildMealVariant(
     { food: veggie, grams: veggieGrams },
   ];
 
-  const items: MealItem[] = itemPlan.map(({ food, grams }) => {
-    const matchedFood = foodMap.get(food.name.toLowerCase()) || null;
+  const items: MealItem[] = itemPlan
+    .filter(({ grams }) => grams > 0.1)
+    .map(({ food, grams }) => {
+    const matchedFood = findBestFoodRecordMatch(food.name, foodLookup);
+    if (!matchedFood) {
+      throw new Error(`Generated meal item "${food.name}" is not mapped to a food record.`);
+    }
     const macros = macroFromFood(food, grams);
     return {
-      food_item_id: matchedFood?.id || null,
+      food_item_id: matchedFood.id,
       item_name: food.name,
       quantity_value: round1(grams),
       quantity_unit: "g",
@@ -1179,7 +1497,7 @@ function buildMealVariant(
       fat: round1(macros.fat),
       fiber: round1(macros.fiber),
     };
-  });
+    });
 
   const totals = items.reduce(
     (acc, item) => {
@@ -1261,6 +1579,673 @@ async function fetchUserContext(supabase: SupabaseClient, userId: string): Promi
   };
 }
 
+function normalizeNameTerm(value: string | null | undefined) {
+  return normalizeToken(value || "");
+}
+
+function matchesNamePreference(value: string | null | undefined, terms: string[]) {
+  const normalizedValue = normalizeNameTerm(value);
+  if (!normalizedValue) return false;
+  return terms.some((term) => normalizedValue.includes(term));
+}
+
+function toComparableWorkoutPlan(plan: {
+  id: string;
+  days_per_week: number | null;
+  program_family_key: string | null;
+  progression_model: string | null;
+  weekly_layout_json: unknown;
+  days: Array<{
+    id: string;
+    name: string;
+    focus: string | null;
+    day_type?: string | null;
+    estimated_duration_min?: number | null;
+    exercises: Array<{
+      exercise_id?: string | null;
+      exercise?: { id?: string | null; name?: string | null } | null;
+    }>;
+  }>;
+}): WorkoutPlanComparable {
+  const weeklyLayout = normalizeWeeklyLayout(
+    plan.weekly_layout_json,
+    plan.days.map((day) => ({
+      id: day.id,
+      dayType: day.day_type || "workout",
+    })),
+    Number(plan.days_per_week || plan.days.length || 0),
+    [],
+  );
+
+  return {
+    id: plan.id,
+    familyKey: plan.program_family_key,
+    progressionModel: plan.progression_model,
+    daysPerWeek: Number(plan.days_per_week || plan.days.length || 0),
+    weeklyLayout,
+    days: plan.days.map((day) => ({
+      id: day.id,
+      name: day.name,
+      focus: day.focus,
+      estimatedDurationMin: day.estimated_duration_min ?? null,
+      exercises: (day.exercises || []).map((exercise) => ({
+        exerciseId: exercise.exercise_id || exercise.exercise?.id || null,
+        name: exercise.exercise?.name || null,
+      })),
+    })),
+  };
+}
+
+async function fetchCurrentWorkoutPlanContext(
+  supabase: SupabaseClient,
+  userId: string,
+  planId?: string | null,
+): Promise<CurrentWorkoutPlanContext | null> {
+  let query = supabase
+    .from("user_workout_plans")
+    .select(`
+      id,
+      days_per_week,
+      program_family_key,
+      progression_model,
+      weekly_layout_json,
+      days:user_workout_plan_days(
+        id,
+        name,
+        focus,
+        day_type,
+        estimated_duration_min,
+        exercises:user_workout_plan_exercises(
+          exercise_id,
+          exercise:exercises!exercise_id(id,name)
+        )
+      )
+    `)
+    .eq("user_id", userId);
+
+  if (planId) {
+    query = query.eq("id", planId);
+  } else {
+    query = query.eq("is_active", true);
+  }
+
+  const { data: planRow, error: planError } = await query.maybeSingle();
+  if (planError || !planRow) {
+    return null;
+  }
+
+  const comparablePlan = toComparableWorkoutPlan(planRow as any);
+  const today = new Date();
+  const start = new Date(today);
+  start.setDate(today.getDate() - 27);
+
+  const { data: scheduleRows } = await supabase
+    .from("user_workout_plan_schedule")
+    .select(`
+      status,
+      completed_session_id,
+      plan_day:plan_day_id(name)
+    `)
+    .eq("plan_id", planRow.id)
+    .gte("scheduled_date", formatDate(start))
+    .lte("scheduled_date", formatDate(today));
+
+  const rows = scheduleRows || [];
+  const workoutRows = rows.filter((row: any) => row.plan_day || row.completed_session_id);
+  const completedRows = rows.filter((row: any) => row.status === "completed");
+  const missedRows = rows.filter((row: any) => row.status === "missed");
+  const completedSessionIds = completedRows
+    .map((row: any) => row.completed_session_id)
+    .filter(Boolean);
+
+  let avgLoggedDurationMin: number | null = null;
+  if (completedSessionIds.length) {
+    const { data: sessions } = await supabase
+      .from("workout_sessions")
+      .select("duration_sec")
+      .in("id", completedSessionIds);
+    const durations = (sessions || [])
+      .map((session: any) => Number(session.duration_sec || 0))
+      .filter((value) => Number.isFinite(value) && value > 0);
+    if (durations.length) {
+      avgLoggedDurationMin = Math.round(
+        durations.reduce((sum, value) => sum + value, 0) / durations.length / 60,
+      );
+    }
+  }
+
+  const missedCounts = new Map<string, number>();
+  for (const row of missedRows as any[]) {
+    const dayName = String(row.plan_day?.name || "").trim();
+    if (!dayName) continue;
+    missedCounts.set(dayName, (missedCounts.get(dayName) || 0) + 1);
+  }
+
+  return {
+    planId: planRow.id,
+    familyKey: planRow.program_family_key || null,
+    progressionModel: planRow.progression_model || null,
+    daysPerWeek: Number(planRow.days_per_week || comparablePlan.days?.length || 0),
+    weeklyLayout: comparablePlan.weeklyLayout || [],
+    comparablePlan,
+    adherenceSummary: {
+      completionRate28d: workoutRows.length
+        ? Math.round((completedRows.length / workoutRows.length) * 100)
+        : 0,
+      missedSessions28d: missedRows.length,
+      completedSessions28d: completedRows.length,
+      avgLoggedDurationMin,
+      mostFrequentlySkippedDays: Array.from(missedCounts.entries())
+        .sort((a, b) => b[1] - a[1])
+        .slice(0, 3)
+        .map(([name]) => name),
+    },
+  };
+}
+
+async function fetchCurrentNutritionPlanContext(
+  supabase: SupabaseClient,
+  userId: string,
+  planId?: string | null,
+): Promise<CurrentNutritionPlanContext | null> {
+  let query = supabase
+    .from("user_nutrition_plans")
+    .select("id, meal_structure")
+    .eq("user_id", userId);
+
+  if (planId) {
+    query = query.eq("id", planId);
+  } else {
+    query = query.eq("is_active", true);
+  }
+
+  const { data: planRow, error: planError } = await query.maybeSingle();
+  if (planError || !planRow) {
+    return null;
+  }
+
+  const mealStructureSlots = Array.isArray((planRow as any).meal_structure?.slots)
+    ? (planRow as any).meal_structure.slots.filter(Boolean)
+    : [];
+
+  const { data: mealRows } = await supabase
+    .from("user_nutrition_plan_meals")
+    .select("meal_slot")
+    .eq("plan_id", planRow.id);
+
+  const mealSlots = normalizeNutritionSlots([
+    ...mealStructureSlots,
+    ...((mealRows || []).map((row: any) => row.meal_slot).filter(Boolean)),
+  ]);
+
+  return {
+    planId: planRow.id,
+    mealSlots,
+  };
+}
+
+async function fetchStoredWorkoutPlanComparable(
+  supabase: SupabaseClient,
+  userId: string,
+  planId: string,
+): Promise<WorkoutPlanComparable | null> {
+  const { data, error } = await supabase
+    .from("user_workout_plans")
+    .select(`
+      id,
+      days_per_week,
+      program_family_key,
+      progression_model,
+      weekly_layout_json,
+      days:user_workout_plan_days(
+        id,
+        name,
+        focus,
+        day_type,
+        estimated_duration_min,
+        exercises:user_workout_plan_exercises(
+          exercise_id,
+          exercise:exercises!exercise_id(id,name)
+        )
+      )
+    `)
+    .eq("user_id", userId)
+    .eq("id", planId)
+    .maybeSingle();
+
+  if (error || !data) {
+    return null;
+  }
+
+  return toComparableWorkoutPlan(data as any);
+}
+
+function applyWorkoutRegenerationToContext(
+  context: UserContext,
+  workoutRegeneration: WorkoutRegenerationRequest | null,
+  currentPlanContext: CurrentWorkoutPlanContext | null,
+) {
+  const nextContext: UserContext = {
+    ...context,
+    onboarding: {
+      ...context.onboarding,
+    },
+  };
+
+  if (!workoutRegeneration) {
+    return nextContext;
+  }
+
+  if (workoutRegeneration.days_per_week_override) {
+    nextContext.onboarding.training_days_per_week = clamp(
+      Number(workoutRegeneration.days_per_week_override),
+      2,
+      6,
+    );
+  } else if (workoutRegeneration.reason === "too_hard_to_recover" && currentPlanContext) {
+    nextContext.onboarding.training_days_per_week = clamp(
+      currentPlanContext.daysPerWeek - 1,
+      2,
+      6,
+    );
+  }
+
+  if (workoutRegeneration.preferred_days_off?.length) {
+    nextContext.onboarding.preferred_days_off = workoutRegeneration.preferred_days_off;
+  }
+  if (workoutRegeneration.equipment_access) {
+    nextContext.onboarding.equipment_access = workoutRegeneration.equipment_access;
+  }
+  if (workoutRegeneration.injuries?.length) {
+    nextContext.onboarding.injuries = workoutRegeneration.injuries;
+  }
+  if (workoutRegeneration.preferred_split_family) {
+    nextContext.onboarding.preferred_split_family = workoutRegeneration.preferred_split_family;
+  } else if (workoutRegeneration.keep_current_split && currentPlanContext?.familyKey) {
+    nextContext.onboarding.preferred_split_family = currentPlanContext.familyKey;
+  }
+  if (workoutRegeneration.progression_preference) {
+    nextContext.onboarding.progression_preference = workoutRegeneration.progression_preference;
+  }
+  if (workoutRegeneration.goal_emphasis) {
+    nextContext.onboarding.session_emphasis = workoutRegeneration.goal_emphasis;
+  }
+
+  return nextContext;
+}
+
+function applyNutritionRegenerationToContext(
+  context: UserContext,
+  nutritionRegeneration: NutritionRegenerationRequest | null,
+) {
+  const nextContext: UserContext = {
+    ...context,
+    onboarding: {
+      ...context.onboarding,
+    },
+  };
+
+  if (!nutritionRegeneration) {
+    return nextContext;
+  }
+
+  if (nutritionRegeneration.dietary_preference_override) {
+    nextContext.onboarding.dietary_preference = nutritionRegeneration.dietary_preference_override;
+  }
+  if (nutritionRegeneration.allergies?.length) {
+    nextContext.onboarding.allergies_exclusions = nutritionRegeneration.allergies;
+  }
+  if (nutritionRegeneration.refused_foods?.length) {
+    nextContext.onboarding.refused_foods = nutritionRegeneration.refused_foods;
+  }
+
+  return nextContext;
+}
+
+function resolveNutritionMealSlots(
+  nutritionRegeneration: NutritionRegenerationRequest | null,
+  currentPlanContext: CurrentNutritionPlanContext | null,
+) {
+  if (nutritionRegeneration?.keep_meal_slots && !nutritionRegeneration.start_fresh && currentPlanContext?.mealSlots?.length) {
+    return currentPlanContext.mealSlots;
+  }
+
+  const mealsPerDayOverride = Number(nutritionRegeneration?.meals_per_day_override || 0);
+  if (Number.isFinite(mealsPerDayOverride) && mealsPerDayOverride > 0) {
+    return normalizeNutritionSlots(SLOT_ORDER.slice(0, clamp(mealsPerDayOverride, 1, SLOT_ORDER.length)));
+  }
+
+  return [...SLOT_ORDER];
+}
+
+function buildWorkoutGenerationConfig(input: {
+  generationMode: GenerationMode;
+  activationMode: ActivationMode;
+  workoutRegeneration: WorkoutRegenerationRequest | null;
+  currentPlanContext: CurrentWorkoutPlanContext | null;
+}) {
+  const { generationMode, activationMode, workoutRegeneration, currentPlanContext } = input;
+  const reason = workoutRegeneration?.reason || null;
+  const avoidExerciseTerms = (workoutRegeneration?.avoid_exercise_names || [])
+    .map((value) => normalizeNameTerm(value))
+    .filter(Boolean);
+  const keepExerciseTerms = (workoutRegeneration?.keep_exercise_names || [])
+    .map((value) => normalizeNameTerm(value))
+    .filter(Boolean);
+
+  let excludeFamilyKey: string | null = null;
+  if (
+    generationMode === "regenerate"
+    && !workoutRegeneration?.keep_current_split
+    && currentPlanContext?.familyKey
+    && (
+      reason === "too_repetitive"
+      || reason === "want_different_split"
+      || reason === "not_seeing_results"
+    )
+  ) {
+    excludeFamilyKey = currentPlanContext.familyKey;
+  }
+
+  let sessionDurationTargetMin = workoutRegeneration?.session_duration_target_min ?? null;
+  let maxExercisesPerDay: number | null = null;
+  if (sessionDurationTargetMin && sessionDurationTargetMin <= 50) {
+    maxExercisesPerDay = 4;
+  } else if (sessionDurationTargetMin && sessionDurationTargetMin <= 60) {
+    maxExercisesPerDay = 5;
+  } else if (reason === "too_hard_to_recover") {
+    sessionDurationTargetMin = sessionDurationTargetMin ?? 55;
+    maxExercisesPerDay = 4;
+  }
+
+  return {
+    generationMode,
+    activationMode,
+    currentPlanContext,
+    workoutRegeneration,
+    sessionDurationTargetMin,
+    maxExercisesPerDay,
+    avoidExerciseTerms,
+    keepExerciseTerms,
+    excludeFamilyKey,
+    minorRefinement: !!workoutRegeneration?.keep_current_split && !workoutRegeneration?.start_fresh,
+  } satisfies WorkoutGenerationConfig;
+}
+
+async function deleteWorkoutPlanTree(supabase: SupabaseClient, planId: string) {
+  const { error } = await supabase
+    .from("user_workout_plans")
+    .delete()
+    .eq("id", planId);
+
+  if (error) {
+    throw new Error(`Failed to discard generated preview: ${error.message}`);
+  }
+}
+
+async function loadStoredWorkoutPlanValidationData(
+  supabase: SupabaseClient,
+  userId: string,
+  planId: string,
+) {
+  const { data, error } = await supabase
+    .from("user_workout_plans")
+    .select(`
+      id,
+      user_id,
+      days_per_week,
+      source_model,
+      program_family_key,
+      goal_tags,
+      days:user_workout_plan_days(
+        id,
+        day_number,
+        name,
+        focus,
+        day_type,
+        exercises:user_workout_plan_exercises(
+          id,
+          exercise_id,
+          order_index,
+          block_id,
+          exercise:exercises!exercise_id(
+            id,
+            name,
+            category,
+            equipment_required,
+            primary_muscle,
+            pattern,
+            difficulty
+          )
+        )
+      )
+    `)
+    .eq("user_id", userId)
+    .eq("id", planId)
+    .maybeSingle();
+
+  if (error || !data) {
+    throw new Error(error?.message || "Generated workout plan could not be reloaded for validation.");
+  }
+
+  return data as {
+    id: string;
+    user_id: string;
+    days_per_week: number;
+    source_model: string | null;
+    program_family_key: string | null;
+    goal_tags: string[] | null;
+    days: Array<{
+      id: string;
+      day_number: number;
+      name: string;
+      focus: string | null;
+      day_type: string | null;
+      exercises: Array<{
+        id: string;
+        exercise_id: string;
+        order_index: number;
+        block_id: string | null;
+        exercise: UserContext["exercises"][number] | null;
+      }>;
+    }>;
+  };
+}
+
+function collectDayPolicyValidation(input: {
+  dayAudit: ReturnType<typeof auditDayExerciseMappings>;
+  rowCount: number;
+}) {
+  const focusMismatchRows = input.dayAudit.violations.filter((violation) =>
+    violation.violationTypes.includes("focus_mismatch")
+  ).length;
+  const focusAlignedRows = Math.max(0, input.rowCount - focusMismatchRows);
+  const focusRatio = input.rowCount > 0 ? focusAlignedRows / input.rowCount : 1;
+  const singleFocusDay = !input.dayAudit.policy.mixed && input.dayAudit.policy.primaryFocusTags.length <= 1;
+  const requiredRatio = singleFocusDay ? 1 : MIN_DAY_FOCUS_MATCH_RATIO;
+
+  return {
+    focusRatio,
+    requiredRatio,
+    singleFocusDay,
+    failsRatio: input.rowCount > 0 && focusRatio < requiredRatio,
+  };
+}
+
+async function validateStoredWorkoutPlanCoherence(
+  supabase: SupabaseClient,
+  input: {
+    userId: string;
+    planId: string;
+    exercisePool: UserContext["exercises"];
+    templateEquipment?: string[] | null;
+    familyKey?: string | null;
+    goalTags?: string[] | null;
+  },
+) {
+  const warnings: string[] = [];
+  const plan = await loadStoredWorkoutPlanValidationData(supabase, input.userId, input.planId);
+  const templateEquipment = input.templateEquipment || [];
+  const familyKey = input.familyKey ?? plan.program_family_key ?? null;
+  const goalTags = input.goalTags ?? plan.goal_tags ?? [];
+
+  const runAudits = () =>
+    (plan.days || [])
+      .filter((day) => (day.day_type || "workout") === "workout")
+      .map((day) => {
+        const rows = (day.exercises || [])
+          .filter((row) => !!row.exercise)
+          .map((row) => ({
+            rowId: row.id,
+            exerciseId: row.exercise_id,
+            orderIndex: Number(row.order_index || 0),
+            blockId: row.block_id || null,
+            exercise: row.exercise!,
+          }));
+
+        const audit = auditDayExerciseMappings({
+          dayId: day.id,
+          dayName: day.name,
+          dayFocus: day.focus,
+          dayIndex: Number(day.day_number || 1),
+          daysPerWeek: Number(plan.days_per_week || 0),
+          familyKey,
+          goalTags,
+          templateEquipment,
+          rows,
+          exercisePool: input.exercisePool,
+        });
+
+        return { day, rows, audit };
+      });
+
+  const initialAudits = runAudits();
+
+  for (const entry of initialAudits) {
+    const validation = collectDayPolicyValidation({
+      dayAudit: entry.audit,
+      rowCount: entry.rows.length,
+    });
+    const requiresRepair = entry.audit.hardViolationCount > 0 || validation.failsRatio;
+
+    if (!requiresRepair) {
+      continue;
+    }
+
+    const remediation = remediateDayExerciseMappings({
+      dayId: entry.day.id,
+      dayName: entry.day.name,
+      dayFocus: entry.day.focus,
+      dayIndex: Number(entry.day.day_number || 1),
+      daysPerWeek: Number(plan.days_per_week || 0),
+      familyKey,
+      goalTags,
+      templateEquipment,
+      rows: entry.rows,
+      exercisePool: input.exercisePool,
+    });
+
+    if (remediation.unresolvedRows.length > 0) {
+      await deleteWorkoutPlanTree(supabase, input.planId);
+      throw new WorkoutGenerationValidationError(
+        `Workout day "${entry.day.name}" could not be repaired without violating focus rules.`,
+        warnings,
+      );
+    }
+
+    for (const change of remediation.changedRows) {
+      const { error } = await supabase
+        .from("user_workout_plan_exercises")
+        .update({
+          exercise_id: change.nextExerciseId,
+          user_notes: "Auto-adjusted to maintain workout-day coherence.",
+        })
+        .eq("id", change.rowId);
+
+      if (error) {
+        await deleteWorkoutPlanTree(supabase, input.planId);
+        throw new Error(`Failed to apply workout coherence repair: ${error.message}`);
+      }
+    }
+
+    if (remediation.changedRows.length > 0) {
+      warnings.push(`Repaired ${entry.day.name} to match its workout-day focus.`);
+      for (const change of remediation.changedRows) {
+        const row = entry.day.exercises.find((exercise) => exercise.id === change.rowId);
+        if (row) {
+          row.exercise_id = change.nextExerciseId;
+          row.exercise = input.exercisePool.find((exercise) => exercise.id === change.nextExerciseId) || row.exercise;
+        }
+      }
+    }
+  }
+
+  const finalAudits = runAudits();
+  for (const entry of finalAudits) {
+    const validation = collectDayPolicyValidation({
+      dayAudit: entry.audit,
+      rowCount: entry.rows.length,
+    });
+    if (entry.audit.hardViolationCount > 0 || validation.failsRatio) {
+      await deleteWorkoutPlanTree(supabase, input.planId);
+      throw new WorkoutGenerationValidationError(
+        `Workout day "${entry.day.name}" still contains exercises that do not match the day intent.`,
+        warnings,
+      );
+    }
+  }
+
+  return {
+    warnings,
+  };
+}
+
+async function finalizeStoredWorkoutPlanActivation(
+  supabase: SupabaseClient,
+  input: {
+    userId: string;
+    planId: string;
+    activationMode: ActivationMode;
+    currentPlanId?: string | null;
+  },
+) {
+  if (input.activationMode === "preview") {
+    await supabase
+      .from("user_workout_plans")
+      .update({
+        is_active: false,
+        lifecycle_state: "preview",
+        replaces_plan_id: input.currentPlanId || null,
+      })
+      .eq("id", input.planId)
+      .eq("user_id", input.userId);
+    return;
+  }
+
+  await supabase
+    .from("user_workout_plans")
+    .update({
+      is_active: false,
+      lifecycle_state: "archived",
+    })
+    .eq("user_id", input.userId)
+    .eq("is_active", true);
+
+  const { error } = await supabase
+    .from("user_workout_plans")
+    .update({
+      is_active: true,
+      lifecycle_state: "live",
+      replaces_plan_id: null,
+    })
+    .eq("id", input.planId)
+    .eq("user_id", input.userId);
+
+  if (error) {
+    throw new Error(`Failed to activate generated workout plan: ${error.message}`);
+  }
+}
+
 function getAllowedWorkoutDays(daysPerWeek: number, preferredDaysOff: string[]): AllowedWorkoutDaysResult {
   const rawDaysOff = (preferredDaysOff || [])
     .map((day) => day.toLowerCase())
@@ -1325,10 +2310,210 @@ function formatDate(date: Date) {
   return date.toISOString().split("T")[0];
 }
 
+function getErrorMessage(error: unknown) {
+  if (error instanceof Error) return error.message;
+  if (typeof error === "object" && error && "message" in error) {
+    return String((error as { message?: unknown }).message || "");
+  }
+  return String(error || "");
+}
+
+function isMissingColumnError(error: unknown) {
+  const message = getErrorMessage(error).toLowerCase();
+  return (
+    message.includes("column")
+    || message.includes("schema cache")
+    || message.includes("does not exist")
+    || message.includes("could not find")
+  );
+}
+
+async function insertWorkoutPlanWithFallback(
+  supabase: SupabaseClient,
+  payload: Record<string, unknown>,
+) {
+  const attempts = [
+    payload,
+    {
+      user_id: payload.user_id,
+      generation_run_id: payload.generation_run_id,
+      template_id: payload.template_id,
+      version: payload.version,
+      is_active: payload.is_active,
+      name: payload.name,
+      description: payload.description,
+      start_date: payload.start_date,
+      total_weeks: payload.total_weeks,
+      days_per_week: payload.days_per_week,
+    },
+  ];
+
+  let lastError: unknown = null;
+  for (const attempt of attempts) {
+    const { data, error } = await supabase
+      .from("user_workout_plans")
+      .insert(attempt)
+      .select("id")
+      .single();
+
+    if (!error && data) {
+      return data;
+    }
+
+    lastError = error;
+  }
+
+  throw new Error(getErrorMessage(lastError) || "Failed to create workout plan");
+}
+
+async function insertWorkoutPlanDayWithFallback(
+  supabase: SupabaseClient,
+  payload: Record<string, unknown>,
+) {
+  const attempts = [
+    payload,
+    {
+      plan_id: payload.plan_id,
+      day_number: payload.day_number,
+      name: payload.name,
+      focus: payload.focus,
+    },
+  ];
+
+  let lastError: unknown = null;
+  for (const attempt of attempts) {
+    const { data, error } = await supabase
+      .from("user_workout_plan_days")
+      .insert(attempt)
+      .select("id, day_number, name, focus")
+      .single();
+
+    if (!error && data) {
+      return data;
+    }
+
+    lastError = error;
+  }
+
+  throw new Error(getErrorMessage(lastError) || "Failed to create workout plan day");
+}
+
+async function updateWorkoutPlanMetadataWithFallback(
+  supabase: SupabaseClient,
+  planId: string,
+  updates: Record<string, unknown>,
+) {
+  const { error } = await supabase
+    .from("user_workout_plans")
+    .update(updates)
+    .eq("id", planId);
+
+  if (!error) {
+    return;
+  }
+
+  if (isMissingColumnError(error)) {
+    console.warn(
+      "[generate-user-plans] Skipping workout plan metadata update because latest columns are unavailable:",
+      getErrorMessage(error),
+    );
+    return;
+  }
+
+  throw new Error(getErrorMessage(error) || "Failed to update workout plan metadata");
+}
+
+async function seedWorkoutScheduleFromLayout(
+  supabase: SupabaseClient,
+  input: {
+    planId: string;
+    planDays: Array<{ id: string; dayType?: string | null }>;
+    daysPerWeek: number;
+    preferredDaysOff: string[];
+    horizonDays: number;
+  },
+) {
+  const weeklyLayout = buildWeeklyLayout({
+    planDays: input.planDays,
+    daysPerWeek: input.daysPerWeek,
+    preferredDaysOff: input.preferredDaysOff,
+  });
+
+  const weekStart = startOfWeek(new Date());
+  const layoutByWeekday = new Map(
+    weeklyLayout.map((entry) => [entry.weekday, entry]),
+  );
+
+  for (let offset = 0; offset < input.horizonDays; offset += 1) {
+    const date = new Date(weekStart);
+    date.setDate(weekStart.getDate() + offset);
+    const weekday = ["sun", "mon", "tue", "wed", "thu", "fri", "sat"][date.getDay()];
+    const entry = layoutByWeekday.get(weekday as WeeklyLayoutAssignment["weekday"]);
+
+    const payload = entry
+      ? {
+          plan_id: input.planId,
+          plan_day_id: entry.planDayId,
+          scheduled_date: formatDate(date),
+          session_type: entry.sessionType,
+          status: "planned",
+        }
+      : {
+          plan_id: input.planId,
+          plan_day_id: null,
+          scheduled_date: formatDate(date),
+          session_type: "rest",
+          status: "planned",
+        };
+
+    const { error } = await supabase
+      .from("user_workout_plan_schedule")
+      .insert(payload);
+
+    if (error) {
+      throw new Error(`Failed to insert schedule row: ${error.message}`);
+    }
+  }
+
+  return weeklyLayout;
+}
+
+async function syncLegacyPlanDayScheduledDates(
+  supabase: SupabaseClient,
+  dayRecords: Array<{ id: string }>,
+  weeklyLayout: WeeklyLayoutAssignment[],
+) {
+  const weekStart = startOfWeek(new Date());
+  const weekdayOffset: Record<WeeklyLayoutAssignment["weekday"], number> = {
+    mon: 0,
+    tue: 1,
+    wed: 2,
+    thu: 3,
+    fri: 4,
+    sat: 5,
+    sun: 6,
+  };
+
+  for (const day of dayRecords) {
+    const scheduled = weeklyLayout.find((entry) => entry.planDayId === day.id);
+    if (!scheduled) continue;
+
+    const date = new Date(weekStart);
+    date.setDate(weekStart.getDate() + weekdayOffset[scheduled.weekday]);
+
+    await supabase
+      .from("user_workout_plan_days")
+      .update({ scheduled_date: formatDate(date) })
+      .eq("id", day.id);
+  }
+}
+
 type ReplacementOptions = {
   focusTags?: string[];
   avoidIds?: string[];
   strictFocus?: boolean;
+  avoidTerms?: string[];
+  keepTerms?: string[];
 };
 
 function pickReplacementExercise(
@@ -1341,12 +2526,16 @@ function pickReplacementExercise(
   if (!pool.length) return null;
   const focusTags = options.focusTags || [];
   const avoidIds = new Set(options.avoidIds || []);
+  const avoidTerms = options.avoidTerms || [];
+  const keepTerms = options.keepTerms || [];
 
   const compatiblePool = pool.filter((exercise) =>
     isEquipmentCompatible(exercise, context.onboarding.equipment_access)
     && isInjuryCompatible(exercise, context.onboarding.injuries),
   );
-  const source = (compatiblePool.length ? compatiblePool : pool).filter((exercise) => !avoidIds.has(exercise.id));
+  const source = (compatiblePool.length ? compatiblePool : pool)
+    .filter((exercise) => !avoidIds.has(exercise.id))
+    .filter((exercise) => !matchesNamePreference(exercise.name, avoidTerms));
   if (!source.length) return null;
 
   const focusFiltered = focusTags.length
@@ -1355,19 +2544,24 @@ function pickReplacementExercise(
   const candidatePool = options.strictFocus ? focusFiltered : (focusFiltered.length ? focusFiltered : source);
   if (!candidatePool.length) return null;
 
+  const preferredPool = keepTerms.length
+    ? candidatePool.filter((exercise) => matchesNamePreference(exercise.name, keepTerms))
+    : [];
+  const weightedPool = preferredPool.length ? preferredPool : candidatePool;
+
   if (!original) {
-    return deterministicPick(candidatePool, seed);
+    return deterministicPick(weightedPool, seed);
   }
 
   const primaryMuscle = normalizeToken(original.primary_muscle || "");
   const category = normalizeToken(original.category || "");
-  const sameMuscle = candidatePool.filter((item) => normalizeToken(item.primary_muscle || "") === primaryMuscle);
+  const sameMuscle = weightedPool.filter((item) => normalizeToken(item.primary_muscle || "") === primaryMuscle);
   if (sameMuscle.length) return deterministicPick(sameMuscle, seed);
 
-  const sameCategory = candidatePool.filter((item) => normalizeToken(item.category || "") === category);
+  const sameCategory = weightedPool.filter((item) => normalizeToken(item.category || "") === category);
   if (sameCategory.length) return deterministicPick(sameCategory, seed + 11);
 
-  return deterministicPick(candidatePool, seed + 19);
+  return deterministicPick(weightedPool, seed + 19);
 }
 
 function inferFocusTags(dayName: string, dayFocus: string | null): WorkoutFocusTag[] {
@@ -1412,6 +2606,7 @@ async function storeWorkoutPlanFromTemplateV2(
   context: UserContext,
   template: SelectedTemplate,
   horizonDays: number,
+  config: WorkoutGenerationConfig,
 ) {
   const warnings: string[] = [];
   const { data: maxVersionData } = await supabase
@@ -1424,361 +2619,390 @@ async function storeWorkoutPlanFromTemplateV2(
 
   const version = (maxVersionData?.version || 0) + 1;
 
-  await supabase
-    .from("user_workout_plans")
-    .update({ is_active: false })
-    .eq("user_id", userId)
-    .eq("is_active", true);
-
-  const { data: workoutPlan, error: planError } = await supabase
-    .from("user_workout_plans")
-    .insert({
-      user_id: userId,
-      generation_run_id: runId,
-      version,
-      is_active: true,
-      name: `MetriqFit ${template.name}`,
-      description: template.description || "Template-driven plan aligned to onboarding preferences.",
-      start_date: formatDate(new Date()),
-      total_weeks: Math.max(4, Math.ceil(horizonDays / 7)),
-      days_per_week: context.onboarding.training_days_per_week,
-    })
-    .select("id")
-    .single();
-
-  if (planError || !workoutPlan) {
-    throw new Error(`Failed to create template workout plan: ${planError?.message || "unknown"}`);
-  }
+  const workoutPlan = await insertWorkoutPlanWithFallback(supabase, {
+    user_id: userId,
+    generation_run_id: runId,
+    version,
+    is_active: false,
+    lifecycle_state: config.activationMode === "preview" ? "preview" : "live",
+    replaces_plan_id: config.currentPlanContext?.planId || null,
+    source_model: "v2_template",
+    program_template_v2_id: template.id,
+    program_family_key: template.family_key,
+    progression_model: template.progression_model,
+    training_style_tags: template.training_style_tags || [],
+    goal_tags: template.goal_tags || [],
+    weekly_layout_json: null,
+    name: `${config.activationMode === "preview" ? WORKOUT_PREVIEW_NAME_PREFIX : ""}MetriqFit ${template.name}`,
+    description: template.description || "Template-driven plan aligned to onboarding preferences.",
+    start_date: formatDate(new Date()),
+    total_weeks: Math.max(4, Math.ceil(horizonDays / 7)),
+    days_per_week: template.days_per_week,
+  });
 
   const planId = workoutPlan.id;
-  const dayRecords: Array<{ id: string; day_number: number; name: string; focus: string }> = [];
+  const dayRecords: Array<{
+    id: string;
+    day_number: number;
+    name: string;
+    focus: string | null;
+    day_type: string;
+    estimated_duration_min: number | null;
+  }> = [];
   const filteredPool = filterExercisesForConstraints(
     context.exercises,
     context.onboarding.equipment_access,
     context.onboarding.injuries,
+    config.avoidExerciseTerms,
   );
   const exercisePool = filteredPool.exercises.length ? filteredPool.exercises : context.exercises;
   const exerciseLookup = new Map(exercisePool.map((exercise) => [exercise.id, exercise]));
   warnings.push(...filteredPool.warnings);
 
   for (const day of template.days) {
-    if (day.day_type !== "workout") continue;
     const dayFocusTags = inferFocusTags(day.name, day.focus);
     const strictDayFocusTags = dayFocusTags.filter((tag) => STRICT_FOCUS_TAGS.has(tag));
     const focusFallbackPool = buildFocusFallbackPool(exercisePool, strictDayFocusTags);
 
-    const { data: dayInsert, error: dayError } = await supabase
-      .from("user_workout_plan_days")
-      .insert({
-        plan_id: planId,
-        day_number: day.sequence_index,
-        name: day.name,
-        focus: day.focus,
-      })
-      .select("id, day_number, name, focus")
-      .single();
+    const dayInsert = await insertWorkoutPlanDayWithFallback(supabase, {
+      plan_id: planId,
+      day_number: day.sequence_index,
+      name: day.name,
+      focus: day.focus,
+      day_type: day.day_type || "workout",
+      estimated_duration_min: config.sessionDurationTargetMin
+        ? Math.min(day.estimated_duration_min ?? config.sessionDurationTargetMin, config.sessionDurationTargetMin)
+        : (day.estimated_duration_min ?? null),
+    });
 
-    if (dayError || !dayInsert) {
-      throw new Error(`Failed to create template workout day: ${dayError?.message || "unknown"}`);
-    }
-
-    dayRecords.push(dayInsert);
+    dayRecords.push({
+      ...dayInsert,
+      day_type: day.day_type || "workout",
+      estimated_duration_min: config.sessionDurationTargetMin
+        ? Math.min(day.estimated_duration_min ?? config.sessionDurationTargetMin, config.sessionDurationTargetMin)
+        : (day.estimated_duration_min ?? null),
+    });
 
     let insertedForDay = 0;
     const usedExerciseIds = new Set<string>();
     const daySelections: Array<{ rowId: string; exerciseId: string; focusMatch: boolean }> = [];
     const blocks = (day.blocks || []).sort((a, b) => a.order_index - b.order_index);
 
-    for (const block of blocks) {
-      const { data: blockInsert, error: blockError } = await supabase
-        .from("user_workout_plan_blocks")
-        .insert({
-          plan_day_id: dayInsert.id,
-          order_index: block.order_index,
-          block_type: block.block_type || "normal",
-          title: block.title || null,
-          config_json: block.config_json || {},
-        })
-        .select("id")
-        .single();
+    if (day.day_type === "workout") {
+      for (const block of blocks) {
+        const { data: blockInsert, error: blockError } = await supabase
+          .from("user_workout_plan_blocks")
+          .insert({
+            plan_day_id: dayInsert.id,
+            order_index: block.order_index,
+            block_type: block.block_type || "normal",
+            title: block.title || null,
+            config_json: block.config_json || {},
+          })
+          .select("id")
+          .single();
 
-      if (blockError || !blockInsert) {
-        throw new Error(`Failed to create workout block: ${blockError?.message || "unknown"}`);
-      }
-
-      for (const [exerciseIndex, exercise] of (block.exercises || []).entries()) {
-        const rawExercise = exercise.exercise as UserContext["exercises"][number] | null;
-        let resolvedExerciseId = exercise.exercise_id;
-        let replaced = false;
-        const focusMismatch = !!rawExercise && dayFocusTags.length > 0 && !exerciseMatchesFocus(rawExercise, dayFocusTags);
-        const seed = day.sequence_index * 31 + exerciseIndex;
-        const shouldReplace = !rawExercise
-          || !isEquipmentCompatible(rawExercise, context.onboarding.equipment_access)
-          || !isInjuryCompatible(rawExercise, context.onboarding.injuries)
-          || focusMismatch
-          || usedExerciseIds.has(resolvedExerciseId);
-
-        if (shouldReplace) {
-          let replacement = pickReplacementExercise(
-            rawExercise,
-            exercisePool,
-            context,
-            seed,
-            {
-              focusTags: strictDayFocusTags.length ? strictDayFocusTags : dayFocusTags,
-              avoidIds: Array.from(usedExerciseIds),
-              strictFocus: strictDayFocusTags.length > 0,
-            },
-          );
-          if (!replacement && strictDayFocusTags.length > 0) {
-            replacement = pickReplacementExercise(
-              rawExercise,
-              focusFallbackPool,
-              context,
-              seed + 13,
-              {
-                focusTags: strictDayFocusTags,
-                avoidIds: Array.from(usedExerciseIds),
-                strictFocus: true,
-              },
-            );
-          }
-          if (!replacement && strictDayFocusTags.length > 0) {
-            replacement = pickReplacementExercise(
-              rawExercise,
-              exercisePool,
-              context,
-              seed + 17,
-              {
-                focusTags: strictDayFocusTags,
-                avoidIds: [],
-                strictFocus: true,
-              },
-            );
-          }
-          if (!replacement && dayFocusTags.length > 0) {
-            replacement = pickReplacementExercise(
-              rawExercise,
-              exercisePool,
-              context,
-              seed + 29,
-              {
-                focusTags: dayFocusTags,
-                avoidIds: Array.from(usedExerciseIds),
-                strictFocus: false,
-              },
-            );
-          }
-          if (replacement && !usedExerciseIds.has(replacement.id)) {
-            resolvedExerciseId = replacement.id;
-            replaced = replacement.id !== exercise.exercise_id;
-          }
+        if (blockError || !blockInsert) {
+          throw new Error(`Failed to create workout block: ${blockError?.message || "unknown"}`);
         }
 
-        if (usedExerciseIds.has(resolvedExerciseId)) {
-          const uniqueReplacement = pickReplacementExercise(
-            rawExercise,
-            exercisePool,
-            context,
-            seed + 97,
-            {
-              focusTags: strictDayFocusTags.length ? strictDayFocusTags : dayFocusTags,
-              avoidIds: Array.from(usedExerciseIds),
-              strictFocus: strictDayFocusTags.length > 0,
-            },
-          );
-          if (uniqueReplacement) {
-            resolvedExerciseId = uniqueReplacement.id;
-            replaced = true;
-          } else if (strictDayFocusTags.length > 0) {
-            const focusedDuplicate = pickReplacementExercise(
+        const blockExercises = config.maxExercisesPerDay
+          ? (block.exercises || []).slice(0, config.maxExercisesPerDay)
+          : (block.exercises || []);
+
+        for (const [exerciseIndex, exercise] of blockExercises.entries()) {
+          const rawExercise = exercise.exercise as UserContext["exercises"][number] | null;
+          let resolvedExerciseId = exercise.exercise_id;
+          let replaced = false;
+          const focusMismatch = !!rawExercise && dayFocusTags.length > 0 && !exerciseMatchesFocus(rawExercise, dayFocusTags);
+          const seed = day.sequence_index * 31 + exerciseIndex;
+          const shouldReplace = !rawExercise
+            || !isEquipmentCompatible(rawExercise, context.onboarding.equipment_access)
+            || !isInjuryCompatible(rawExercise, context.onboarding.injuries)
+            || matchesNamePreference(rawExercise?.name, config.avoidExerciseTerms)
+            || focusMismatch
+            || usedExerciseIds.has(resolvedExerciseId);
+
+          if (shouldReplace) {
+            let replacement = pickReplacementExercise(
               rawExercise,
-              focusFallbackPool,
+              exercisePool,
               context,
-              seed + 101,
+              seed,
               {
-                focusTags: strictDayFocusTags,
-                avoidIds: [],
-                strictFocus: true,
+                focusTags: strictDayFocusTags.length ? strictDayFocusTags : dayFocusTags,
+                avoidIds: Array.from(usedExerciseIds),
+                strictFocus: strictDayFocusTags.length > 0,
+                avoidTerms: config.avoidExerciseTerms,
+                keepTerms: config.keepExerciseTerms,
               },
             );
-            if (focusedDuplicate) {
-              resolvedExerciseId = focusedDuplicate.id;
-              replaced = true;
+            if (!replacement && strictDayFocusTags.length > 0) {
+              replacement = pickReplacementExercise(
+                rawExercise,
+                focusFallbackPool,
+                context,
+                seed + 13,
+                {
+                  focusTags: strictDayFocusTags,
+                  avoidIds: Array.from(usedExerciseIds),
+                  strictFocus: true,
+                  avoidTerms: config.avoidExerciseTerms,
+                  keepTerms: config.keepExerciseTerms,
+                },
+              );
+            }
+            if (!replacement && strictDayFocusTags.length > 0) {
+              replacement = pickReplacementExercise(
+                rawExercise,
+                exercisePool,
+                context,
+                seed + 17,
+                {
+                  focusTags: strictDayFocusTags,
+                  avoidIds: [],
+                  strictFocus: true,
+                  avoidTerms: config.avoidExerciseTerms,
+                  keepTerms: config.keepExerciseTerms,
+                },
+              );
+            }
+            if (!replacement && dayFocusTags.length > 0) {
+              replacement = pickReplacementExercise(
+                rawExercise,
+                exercisePool,
+                context,
+                seed + 29,
+                {
+                  focusTags: dayFocusTags,
+                  avoidIds: Array.from(usedExerciseIds),
+                  strictFocus: false,
+                  avoidTerms: config.avoidExerciseTerms,
+                  keepTerms: config.keepExerciseTerms,
+                },
+              );
+            }
+            if (replacement && !usedExerciseIds.has(replacement.id)) {
+              resolvedExerciseId = replacement.id;
+              replaced = replacement.id !== exercise.exercise_id;
             }
           }
+
+          if (usedExerciseIds.has(resolvedExerciseId)) {
+            const uniqueReplacement = pickReplacementExercise(
+              rawExercise,
+              exercisePool,
+              context,
+              seed + 97,
+              {
+                focusTags: strictDayFocusTags.length ? strictDayFocusTags : dayFocusTags,
+                avoidIds: Array.from(usedExerciseIds),
+                strictFocus: strictDayFocusTags.length > 0,
+                avoidTerms: config.avoidExerciseTerms,
+                keepTerms: config.keepExerciseTerms,
+              },
+            );
+            if (uniqueReplacement) {
+              resolvedExerciseId = uniqueReplacement.id;
+              replaced = true;
+            } else if (strictDayFocusTags.length > 0) {
+              const focusedDuplicate = pickReplacementExercise(
+                rawExercise,
+                focusFallbackPool,
+                context,
+                seed + 101,
+                {
+                  focusTags: strictDayFocusTags,
+                  avoidIds: [],
+                  strictFocus: true,
+                  avoidTerms: config.avoidExerciseTerms,
+                  keepTerms: config.keepExerciseTerms,
+                },
+              );
+              if (focusedDuplicate) {
+                resolvedExerciseId = focusedDuplicate.id;
+                replaced = true;
+              }
+            }
+          }
+
+          const repsMin = clamp(Number(exercise.reps_min || 8), 1, 25);
+          const repsMax = clamp(Number(exercise.reps_max || Math.max(10, repsMin)), repsMin, 30);
+          const restSeconds = clamp(Number(exercise.rest_seconds || 90), 20, 300);
+          const setsTarget = clamp(Number(exercise.sets_target || 3), 1, 8);
+
+          const { data: insertedExercise, error: exerciseError } = await supabase
+            .from("user_workout_plan_exercises")
+            .insert({
+              plan_day_id: dayInsert.id,
+              block_id: blockInsert.id,
+              exercise_id: resolvedExerciseId,
+              order_index: exerciseIndex + 1,
+              sets_target: setsTarget,
+              reps_min: repsMin,
+              reps_max: repsMax,
+              rest_seconds: restSeconds,
+              tempo: exercise.tempo || null,
+              technique_type: exercise.technique_type || null,
+              technique_config_json: exercise.technique_config_json || {},
+              set_style: exercise.set_style || null,
+              rir_target_min: exercise.rir_target_min,
+              rir_target_max: exercise.rir_target_max,
+              rpe_target_min: exercise.rpe_target_min,
+              rpe_target_max: exercise.rpe_target_max,
+              pause_seconds: exercise.pause_seconds,
+              user_notes: replaced ? `${exercise.notes || ""} (Auto-replaced due to constraints)` : (exercise.notes || null),
+              original_exercise_id: exercise.exercise_id,
+            })
+            .select("id, exercise_id")
+            .single();
+
+          if (exerciseError || !insertedExercise) {
+            throw new Error(`Failed to insert template exercise: ${exerciseError.message}`);
+          }
+
+          usedExerciseIds.add(resolvedExerciseId);
+          const selectedExercise = exerciseLookup.get(resolvedExerciseId);
+          const focusMatch = strictDayFocusTags.length > 0
+            ? !!selectedExercise && exerciseMatchesFocus(selectedExercise, strictDayFocusTags)
+            : true;
+          daySelections.push({
+            rowId: insertedExercise.id,
+            exerciseId: resolvedExerciseId,
+            focusMatch,
+          });
+
+          if (replaced) {
+            warnings.push(`Adjusted exercise selection in ${day.name} (${block.title || block.block_type}) for safety/focus alignment.`);
+          }
+          insertedForDay += 1;
         }
-
-        const repsMin = clamp(Number(exercise.reps_min || 8), 1, 25);
-        const repsMax = clamp(Number(exercise.reps_max || Math.max(10, repsMin)), repsMin, 30);
-        const restSeconds = clamp(Number(exercise.rest_seconds || 90), 20, 300);
-        const setsTarget = clamp(Number(exercise.sets_target || 3), 1, 8);
-
-        const { data: insertedExercise, error: exerciseError } = await supabase
-          .from("user_workout_plan_exercises")
-          .insert({
-            plan_day_id: dayInsert.id,
-            block_id: blockInsert.id,
-            exercise_id: resolvedExerciseId,
-            order_index: exerciseIndex + 1,
-            sets_target: setsTarget,
-            reps_min: repsMin,
-            reps_max: repsMax,
-            rest_seconds: restSeconds,
-            tempo: exercise.tempo || null,
-            technique_type: exercise.technique_type || null,
-            technique_config_json: exercise.technique_config_json || {},
-            set_style: exercise.set_style || null,
-            rir_target_min: exercise.rir_target_min,
-            rir_target_max: exercise.rir_target_max,
-            rpe_target_min: exercise.rpe_target_min,
-            rpe_target_max: exercise.rpe_target_max,
-            pause_seconds: exercise.pause_seconds,
-            user_notes: replaced ? `${exercise.notes || ""} (Auto-replaced due to constraints)` : (exercise.notes || null),
-            original_exercise_id: exercise.exercise_id,
-          })
-          .select("id, exercise_id")
-          .single();
-
-        if (exerciseError || !insertedExercise) {
-          throw new Error(`Failed to insert template exercise: ${exerciseError.message}`);
-        }
-
-        usedExerciseIds.add(resolvedExerciseId);
-        const selectedExercise = exerciseLookup.get(resolvedExerciseId);
-        const focusMatch = strictDayFocusTags.length > 0
-          ? !!selectedExercise && exerciseMatchesFocus(selectedExercise, strictDayFocusTags)
-          : true;
-        daySelections.push({
-          rowId: insertedExercise.id,
-          exerciseId: resolvedExerciseId,
-          focusMatch,
-        });
-
-        if (replaced) {
-          warnings.push(`Adjusted exercise selection in ${day.name} (${block.title || block.block_type}) for safety/focus alignment.`);
-        }
-        insertedForDay += 1;
       }
-    }
 
-    if (insertedForDay === 0) {
-      const fallback = pickReplacementExercise(
-        null,
-        strictDayFocusTags.length > 0 ? focusFallbackPool : exercisePool,
-        context,
-        day.sequence_index * 101,
-        {
-          focusTags: strictDayFocusTags.length ? strictDayFocusTags : dayFocusTags,
-          avoidIds: Array.from(usedExerciseIds),
-          strictFocus: strictDayFocusTags.length > 0,
-        },
-      );
-      if (fallback) {
-        const { data: insertedFallback, error: fallbackError } = await supabase
-          .from("user_workout_plan_exercises")
-          .insert({
-            plan_day_id: dayInsert.id,
-            block_id: null,
-            exercise_id: fallback.id,
-            order_index: 1,
-            sets_target: 3,
-            reps_min: 8,
-            reps_max: 12,
-            rest_seconds: 90,
-            tempo: null,
-            technique_type: null,
-            technique_config_json: {},
-            set_style: "straight",
-            user_notes: "Fallback exercise inserted to avoid empty workout day.",
-            original_exercise_id: fallback.id,
-          })
-          .select("id, exercise_id")
-          .single();
-        if (fallbackError || !insertedFallback) {
-          throw new Error(`Failed to insert fallback exercise: ${fallbackError?.message || "unknown"}`);
+      if (insertedForDay === 0) {
+        const fallback = pickReplacementExercise(
+          null,
+          strictDayFocusTags.length > 0 ? focusFallbackPool : exercisePool,
+          context,
+          day.sequence_index * 101,
+          {
+            focusTags: strictDayFocusTags.length ? strictDayFocusTags : dayFocusTags,
+            avoidIds: Array.from(usedExerciseIds),
+            strictFocus: strictDayFocusTags.length > 0,
+            avoidTerms: config.avoidExerciseTerms,
+            keepTerms: config.keepExerciseTerms,
+          },
+        );
+        if (fallback) {
+          const { data: insertedFallback, error: fallbackError } = await supabase
+            .from("user_workout_plan_exercises")
+            .insert({
+              plan_day_id: dayInsert.id,
+              block_id: null,
+              exercise_id: fallback.id,
+              order_index: 1,
+              sets_target: 3,
+              reps_min: 8,
+              reps_max: 12,
+              rest_seconds: 90,
+              tempo: null,
+              technique_type: null,
+              technique_config_json: {},
+              set_style: "straight",
+              user_notes: "Fallback exercise inserted to avoid empty workout day.",
+              original_exercise_id: fallback.id,
+            })
+            .select("id, exercise_id")
+            .single();
+          if (fallbackError || !insertedFallback) {
+            throw new Error(`Failed to insert fallback exercise: ${fallbackError?.message || "unknown"}`);
+          }
+          usedExerciseIds.add(fallback.id);
+          daySelections.push({
+            rowId: insertedFallback.id,
+            exerciseId: fallback.id,
+            focusMatch: strictDayFocusTags.length > 0
+              ? exerciseMatchesFocus(fallback, strictDayFocusTags)
+              : true,
+          });
+          insertedForDay += 1;
+          warnings.push(`Inserted fallback exercise for ${day.name} because template block became empty.`);
+        } else {
+          throw new Error(`Workout day ${day.name} has no valid exercises after constraints.`);
         }
-        usedExerciseIds.add(fallback.id);
-        daySelections.push({
-          rowId: insertedFallback.id,
-          exerciseId: fallback.id,
-          focusMatch: strictDayFocusTags.length > 0
-            ? exerciseMatchesFocus(fallback, strictDayFocusTags)
-            : true,
-        });
-        insertedForDay += 1;
-        warnings.push(`Inserted fallback exercise for ${day.name} because template block became empty.`);
-      } else {
-        throw new Error(`Workout day ${day.name} has no valid exercises after constraints.`);
       }
-    }
 
-    if (strictDayFocusTags.length > 0 && daySelections.length >= 3) {
-      const minimumFocused = Math.ceil(daySelections.length * MIN_DAY_FOCUS_MATCH_RATIO);
-      let focusedCount = daySelections.filter((selection) => selection.focusMatch).length;
-      let remainingNeeded = Math.max(0, minimumFocused - focusedCount);
+      if (strictDayFocusTags.length > 0 && daySelections.length >= 3) {
+        const minimumFocused = Math.ceil(daySelections.length * MIN_DAY_FOCUS_MATCH_RATIO);
+        let focusedCount = daySelections.filter((selection) => selection.focusMatch).length;
+        let remainingNeeded = Math.max(0, minimumFocused - focusedCount);
 
-      if (remainingNeeded > 0) {
-        for (const [index, selection] of daySelections.filter((entry) => !entry.focusMatch).entries()) {
-          if (remainingNeeded <= 0) break;
+        if (remainingNeeded > 0) {
+          for (const [index, selection] of daySelections.filter((entry) => !entry.focusMatch).entries()) {
+            if (remainingNeeded <= 0) break;
 
-          const currentExercise = exerciseLookup.get(selection.exerciseId) || null;
-          const avoidIds = daySelections
-            .filter((entry) => entry.rowId !== selection.rowId)
-            .map((entry) => entry.exerciseId);
+            const currentExercise = exerciseLookup.get(selection.exerciseId) || null;
+            const avoidIds = daySelections
+              .filter((entry) => entry.rowId !== selection.rowId)
+              .map((entry) => entry.exerciseId);
 
-          let replacement = pickReplacementExercise(
-            currentExercise,
-            focusFallbackPool,
-            context,
-            day.sequence_index * 211 + index,
-            {
-              focusTags: strictDayFocusTags,
-              avoidIds,
-              strictFocus: true,
-            },
-          );
-
-          if (!replacement) {
-            replacement = pickReplacementExercise(
+            let replacement = pickReplacementExercise(
               currentExercise,
               focusFallbackPool,
               context,
-              day.sequence_index * 223 + index,
+              day.sequence_index * 211 + index,
               {
                 focusTags: strictDayFocusTags,
-                avoidIds: [],
+                avoidIds,
                 strictFocus: true,
+                avoidTerms: config.avoidExerciseTerms,
+                keepTerms: config.keepExerciseTerms,
               },
             );
+
+            if (!replacement) {
+              replacement = pickReplacementExercise(
+                currentExercise,
+                focusFallbackPool,
+                context,
+                day.sequence_index * 223 + index,
+                {
+                  focusTags: strictDayFocusTags,
+                  avoidIds: [],
+                  strictFocus: true,
+                  avoidTerms: config.avoidExerciseTerms,
+                  keepTerms: config.keepExerciseTerms,
+                },
+              );
+            }
+
+            if (!replacement || !exerciseMatchesFocus(replacement, strictDayFocusTags)) {
+              continue;
+            }
+
+            const { error: updateError } = await supabase
+              .from("user_workout_plan_exercises")
+              .update({
+                exercise_id: replacement.id,
+                user_notes: "Auto-adjusted to maintain day-focus coherence.",
+              })
+              .eq("id", selection.rowId);
+
+            if (updateError) {
+              continue;
+            }
+
+            selection.exerciseId = replacement.id;
+            selection.focusMatch = true;
+            focusedCount += 1;
+            remainingNeeded = Math.max(0, minimumFocused - focusedCount);
+            warnings.push(`Tuned ${day.name} to maintain >${Math.round(MIN_DAY_FOCUS_MATCH_RATIO * 100)}% day-focus exercise coherence.`);
           }
-
-          if (!replacement || !exerciseMatchesFocus(replacement, strictDayFocusTags)) {
-            continue;
-          }
-
-          const { error: updateError } = await supabase
-            .from("user_workout_plan_exercises")
-            .update({
-              exercise_id: replacement.id,
-              user_notes: "Auto-adjusted to maintain day-focus coherence.",
-            })
-            .eq("id", selection.rowId);
-
-          if (updateError) {
-            continue;
-          }
-
-          selection.exerciseId = replacement.id;
-          selection.focusMatch = true;
-          focusedCount += 1;
-          remainingNeeded = Math.max(0, minimumFocused - focusedCount);
-          warnings.push(`Tuned ${day.name} to maintain >${Math.round(MIN_DAY_FOCUS_MATCH_RATIO * 100)}% day-focus exercise coherence.`);
         }
-      }
 
-      if (remainingNeeded > 0) {
-        warnings.push(`Limited ${day.name} focus pool under current constraints; full day-focus quota could not be met.`);
+        if (remainingNeeded > 0) {
+          warnings.push(`Limited ${day.name} focus pool under current constraints; full day-focus quota could not be met.`);
+        }
       }
     }
   }
@@ -1787,42 +3011,47 @@ async function storeWorkoutPlanFromTemplateV2(
     throw new Error("Selected template produced no workout days.");
   }
 
-  const daySelection = getAllowedWorkoutDays(
-    context.onboarding.training_days_per_week,
-    context.onboarding.preferred_days_off,
-  );
-  if (daySelection.warning) warnings.push(daySelection.warning);
+  const weeklyLayout = await seedWorkoutScheduleFromLayout(supabase, {
+    planId,
+    planDays: dayRecords.map((day) => ({
+      id: day.id,
+      dayType: day.day_type,
+    })),
+    daysPerWeek: template.days_per_week,
+    preferredDaysOff: context.onboarding.preferred_days_off,
+    horizonDays,
+  });
+  await updateWorkoutPlanMetadataWithFallback(supabase, planId, {
+    source_model: "v2_template",
+    program_template_v2_id: template.id,
+    program_family_key: template.family_key,
+    progression_model: template.progression_model,
+    training_style_tags: template.training_style_tags || [],
+    goal_tags: template.goal_tags || [],
+    weekly_layout_json: weeklyLayout,
+  });
+  await syncLegacyPlanDayScheduledDates(supabase, dayRecords, weeklyLayout);
 
-  const allowedDays = daySelection.allowedDays;
-  const cycleDayIds = dayRecords.map((d) => d.id);
-  let workoutCycleIndex = 0;
-  const weekStart = startOfWeek(new Date());
+  const coherenceValidation = await validateStoredWorkoutPlanCoherence(supabase, {
+    userId,
+    planId,
+    exercisePool,
+    templateEquipment: Array.from(
+      new Set(
+        exercisePool.flatMap((exercise) => exercise.equipment_required || []).filter(Boolean),
+      ),
+    ),
+    familyKey: template.family_key,
+    goalTags: template.goal_tags || [],
+  });
+  warnings.push(...coherenceValidation.warnings);
 
-  for (let offset = 0; offset < horizonDays; offset += 1) {
-    const date = new Date(weekStart);
-    date.setDate(weekStart.getDate() + offset);
-    const weekday = DAYS[date.getDay()];
-    const isWorkoutDay = allowedDays.includes(weekday);
-
-    const payload = isWorkoutDay
-      ? {
-          plan_id: planId,
-          plan_day_id: cycleDayIds[workoutCycleIndex++ % cycleDayIds.length],
-          scheduled_date: formatDate(date),
-          session_type: "workout",
-          status: "planned",
-        }
-      : {
-          plan_id: planId,
-          plan_day_id: null,
-          scheduled_date: formatDate(date),
-          session_type: "rest",
-          status: "planned",
-        };
-
-    const { error: scheduleErr } = await supabase.from("user_workout_plan_schedule").insert(payload);
-    if (scheduleErr) throw new Error(`Failed to insert schedule row: ${scheduleErr.message}`);
-  }
+  await finalizeStoredWorkoutPlanActivation(supabase, {
+    userId,
+    planId,
+    activationMode: config.activationMode,
+    currentPlanId: config.currentPlanContext?.planId || null,
+  });
 
   const dedupedWarnings = Array.from(new Set(warnings));
 
@@ -1850,6 +3079,7 @@ async function storeWorkoutPlan(
   context: UserContext,
   split: SplitDefinition,
   horizonDays: number,
+  config: WorkoutGenerationConfig,
 ) {
   const warnings: string[] = [];
 
@@ -1863,31 +3093,26 @@ async function storeWorkoutPlan(
 
   const version = (maxVersionData?.version || 0) + 1;
 
-  await supabase
-    .from("user_workout_plans")
-    .update({ is_active: false })
-    .eq("user_id", userId)
-    .eq("is_active", true);
-
-  const { data: workoutPlan, error: planError } = await supabase
-    .from("user_workout_plans")
-    .insert({
-      user_id: userId,
-      generation_run_id: runId,
-      version,
-      is_active: true,
-      name: `MetriqFit ${split.name}`,
-      description: split.description,
-      start_date: formatDate(new Date()),
-      total_weeks: Math.max(4, Math.ceil(horizonDays / 7)),
-      days_per_week: context.onboarding.training_days_per_week,
-    })
-    .select("id")
-    .single();
-
-  if (planError || !workoutPlan) {
-    throw new Error(`Failed to create workout plan: ${planError?.message || "unknown"}`);
-  }
+  const workoutPlan = await insertWorkoutPlanWithFallback(supabase, {
+    user_id: userId,
+    generation_run_id: runId,
+    version,
+    is_active: false,
+    lifecycle_state: config.activationMode === "preview" ? "preview" : "live",
+    replaces_plan_id: config.currentPlanContext?.planId || null,
+    source_model: "generated",
+    program_template_v2_id: null,
+    program_family_key: split.familyKey || split.key,
+    progression_model: context.onboarding.progression_preference || null,
+    training_style_tags: context.onboarding.technique_preferences || [],
+    goal_tags: context.onboarding.goal_type ? [context.onboarding.goal_type] : [],
+    weekly_layout_json: null,
+    name: `${config.activationMode === "preview" ? WORKOUT_PREVIEW_NAME_PREFIX : ""}MetriqFit ${split.name}`,
+    description: split.description,
+    start_date: formatDate(new Date()),
+    total_weeks: Math.max(4, Math.ceil(horizonDays / 7)),
+    days_per_week: context.onboarding.training_days_per_week,
+  });
 
   const planId = workoutPlan.id;
   const targetDaysPerWeek = context.onboarding.training_days_per_week;
@@ -1895,40 +3120,77 @@ async function storeWorkoutPlan(
     context.exercises,
     context.onboarding.equipment_access,
     context.onboarding.injuries,
+    config.avoidExerciseTerms,
   );
   warnings.push(...exerciseFilterResult.warnings);
 
   const exerciseSource = exerciseFilterResult.exercises.length ? exerciseFilterResult.exercises : context.exercises;
-  const exercisePools = buildExercisePools(exerciseSource);
-  const dayRecords: Array<{ id: string; day_number: number; name: string; focus: string }> = [];
+  const dayRecords: Array<{
+    id: string;
+    day_number: number;
+    name: string;
+    focus: string | null;
+    day_type: string;
+    estimated_duration_min: number | null;
+  }> = [];
 
   for (const [index, day] of split.days.entries()) {
-    const { data: dayInsert, error: dayError } = await supabase
-      .from("user_workout_plan_days")
-      .insert({
-        plan_id: planId,
-        day_number: index + 1,
-        name: day.name,
-        focus: day.focus,
-      })
-      .select("id, day_number, name, focus")
-      .single();
+    const dayInsert = await insertWorkoutPlanDayWithFallback(supabase, {
+      plan_id: planId,
+      day_number: index + 1,
+      name: day.name,
+      focus: day.focus,
+      day_type: "workout",
+      estimated_duration_min: config.sessionDurationTargetMin || 60,
+    });
 
-    if (dayError || !dayInsert) {
-      throw new Error(`Failed to create workout day: ${dayError?.message || "unknown"}`);
+    dayRecords.push({
+      ...dayInsert,
+      day_type: "workout",
+      estimated_duration_min: config.sessionDurationTargetMin || 60,
+    });
+
+    const selection = selectExercisesForGeneratedSplitDay({
+      day: {
+        ...day,
+        targetExercises: config.maxExercisesPerDay
+          ? Math.min(config.maxExercisesPerDay, Number(day.targetExercises || config.maxExercisesPerDay))
+          : day.targetExercises,
+        minExercises: config.maxExercisesPerDay
+          ? Math.min(config.maxExercisesPerDay, Number(day.minExercises || Math.min(4, config.maxExercisesPerDay)))
+          : day.minExercises,
+        minPrimaryExercises: config.maxExercisesPerDay
+          ? Math.min(config.maxExercisesPerDay, Number(day.minPrimaryExercises || Math.min(3, config.maxExercisesPerDay)))
+          : day.minPrimaryExercises,
+      } satisfies GeneratedSplitDayDefinition,
+      familyKey: split.familyKey || split.key,
+      dayIndex: index + 1,
+      daysPerWeek: split.frequency,
+      exercises: exerciseSource,
+      keepTerms: config.keepExerciseTerms,
+      avoidTerms: config.avoidExerciseTerms,
+    });
+
+    warnings.push(...selection.warnings.map((warning) => `${day.name}: ${warning}`));
+
+    if (selection.exercises.length < selection.minExercises || selection.primaryExerciseCount < selection.minPrimaryExercises) {
+      await deleteWorkoutPlanTree(supabase, planId);
+      throw new WorkoutGenerationValidationError(
+        `Workout day "${day.name}" could not be filled coherently with the current constraints.`,
+        warnings,
+      );
     }
 
-    dayRecords.push(dayInsert);
-
-    const picked = pickExercisesForDay(day, exercisePools, exerciseSource, index * 17 + split.frequency);
-
-    if (picked.length < 4) {
-      warnings.push(`Low exercise match for ${day.name}; fallback selection applied.`);
-    }
-
-    const exerciseInsert = picked.map((exercise) => ({
+    const exerciseInsert = selection.exercises.map((exercise, exerciseIndex) => ({
       plan_day_id: dayInsert.id,
-      ...exercise,
+      exercise_id: exercise.id,
+      order_index: exerciseIndex + 1,
+      sets_target: day.sets,
+      reps_min: day.repRange[0],
+      reps_max: day.repRange[1],
+      rest_seconds: day.restSeconds,
+      tempo: day.tempo || null,
+      user_notes: day.cue || null,
     }));
 
     const { error: exerciseError } = await supabase
@@ -1941,86 +3203,48 @@ async function storeWorkoutPlan(
   }
 
   const daySelection = getAllowedWorkoutDays(targetDaysPerWeek, context.onboarding.preferred_days_off);
-  const allowedDays = daySelection.allowedDays;
   if (daySelection.warning) warnings.push(daySelection.warning);
 
-  if (allowedDays.length !== targetDaysPerWeek) {
-    warnings.push(`Schedule generated ${allowedDays.length} workout days instead of requested ${targetDaysPerWeek}.`);
-  }
-  const dayNameToNum: Record<string, number> = {
-    mon: 1,
-    tue: 2,
-    wed: 3,
-    thu: 4,
-    fri: 5,
-    sat: 6,
-    sun: 7,
-  };
+  const weeklyLayout = await seedWorkoutScheduleFromLayout(supabase, {
+    planId,
+    planDays: dayRecords.map((day) => ({
+      id: day.id,
+      dayType: day.day_type,
+    })),
+    daysPerWeek: targetDaysPerWeek,
+    preferredDaysOff: context.onboarding.preferred_days_off,
+    horizonDays,
+  });
+  await updateWorkoutPlanMetadataWithFallback(supabase, planId, {
+    source_model: "generated",
+    program_template_v2_id: null,
+    program_family_key: split.familyKey || split.key,
+    progression_model: context.onboarding.progression_preference || null,
+    training_style_tags: context.onboarding.technique_preferences || [],
+    goal_tags: context.onboarding.goal_type ? [context.onboarding.goal_type] : [],
+    weekly_layout_json: weeklyLayout,
+  });
+  await syncLegacyPlanDayScheduledDates(supabase, dayRecords, weeklyLayout);
 
-  const cycleDayIds = dayRecords.map((d) => d.id);
-  let workoutCycleIndex = 0;
-  const weekStart = startOfWeek(new Date());
+  const coherenceValidation = await validateStoredWorkoutPlanCoherence(supabase, {
+    userId,
+    planId,
+    exercisePool: exerciseSource,
+    familyKey: split.familyKey || split.key,
+    goalTags: context.onboarding.goal_type ? [context.onboarding.goal_type] : [],
+  });
+  warnings.push(...coherenceValidation.warnings);
 
-  for (let offset = 0; offset < horizonDays; offset += 1) {
-    const date = new Date(weekStart);
-    date.setDate(weekStart.getDate() + offset);
-    const weekday = DAYS[date.getDay()];
-    const isWorkoutDay = allowedDays.includes(weekday);
-
-    if (isWorkoutDay) {
-      const planDayId = cycleDayIds[workoutCycleIndex % cycleDayIds.length];
-      workoutCycleIndex += 1;
-
-      const { error: scheduleErr } = await supabase
-        .from("user_workout_plan_schedule")
-        .insert({
-          plan_id: planId,
-          plan_day_id: planDayId,
-          scheduled_date: formatDate(date),
-          session_type: "workout",
-          status: "planned",
-        });
-
-      if (scheduleErr) {
-        throw new Error(`Failed to insert workout schedule: ${scheduleErr.message}`);
-      }
-    } else {
-      const { error: scheduleErr } = await supabase
-        .from("user_workout_plan_schedule")
-        .insert({
-          plan_id: planId,
-          plan_day_id: null,
-          scheduled_date: formatDate(date),
-          session_type: "rest",
-          status: "planned",
-        });
-
-      if (scheduleErr) {
-        throw new Error(`Failed to insert rest schedule: ${scheduleErr.message}`);
-      }
-    }
-  }
-
-  // Keep legacy scheduled_date aligned for day strip fallback.
-  const firstWeekDays = allowedDays
-    .map((d) => dayNameToNum[d])
-    .sort((a, b) => a - b)
-    .slice(0, cycleDayIds.length);
-
-  for (const [index, day] of dayRecords.entries()) {
-    const dayNum = firstWeekDays[index % firstWeekDays.length] || index + 1;
-    const scheduled = new Date(weekStart);
-    scheduled.setDate(weekStart.getDate() + (dayNum - 1));
-
-    await supabase
-      .from("user_workout_plan_days")
-      .update({ scheduled_date: formatDate(scheduled) })
-      .eq("id", day.id);
-  }
+  await finalizeStoredWorkoutPlanActivation(supabase, {
+    userId,
+    planId,
+    activationMode: config.activationMode,
+    currentPlanId: config.currentPlanContext?.planId || null,
+  });
 
   return {
     planId,
-    warnings,
+    warnings: Array.from(new Set(warnings)),
     splitName: split.name,
     scheduleCount: horizonDays,
   };
@@ -2036,9 +3260,14 @@ async function storeNutritionPlan(
   horizonDays: number,
   strictMacroMode: boolean,
   varietyProfile: VarietyProfile,
+  activationMode: ActivationMode,
+  currentPlanId: string | null,
+  mealSlots: NutritionMealSlot[],
 ) {
   const warnings: string[] = [];
   const nutritionDays = Math.max(7, Math.min(14, horizonDays));
+  const normalizedMealSlots = normalizeNutritionSlots(mealSlots);
+  const slotRatio = buildNutritionSlotRatio(normalizedMealSlots);
 
   const { data: maxVersionData } = await supabase
     .from("user_nutrition_plans")
@@ -2050,11 +3279,13 @@ async function storeNutritionPlan(
 
   const version = (maxVersionData?.version || 0) + 1;
 
-  await supabase
-    .from("user_nutrition_plans")
-    .update({ is_active: false })
-    .eq("user_id", userId)
-    .eq("is_active", true);
+  if (activationMode === "activate") {
+    await supabase
+      .from("user_nutrition_plans")
+      .update({ is_active: false, lifecycle_state: "archived" })
+      .eq("user_id", userId)
+      .eq("is_active", true);
+  }
 
   const { data: nutritionPlan, error: planError } = await supabase
     .from("user_nutrition_plans")
@@ -2062,17 +3293,21 @@ async function storeNutritionPlan(
       user_id: userId,
       generation_run_id: runId,
       version,
-      is_active: true,
-      name: "MetriqFit Adaptive Nutrition Plan",
+      is_active: activationMode === "activate",
+      lifecycle_state: activationMode === "preview" ? "preview" : "live",
+      replaces_plan_id: activationMode === "preview" ? currentPlanId : null,
+      name: activationMode === "preview"
+        ? `${NUTRITION_PREVIEW_NAME_PREFIX}MetriqFit Adaptive Nutrition Plan`
+        : "MetriqFit Adaptive Nutrition Plan",
       description: "7-day ingredient-level plan generated from onboarding preferences and macro targets.",
       meal_structure: {
-        slots: SLOT_ORDER,
+        slots: normalizedMealSlots,
         breakfast: [],
         lunch: [],
         dinner: [],
         snacks: [],
       },
-      macro_distribution: SLOT_RATIO,
+      macro_distribution: slotRatio,
       dietary_preferences: {
         preference: context.onboarding.dietary_preference,
         allergies: context.onboarding.allergies_exclusions,
@@ -2097,16 +3332,33 @@ async function storeNutritionPlan(
     warnings.push("No foods matched dietary filters. Falling back to full library.");
   }
 
-  const workingFoods = allowedFoods.length ? allowedFoods : FOOD_LIBRARY;
-  const dbFoodsByName = new Map(
-    context.foods.map((food) => [food.name.toLowerCase(), food]),
+  const dbFoodLookup = buildFoodRecordLookup(context.foods);
+  const mappedAllowedFoods = (allowedFoods.length ? allowedFoods : FOOD_LIBRARY).filter((food) =>
+    !!findBestFoodRecordMatch(food.name, dbFoodLookup)
   );
+  const mappedFallbackFoods = FOOD_LIBRARY.filter((food) =>
+    !!findBestFoodRecordMatch(food.name, dbFoodLookup)
+  );
+
+  if (!mappedAllowedFoods.length && allowedFoods.length) {
+    warnings.push("Dietary-filtered foods did not fully map to the food database. Falling back to mapped foods from the full library.");
+  }
+
+  const workingFoods = mappedAllowedFoods.length ? mappedAllowedFoods : mappedFallbackFoods;
+  if (!workingFoods.length) {
+    throw new Error("No mapped foods are available to build a loggable nutrition plan.");
+  }
+
   const proteinPool = buildMacroRotationPool(workingFoods, "protein", varietyProfile);
   const carbPool = buildMacroRotationPool(workingFoods, "carb", varietyProfile);
   const fatPool = buildMacroRotationPool(workingFoods, "fat", varietyProfile);
   const producePool = workingFoods.filter((food) =>
     food.tags.includes("veggie") || food.tags.includes("fruit") || food.tags.includes("breakfast")
   );
+
+  if (!proteinPool.length || !carbPool.length || !fatPool.length || !producePool.length) {
+    throw new Error("Could not build a fully mapped nutrition plan with the current food library and dietary constraints.");
+  }
 
   if (proteinPool.length < 4) {
     warnings.push("Protein variety is limited by dietary constraints; using reduced rotation.");
@@ -2126,11 +3378,11 @@ async function storeNutritionPlan(
       fat: context.targets.fat_g * dayVariation,
     };
 
-    const mealTargets = SLOT_ORDER.map((slot) => ({
+    const mealTargets = normalizedMealSlots.map((slot) => ({
       slot,
-      protein: dayTargets.protein * SLOT_RATIO[slot],
-      carbs: dayTargets.carbs * SLOT_RATIO[slot],
-      fat: dayTargets.fat * SLOT_RATIO[slot],
+      protein: dayTargets.protein * slotRatio[slot],
+      carbs: dayTargets.carbs * slotRatio[slot],
+      fat: dayTargets.fat * slotRatio[slot],
     }));
     const dayActualTotals = { calories: 0, protein: 0, carbs: 0, fat: 0 };
 
@@ -2171,7 +3423,7 @@ async function storeNutritionPlan(
           workingFoods,
           dayIndex * 31 + meal.slot.length,
           0,
-          dbFoodsByName,
+          dbFoodLookup,
           { strictMacroMode, anchors: defaultAnchors },
         ),
       ];
@@ -2197,7 +3449,7 @@ async function storeNutritionPlan(
             workingFoods,
             dayIndex * 37 + meal.slot.length,
             1,
-            dbFoodsByName,
+            dbFoodLookup,
             { strictMacroMode, anchors: alt1Anchors },
           ),
           buildMealVariant(
@@ -2206,7 +3458,7 @@ async function storeNutritionPlan(
             workingFoods,
             dayIndex * 43 + meal.slot.length,
             2,
-            dbFoodsByName,
+            dbFoodLookup,
             { strictMacroMode, anchors: alt2Anchors },
           ),
         );
@@ -2464,6 +3716,8 @@ serve(async (req) => {
     const body = await req.json() as {
       user_id?: string;
       plan_type?: PlanType;
+      generation_mode?: GenerationMode;
+      activation_mode?: ActivationMode;
       generation_horizon_days?: number | { workout?: number; nutrition?: number };
       macro_tolerance_percent?: number;
       include_variants?: boolean;
@@ -2475,6 +3729,8 @@ serve(async (req) => {
       strict_macro_mode?: boolean;
       variety_profile?: VarietyProfile;
       strict_template_source?: boolean;
+      workout_regeneration?: WorkoutRegenerationRequest | null;
+      nutrition_regeneration?: NutritionRegenerationRequest | null;
     };
 
     const userId = body.user_id || authData.user.id;
@@ -2498,9 +3754,17 @@ serve(async (req) => {
     const strictDaysMatch = body.strict_days_match !== false;
     const strictMacroMode = body.strict_macro_mode !== false;
     const strictTemplateSource = body.strict_template_source === true;
+    const generationMode: GenerationMode = body.generation_mode === "regenerate" ? "regenerate" : "initial";
+    const activationMode: ActivationMode = body.activation_mode === "preview" ? "preview" : "activate";
     const programFamilyPreference = body.program_family_preference || null;
     const trainingStylePreferences = (body.training_style_preferences || []).filter(Boolean);
     const progressionPreference = body.progression_preference || null;
+    const workoutRegeneration = generationMode === "regenerate" && planType !== "nutrition"
+      ? (body.workout_regeneration || null)
+      : null;
+    const nutritionRegeneration = generationMode === "regenerate" && planType !== "workout"
+      ? (body.nutrition_regeneration || null)
+      : null;
     const varietyProfile: VarietyProfile = body.variety_profile === "minimal" || body.variety_profile === "high"
       ? body.variety_profile
       : "moderate_rotation_4_5";
@@ -2512,6 +3776,20 @@ serve(async (req) => {
       global: { headers: { Authorization: authHeader } },
     });
 
+    const currentPlanContext = (planType === "workout" || planType === "both")
+      ? await fetchCurrentWorkoutPlanContext(supabase, userId, workoutRegeneration?.current_plan_id || null)
+      : null;
+    const currentNutritionPlanContext = (planType === "nutrition" || planType === "both")
+      ? await fetchCurrentNutritionPlanContext(supabase, userId, nutritionRegeneration?.current_plan_id || null)
+      : null;
+
+    if (generationMode === "regenerate" && (planType === "workout" || planType === "both") && !currentPlanContext) {
+      return jsonResponse({ success: false, error: "No active workout plan found for regeneration" }, 400);
+    }
+    if (generationMode === "regenerate" && (planType === "nutrition" || planType === "both") && !currentNutritionPlanContext) {
+      return jsonResponse({ success: false, error: "No active nutrition plan found for regeneration" }, 400);
+    }
+
     const startedAt = Date.now();
 
     const { data: runData, error: runError } = await supabase
@@ -2521,8 +3799,11 @@ serve(async (req) => {
         plan_type: planType,
         status: "pending",
         planner_mode: "hybrid",
-        generation_version: 3,
+        generation_version: 4,
         input_context: {
+          generation_mode: generationMode,
+          activation_mode: activationMode,
+          trigger_source: generationMode === "regenerate" ? "my_plan_regenerate" : "system_generate",
           workout_horizon_days: workoutHorizon,
           nutrition_horizon_days: nutritionHorizon,
           include_variants: includeVariants,
@@ -2535,6 +3816,24 @@ serve(async (req) => {
           strict_macro_mode: strictMacroMode,
           strict_template_source: strictTemplateSource,
           variety_profile: varietyProfile,
+          current_plan_snapshot: currentPlanContext
+            ? {
+                plan_id: currentPlanContext.planId,
+                family_key: currentPlanContext.familyKey,
+                progression_model: currentPlanContext.progressionModel,
+                days_per_week: currentPlanContext.daysPerWeek,
+                weekly_layout: currentPlanContext.weeklyLayout,
+              }
+            : null,
+          current_nutrition_plan_snapshot: currentNutritionPlanContext
+            ? {
+                plan_id: currentNutritionPlanContext.planId,
+                meal_slots: currentNutritionPlanContext.mealSlots,
+              }
+            : null,
+          adherence_summary: currentPlanContext?.adherenceSummary || null,
+          workout_regeneration: workoutRegeneration,
+          nutrition_regeneration: nutritionRegeneration,
         },
       })
       .select("id")
@@ -2549,6 +3848,28 @@ serve(async (req) => {
 
     try {
       const context = await fetchUserContext(supabase, userId);
+      const workoutContext = applyWorkoutRegenerationToContext(
+        context,
+        workoutRegeneration,
+        currentPlanContext,
+      );
+      const nutritionContext = applyNutritionRegenerationToContext(
+        workoutContext,
+        nutritionRegeneration,
+      );
+      const workoutConfig = buildWorkoutGenerationConfig({
+        generationMode,
+        activationMode,
+        workoutRegeneration,
+        currentPlanContext,
+      });
+      const effectiveProgramFamilyPreference =
+        workoutRegeneration?.preferred_split_family
+        || (workoutRegeneration?.keep_current_split ? currentPlanContext?.familyKey || null : null)
+        || programFamilyPreference;
+      const effectiveProgressionPreference =
+        workoutRegeneration?.progression_preference
+        || progressionPreference;
 
       let workoutResult:
         | Awaited<ReturnType<typeof storeWorkoutPlan>>
@@ -2556,66 +3877,150 @@ serve(async (req) => {
         | null = null;
       let nutritionResult: Awaited<ReturnType<typeof storeNutritionPlan>> | null = null;
 
-      if (planType === "workout" || planType === "both") {
+      const generateWorkoutCandidate = async (attemptConfig: WorkoutGenerationConfig) => {
         const selectedTemplate = await chooseTemplateFromCatalog(
           supabase,
-          context,
+          workoutContext,
           {
             strictDaysMatch,
             splitOverride: body.split_override || null,
-            programFamilyPreference,
+            programFamilyPreference: effectiveProgramFamilyPreference,
             trainingStylePreferences,
-            progressionPreference,
+            progressionPreference: effectiveProgressionPreference,
             strictTemplateSource,
+            excludeFamilyKey: attemptConfig.excludeFamilyKey,
           },
         );
         warnings.push(...selectedTemplate.warnings);
 
         if (selectedTemplate.template) {
-          workoutResult = await storeWorkoutPlanFromTemplateV2(
+          const result = await storeWorkoutPlanFromTemplateV2(
             supabase,
             userId,
             runId,
-            context,
+            workoutContext,
             selectedTemplate.template,
             workoutHorizon,
+            attemptConfig,
           );
-          warnings.push(...workoutResult.warnings);
-        } else {
-          if (strictTemplateSource) {
-            throw new Error("No v2 workout template matched strict requirements.");
+          warnings.push(...result.warnings);
+          return result;
+        }
+
+        if (strictTemplateSource) {
+          throw new Error("No v2 workout template matched strict requirements.");
+        }
+
+        const split = chooseSplit(
+          workoutContext,
+          body.split_override,
+          strictDaysMatch,
+          attemptConfig.excludeFamilyKey,
+        );
+
+        const result = await storeWorkoutPlan(
+          supabase,
+          userId,
+          runId,
+          workoutContext,
+          split,
+          workoutHorizon,
+          attemptConfig,
+        );
+
+        warnings.push(...result.warnings);
+        return result;
+      };
+
+      if (planType === "workout" || planType === "both") {
+        workoutResult = await generateWorkoutCandidate(workoutConfig);
+
+        if (
+          generationMode === "regenerate"
+          && activationMode === "preview"
+          && currentPlanContext
+          && workoutResult?.planId
+        ) {
+          let previewComparable = await fetchStoredWorkoutPlanComparable(supabase, userId, workoutResult.planId);
+          if (!previewComparable) {
+            throw new Error("Generated workout preview could not be compared");
           }
 
-          const split = chooseSplit(
-            context,
-            body.split_override,
-            strictDaysMatch,
-          );
+          let previewDiff = buildWorkoutPlanDiff({
+            currentPlan: currentPlanContext.comparablePlan,
+            previewPlan: previewComparable,
+            minorRefinement: workoutConfig.minorRefinement,
+          });
 
-          workoutResult = await storeWorkoutPlan(
-            supabase,
-            userId,
-            runId,
-            context,
-            split,
-            workoutHorizon,
-          );
+          if (!previewDiff.isMateriallyDifferent) {
+            await deleteWorkoutPlanTree(supabase, workoutResult.planId);
 
-          warnings.push(...workoutResult.warnings);
+            const retryExcludeFamily = currentPlanContext.familyKey
+              || workoutConfig.excludeFamilyKey
+              || null;
+            const retryConfig: WorkoutGenerationConfig = {
+              ...workoutConfig,
+              excludeFamilyKey: retryExcludeFamily,
+            };
+
+            workoutResult = await generateWorkoutCandidate(retryConfig);
+            previewComparable = await fetchStoredWorkoutPlanComparable(supabase, userId, workoutResult.planId);
+            if (!previewComparable) {
+              throw new Error("Regenerated workout preview could not be compared");
+            }
+
+            previewDiff = buildWorkoutPlanDiff({
+              currentPlan: currentPlanContext.comparablePlan,
+              previewPlan: previewComparable,
+              minorRefinement: retryConfig.minorRefinement,
+            });
+
+            if (!previewDiff.isMateriallyDifferent) {
+              await deleteWorkoutPlanTree(supabase, workoutResult.planId);
+              const validationMessage = "We need more direction to build a meaningfully different plan.";
+
+              await supabase
+                .from("plan_generation_runs")
+                .update({
+                  status: "validation_failed",
+                  completed_at: new Date().toISOString(),
+                  validation_errors: [validationMessage],
+                  warnings_json: warnings,
+                  ai_response: {
+                    current_plan_id: currentPlanContext.planId,
+                    no_op_blocked: true,
+                  },
+                })
+                .eq("id", runId);
+
+              return jsonResponse({
+                success: false,
+                status: "validation_failed",
+                run_id: runId,
+                runId,
+                message: validationMessage,
+                warnings,
+              });
+            }
+          }
         }
       }
 
       if (planType === "nutrition" || planType === "both") {
+        const nutritionMealSlots = resolveNutritionMealSlots(nutritionRegeneration, currentNutritionPlanContext);
         nutritionResult = await storeNutritionPlan(
           supabase,
           userId,
           runId,
-          context,
+          nutritionContext,
           macroTolerancePercent,
           includeVariants,
           nutritionHorizon,
           strictMacroMode,
           varietyProfile,
+          activationMode,
+          currentNutritionPlanContext?.planId || null,
+          nutritionMealSlots,
         );
 
         warnings.push(...nutritionResult.warnings);
@@ -2624,6 +4029,7 @@ serve(async (req) => {
       const consistencySeeded = await seedConsistency(supabase, userId);
 
       const durationMs = Date.now() - startedAt;
+      const dedupedWarnings = Array.from(new Set(warnings));
 
       await supabase
         .from("plan_generation_runs")
@@ -2638,13 +4044,16 @@ serve(async (req) => {
             nutrition_variant_count: nutritionResult?.variantCount || 0,
             workout_selection: (workoutResult as any)?.selection || null,
             consistency_seeded: consistencySeeded,
+            activation_mode: activationMode,
+            generation_mode: generationMode,
           },
-          warnings_json: warnings,
+          warnings_json: dedupedWarnings,
         })
         .eq("id", runId);
 
       return jsonResponse({
         success: true,
+        status: activationMode === "preview" ? "preview_ready" : "success",
         run_id: runId,
         runId,
         workout_plan_id: workoutResult?.planId,
@@ -2654,10 +4063,37 @@ serve(async (req) => {
         workout_schedule_count: workoutResult?.scheduleCount || 0,
         nutrition_variant_count: nutritionResult?.variantCount || 0,
         consistency_seeded: consistencySeeded,
-        warnings,
+        warnings: dedupedWarnings,
       });
     } catch (generationError) {
       const err = generationError as Error;
+      const dedupedWarnings = Array.from(
+        new Set([
+          ...warnings,
+          ...(generationError instanceof WorkoutGenerationValidationError ? generationError.warnings : []),
+        ]),
+      );
+
+      if (generationError instanceof WorkoutGenerationValidationError) {
+        await supabase
+          .from("plan_generation_runs")
+          .update({
+            status: "validation_failed",
+            completed_at: new Date().toISOString(),
+            validation_errors: [err.message],
+            warnings_json: dedupedWarnings,
+          })
+          .eq("id", runId);
+
+        return jsonResponse({
+          success: false,
+          status: "validation_failed",
+          run_id: runId,
+          runId,
+          message: err.message,
+          warnings: dedupedWarnings,
+        });
+      }
 
       await supabase
         .from("plan_generation_runs")
@@ -2665,7 +4101,7 @@ serve(async (req) => {
           status: "failed",
           completed_at: new Date().toISOString(),
           validation_errors: [err.message],
-          warnings_json: warnings,
+          warnings_json: dedupedWarnings,
         })
         .eq("id", runId);
 

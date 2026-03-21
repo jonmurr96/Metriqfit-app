@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import {
   ActivityIndicator,
   Alert,
@@ -9,17 +9,19 @@ import {
   TextInput,
   View,
 } from 'react-native';
-import { useRouter } from 'expo-router';
+import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useTokens } from '../../../lib/theme';
 import { TabBarIcon } from '../../../components/navigation/TabBarIcon';
 import { useImportWorkoutPlan, useResolveWorkoutImportMappings } from '../../../hooks/useWorkoutImport';
+import { trackWorkoutPlanImportOpenedFromMyPlan } from '../../../lib/analytics';
 
 type SourceType = 'text' | 'json' | 'csv';
 
 export default function ImportWorkoutPlanScreen() {
   const { c, s, ty, r } = useTokens();
   const router = useRouter();
+  const params = useLocalSearchParams<{ entry?: string }>();
   const insets = useSafeAreaInsets();
   const [sourceType, setSourceType] = useState<SourceType>('text');
   const [payload, setPayload] = useState('');
@@ -30,6 +32,12 @@ export default function ImportWorkoutPlanScreen() {
   const resolveMutation = useResolveWorkoutImportMappings();
 
   const unresolved = useMemo(() => lastResult?.unresolvedMappings || [], [lastResult]);
+
+  useEffect(() => {
+    if (params.entry === 'my_plan') {
+      trackWorkoutPlanImportOpenedFromMyPlan({ source: 'my_plan' });
+    }
+  }, [params.entry]);
 
   const submitImport = async () => {
     if (!payload.trim()) {
@@ -85,7 +93,7 @@ export default function ImportWorkoutPlanScreen() {
       }
 
       Alert.alert('Plan imported', 'Your imported plan is now active.');
-      router.replace('/(tabs)/workout');
+      router.replace('/(tabs)/workout/my-plan');
     } catch (error: any) {
       Alert.alert('Activation failed', error.message || 'Try again.');
     }
@@ -103,8 +111,24 @@ export default function ImportWorkoutPlanScreen() {
 
       <ScrollView contentContainerStyle={{ padding: s.lg, paddingBottom: insets.bottom + 120 }}>
         <Text style={{ color: c.textMuted, fontFamily: ty.body.family, fontSize: ty.sizes.sm }}>
+          Paste a workout from notes, a coach, a spreadsheet export, or another app.
+        </Text>
+        <Text style={{ color: c.textMuted, fontFamily: ty.body.family, fontSize: ty.sizes.xs, marginTop: s.xs }}>
           Supported formats: plain text, JSON, CSV. Import stays fully editable in builder after activation.
         </Text>
+
+        <View style={{ marginTop: s.md, backgroundColor: c.surface, borderRadius: r.lg, borderWidth: 1, borderColor: c.border, padding: s.md }}>
+          <Text style={{ color: c.text, fontFamily: ty.body.familySemibold, fontSize: ty.sizes.sm }}>Examples</Text>
+          <Text style={{ color: c.textMuted, fontFamily: ty.body.family, fontSize: ty.sizes.xs, marginTop: s.xs }}>
+            Text: Day 1 - Push / Bench Press, 4x8 / Overhead Press, 3x10
+          </Text>
+          <Text style={{ color: c.textMuted, fontFamily: ty.body.family, fontSize: ty.sizes.xs, marginTop: s.xs }}>
+            JSON: {"{ \"days\": [{ \"name\": \"Day 1\", \"exercises\": [...] }] }"}
+          </Text>
+          <Text style={{ color: c.textMuted, fontFamily: ty.body.family, fontSize: ty.sizes.xs, marginTop: s.xs }}>
+            CSV: day,exercise,sets,reps,rest
+          </Text>
+        </View>
 
         <View style={{ flexDirection: 'row', gap: 8, marginTop: s.md }}>
           {(['text', 'json', 'csv'] as const).map((type) => (

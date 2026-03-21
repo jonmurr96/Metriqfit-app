@@ -1,67 +1,118 @@
 /**
- * React Query hooks for AI Coach Service
- * Handles chat messages, conversation history, and rate limiting
+ * React Query hooks for AI Coach
+ * Handles chat, dashboard aggregation, interventions, memory, and rate limiting.
  */
 
-import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { useAuth } from '../lib/auth/AuthProvider';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import {
-  sendMessage,
-  getConversationHistory,
-  checkRateLimit,
-  getDailyUsage,
+  approveActionProposal,
+  appendStatusReceiptMessage,
+  buildThreadItems,
   clearConversationHistory,
-  getSuggestedPrompts,
+  checkRateLimit,
+  executeLowRiskAction,
+  getAICoachDashboard,
+  getAICoachInterventions,
+  getAICoachMemoryItems,
+  getAICoachToolReceipts,
+  getAssistantCapabilities,
+  getCoachStatusStrip,
+  getConversationHistory,
+  getConversationThreadMessages,
+  getConversationThreads,
+  getDailyUsage,
   getLatestConsistencyRecommendation,
-  type ChatMessage,
-  type RateLimitStatus,
+  getPendingCoachActions,
+  getParsedConversationHistory,
+  getSuggestedPrompts,
+  rejectActionProposal,
+  searchWeb,
+  sendMessage,
+  updateSetting,
+  updateAICoachMemoryItemStatus,
+  type AICoachAssistantCapabilities,
+  type AICoachConversationSummary,
+  type AICoachConversationMessage,
+  type AICoachDashboardState,
+  type AICoachIntervention,
+  type AICoachMemoryItem,
+  type AICoachReceipt,
+  type AICoachStatusStripState,
+  type AICoachThreadItem,
+  type AICoachToolReceipt,
   type AIUsageDaily,
+  type ChatMessage,
   type ConsistencyRecommendation,
   type PrepPromptContext,
 } from '../services/aiCoachService';
 
-// Query Keys
 export const aiCoachKeys = {
   all: ['ai-coach'] as const,
   conversation: (userId: string) => [...aiCoachKeys.all, 'conversation', userId] as const,
+  parsedConversation: (userId: string) => [...aiCoachKeys.all, 'conversation-parsed', userId] as const,
   rateLimit: (userId: string) => [...aiCoachKeys.all, 'rate-limit', userId] as const,
   usage: (userId: string, date: string) => [...aiCoachKeys.all, 'usage', userId, date] as const,
   prompts: () => [...aiCoachKeys.all, 'prompts'] as const,
   recommendation: (userId: string) => [...aiCoachKeys.all, 'recommendation', userId] as const,
+  dashboard: (userId: string) => [...aiCoachKeys.all, 'dashboard', userId] as const,
+  interventions: (userId: string) => [...aiCoachKeys.all, 'interventions', userId] as const,
+  memory: (userId: string) => [...aiCoachKeys.all, 'memory', userId] as const,
+  threads: (userId: string) => [...aiCoachKeys.all, 'threads', userId] as const,
+  thread: (userId: string, threadId: string) => [...aiCoachKeys.all, 'thread', userId, threadId] as const,
+  statusStrip: (userId: string) => [...aiCoachKeys.all, 'status-strip', userId] as const,
+  pendingActions: (userId: string) => [...aiCoachKeys.all, 'pending-actions', userId] as const,
 };
 
-/**
- * Get conversation history
- */
 export function useConversationHistory(userId?: string, limit = 50) {
-  return useQuery({
+  return useQuery<ChatMessage[]>({
     queryKey: aiCoachKeys.conversation(userId || ''),
     queryFn: () => userId ? getConversationHistory(userId, limit) : Promise.resolve([]),
     enabled: !!userId,
-    staleTime: 30 * 1000, // 30 seconds
+    staleTime: 30 * 1000,
   });
 }
 
-/**
- * Check rate limit status
- */
+export function useParsedConversationHistory(userId?: string, limit = 50) {
+  return useQuery<AICoachConversationMessage[]>({
+    queryKey: aiCoachKeys.parsedConversation(userId || ''),
+    queryFn: () => userId ? getParsedConversationHistory(userId, limit) : Promise.resolve([]),
+    enabled: !!userId,
+    staleTime: 30 * 1000,
+  });
+}
+
+export function useConversationThreads(userId?: string, limit = 200) {
+  return useQuery<AICoachConversationSummary[]>({
+    queryKey: aiCoachKeys.threads(userId || ''),
+    queryFn: () => userId ? getConversationThreads(userId, limit) : Promise.resolve([]),
+    enabled: !!userId,
+    staleTime: 30 * 1000,
+  });
+}
+
+export function useConversationThread(userId?: string, threadId?: string, limit = 200) {
+  return useQuery<AICoachConversationMessage[]>({
+    queryKey: aiCoachKeys.thread(userId || '', threadId || 'latest'),
+    queryFn: () => userId ? getConversationThreadMessages(userId, threadId, limit) : Promise.resolve([]),
+    enabled: !!userId,
+    staleTime: 30 * 1000,
+  });
+}
+
 export function useRateLimitStatus(userId?: string, isElite = false) {
   return useQuery({
     queryKey: aiCoachKeys.rateLimit(userId || ''),
     queryFn: () => userId ? checkRateLimit(userId, isElite) : Promise.resolve(null),
     enabled: !!userId,
-    staleTime: 60 * 1000, // 1 minute
+    staleTime: 60 * 1000,
     refetchOnWindowFocus: true,
   });
 }
 
-/**
- * Get daily AI usage stats
- */
 export function useDailyAIUsage(userId?: string, date?: string) {
   const targetDate = date || new Date().toISOString().split('T')[0];
 
-  return useQuery({
+  return useQuery<AIUsageDaily | null>({
     queryKey: aiCoachKeys.usage(userId || '', targetDate),
     queryFn: () => userId ? getDailyUsage(userId) : Promise.resolve(null),
     enabled: !!userId,
@@ -69,9 +120,6 @@ export function useDailyAIUsage(userId?: string, date?: string) {
   });
 }
 
-/**
- * Get suggested prompts
- */
 export function useSuggestedPrompts(
   hasLoggedToday = false,
   hasActiveWorkout = false,
@@ -84,18 +132,17 @@ export function useSuggestedPrompts(
       hasLoggedToday,
       hasActiveWorkout,
       consistencyRecommendation?.type || 'none',
-      prepContext?.prepModeEnabled ? `prep:${prepContext.prepDiscipline || 'unknown'}:${prepContext.prepPhase || 'unknown'}` : 'prep:none',
+      prepContext?.prepModeEnabled
+        ? `prep:${prepContext.prepDiscipline || 'unknown'}:${prepContext.prepPhase || 'unknown'}`
+        : 'prep:none',
     ],
     queryFn: () => getSuggestedPrompts(hasLoggedToday, hasActiveWorkout, consistencyRecommendation, prepContext),
-    staleTime: Infinity, // Static data
+    staleTime: Infinity,
   });
 }
 
-/**
- * Get latest consistency recommendation.
- */
 export function useConsistencyRecommendation(userId?: string) {
-  return useQuery({
+  return useQuery<ConsistencyRecommendation | null>({
     queryKey: aiCoachKeys.recommendation(userId || ''),
     queryFn: () => userId ? getLatestConsistencyRecommendation(userId) : Promise.resolve(null),
     enabled: !!userId,
@@ -103,34 +150,90 @@ export function useConsistencyRecommendation(userId?: string) {
   });
 }
 
-/**
- * Send message to AI Coach
- */
+export function useAICoachDashboard(userId?: string) {
+  return useQuery<AICoachDashboardState | null>({
+    queryKey: aiCoachKeys.dashboard(userId || ''),
+    queryFn: () => userId ? getAICoachDashboard(userId) : Promise.resolve(null),
+    enabled: !!userId,
+    staleTime: 30 * 1000,
+  });
+}
+
+export function useCoachStatusStrip(userId?: string) {
+  return useQuery<AICoachStatusStripState | null>({
+    queryKey: aiCoachKeys.statusStrip(userId || ''),
+    queryFn: () => userId ? getCoachStatusStrip(userId) : Promise.resolve(null),
+    enabled: !!userId,
+    staleTime: 30 * 1000,
+  });
+}
+
+export function useAICoachInterventions(userId?: string) {
+  return useQuery<AICoachIntervention[]>({
+    queryKey: aiCoachKeys.interventions(userId || ''),
+    queryFn: () => userId ? getAICoachInterventions(userId) : Promise.resolve([]),
+    enabled: !!userId,
+    staleTime: 30 * 1000,
+  });
+}
+
+export function usePendingCoachActions(userId?: string) {
+  return useQuery<AICoachIntervention[]>({
+    queryKey: aiCoachKeys.pendingActions(userId || ''),
+    queryFn: () => userId ? getPendingCoachActions(userId) : Promise.resolve([]),
+    enabled: !!userId,
+    staleTime: 30 * 1000,
+  });
+}
+
+export function useAICoachMemory(userId?: string) {
+  return useQuery<AICoachMemoryItem[]>({
+    queryKey: aiCoachKeys.memory(userId || ''),
+    queryFn: () => userId ? getAICoachMemoryItems(userId) : Promise.resolve([]),
+    enabled: !!userId,
+    staleTime: 30 * 1000,
+  });
+}
+
+export function useUpdateAICoachMemoryStatus(userId?: string) {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: (input: { memoryId: string; status: 'active' | 'resolved' | 'dismissed' }) =>
+      updateAICoachMemoryItemStatus(input),
+    onSuccess: () => {
+      if (!userId) return;
+      queryClient.invalidateQueries({ queryKey: aiCoachKeys.memory(userId) });
+      queryClient.invalidateQueries({ queryKey: aiCoachKeys.dashboard(userId) });
+    },
+  });
+}
+
 export function useSendMessage(userId?: string) {
   const queryClient = useQueryClient();
 
   return useMutation({
-    mutationFn: async (message: string) => {
-      if (!userId) throw new Error("User ID required");
-      return sendMessage(userId, message);
+    mutationFn: async (input: string | { message: string; options?: Parameters<typeof sendMessage>[2] }) => {
+      if (!userId) throw new Error('User ID required');
+      if (typeof input === 'string') {
+        return sendMessage(userId, input);
+      }
+      return sendMessage(userId, input.message, input.options);
     },
-    onMutate: async (message) => {
+    onMutate: async (input) => {
       if (!userId) return;
+      const message = typeof input === 'string' ? input : input.message;
 
-      // Cancel outgoing refetches
-      await queryClient.cancelQueries({
-        queryKey: aiCoachKeys.conversation(userId),
-      });
+      await queryClient.cancelQueries({ queryKey: aiCoachKeys.conversation(userId) });
 
-      // Snapshot previous value
       const previousConversation = queryClient.getQueryData<ChatMessage[]>(
-        aiCoachKeys.conversation(userId)
+        aiCoachKeys.conversation(userId),
       );
 
-      // Optimistically add user message
       const optimisticUserMessage: ChatMessage = {
         id: `temp-${Date.now()}`,
         user_id: userId,
+        thread_id: typeof input === 'string' ? null : input.options?.threadId || null,
         role: 'user',
         content: message,
         context_snapshot: null,
@@ -138,6 +241,13 @@ export function useSendMessage(userId?: string) {
         tokens_input: null,
         tokens_output: null,
         model: null,
+        intent_mode: null,
+        intent_confidence: null,
+        tool_calls_json: null,
+        web_used: false,
+        approval_required: false,
+        proposal_id: null,
+        receipt_id: null,
         created_at: new Date().toISOString(),
       };
 
@@ -148,23 +258,24 @@ export function useSendMessage(userId?: string) {
 
       return { previousConversation };
     },
-    onSuccess: (response) => {
+    onSuccess: () => {
       if (!userId) return;
-      // Refetch conversation to get both messages with proper IDs
-      queryClient.invalidateQueries({
-        queryKey: aiCoachKeys.conversation(userId),
-      });
-      // Update rate limit status
-      queryClient.invalidateQueries({
-        queryKey: aiCoachKeys.rateLimit(userId),
-      });
+      queryClient.invalidateQueries({ queryKey: aiCoachKeys.conversation(userId) });
+      queryClient.invalidateQueries({ queryKey: aiCoachKeys.parsedConversation(userId) });
+      queryClient.invalidateQueries({ queryKey: aiCoachKeys.threads(userId) });
+      queryClient.invalidateQueries({ queryKey: [...aiCoachKeys.all, 'thread', userId] });
+      queryClient.invalidateQueries({ queryKey: aiCoachKeys.rateLimit(userId) });
       queryClient.invalidateQueries({
         queryKey: aiCoachKeys.usage(userId, new Date().toISOString().split('T')[0]),
       });
+      queryClient.invalidateQueries({ queryKey: aiCoachKeys.dashboard(userId) });
+      queryClient.invalidateQueries({ queryKey: aiCoachKeys.interventions(userId) });
+      queryClient.invalidateQueries({ queryKey: aiCoachKeys.memory(userId) });
+      queryClient.invalidateQueries({ queryKey: aiCoachKeys.statusStrip(userId) });
+      queryClient.invalidateQueries({ queryKey: aiCoachKeys.pendingActions(userId) });
     },
-    onError: (err, message, context) => {
+    onError: (_error, _message, context) => {
       if (!userId) return;
-      // Rollback optimistic update
       if (context?.previousConversation) {
         queryClient.setQueryData(aiCoachKeys.conversation(userId), context.previousConversation);
       }
@@ -172,25 +283,25 @@ export function useSendMessage(userId?: string) {
   });
 }
 
-/**
- * Clear conversation history
- */
 export function useClearConversation(userId?: string) {
   const queryClient = useQueryClient();
 
   return useMutation({
     mutationFn: () => userId ? clearConversationHistory(userId) : Promise.resolve(),
     onSuccess: () => {
-      if (userId) {
-        queryClient.setQueryData(aiCoachKeys.conversation(userId), []);
-      }
+      if (!userId) return;
+      queryClient.setQueryData(aiCoachKeys.conversation(userId), []);
+      queryClient.setQueryData(aiCoachKeys.parsedConversation(userId), []);
+      queryClient.invalidateQueries({ queryKey: aiCoachKeys.dashboard(userId) });
+      queryClient.invalidateQueries({ queryKey: aiCoachKeys.interventions(userId) });
+      queryClient.invalidateQueries({ queryKey: aiCoachKeys.threads(userId) });
+      queryClient.invalidateQueries({ queryKey: [...aiCoachKeys.all, 'thread', userId] });
+      queryClient.invalidateQueries({ queryKey: aiCoachKeys.statusStrip(userId) });
+      queryClient.invalidateQueries({ queryKey: aiCoachKeys.pendingActions(userId) });
     },
   });
 }
 
-/**
- * Combined hook for chat functionality
- */
 export function useAIChat(userId?: string) {
   const conversationQuery = useConversationHistory(userId);
   const rateLimitQuery = useRateLimitStatus(userId);
@@ -198,26 +309,175 @@ export function useAIChat(userId?: string) {
   const clearMutation = useClearConversation(userId);
 
   return {
-    // Data
     messages: conversationQuery.data || [],
     rateLimit: rateLimitQuery.data,
-
-    // Loading states
     isLoadingHistory: conversationQuery.isLoading,
     isSending: sendMessageMutation.isPending,
-
-    // Actions
     sendMessage: sendMessageMutation.mutate,
     clearHistory: clearMutation.mutate,
-
-    // Computed
     canSendMessage: rateLimitQuery.data?.canSendMessage ?? true,
     remainingMessages: rateLimitQuery.data?.messagesLimit === -1
       ? Infinity
       : (rateLimitQuery.data?.messagesLimit ?? 10) - (rateLimitQuery.data?.messagesUsed ?? 0),
-
-    // Error states
     sendError: sendMessageMutation.error,
     historyError: conversationQuery.error,
+    lastAttemptedMessage: sendMessageMutation.variables,
+    retryLastMessage: () => {
+      if (typeof sendMessageMutation.variables === 'string' && sendMessageMutation.variables.trim().length > 0) {
+        sendMessageMutation.mutate(sendMessageMutation.variables);
+      } else if (
+        sendMessageMutation.variables
+        && typeof sendMessageMutation.variables === 'object'
+        && sendMessageMutation.variables.message.trim().length > 0
+      ) {
+        sendMessageMutation.mutate(sendMessageMutation.variables);
+      }
+    },
   };
+}
+
+export function useThreadItems(input: {
+  messages: AICoachConversationMessage[];
+  starterPrompts?: Parameters<typeof buildThreadItems>[0]['starterPrompts'];
+  starterMessage?: string;
+  errorState?: Parameters<typeof buildThreadItems>[0]['errorState'];
+}) {
+  return useQuery<AICoachThreadItem[]>({
+    queryKey: [
+      ...aiCoachKeys.all,
+      'thread-items',
+      input.messages.map((message) => message.id).join(','),
+      input.starterPrompts?.map((prompt) => prompt.id).join(',') || 'starter',
+      input.errorState?.message || 'ok',
+    ],
+    queryFn: () => Promise.resolve(buildThreadItems(input)),
+    staleTime: Infinity,
+  });
+}
+
+export function useAppendReceiptMessage(userId?: string) {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: (receipt: AICoachReceipt) => {
+      if (!userId) throw new Error('User ID required');
+      return appendStatusReceiptMessage(userId, receipt);
+    },
+    onSuccess: () => {
+      if (!userId) return;
+      queryClient.invalidateQueries({ queryKey: aiCoachKeys.conversation(userId) });
+      queryClient.invalidateQueries({ queryKey: aiCoachKeys.parsedConversation(userId) });
+      queryClient.invalidateQueries({ queryKey: aiCoachKeys.threads(userId) });
+      queryClient.invalidateQueries({ queryKey: [...aiCoachKeys.all, 'thread', userId] });
+      queryClient.invalidateQueries({ queryKey: aiCoachKeys.statusStrip(userId) });
+      queryClient.invalidateQueries({ queryKey: aiCoachKeys.pendingActions(userId) });
+    },
+  });
+}
+
+export function useApproveAICoachAction(userId?: string) {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: (proposalId: string) => {
+      if (!userId) throw new Error('User ID required');
+      return approveActionProposal(proposalId, userId);
+    },
+    onSuccess: () => {
+      if (!userId) return;
+      queryClient.invalidateQueries({ queryKey: aiCoachKeys.threads(userId) });
+      queryClient.invalidateQueries({ queryKey: [...aiCoachKeys.all, 'thread', userId] });
+      queryClient.invalidateQueries({ queryKey: aiCoachKeys.dashboard(userId) });
+      queryClient.invalidateQueries({ queryKey: aiCoachKeys.pendingActions(userId) });
+      queryClient.invalidateQueries({ queryKey: aiCoachKeys.memory(userId) });
+    },
+  });
+}
+
+export function useRejectAICoachAction(userId?: string) {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: (proposalId: string) => {
+      if (!userId) throw new Error('User ID required');
+      return rejectActionProposal(proposalId, userId);
+    },
+    onSuccess: () => {
+      if (!userId) return;
+      queryClient.invalidateQueries({ queryKey: aiCoachKeys.threads(userId) });
+      queryClient.invalidateQueries({ queryKey: [...aiCoachKeys.all, 'thread', userId] });
+      queryClient.invalidateQueries({ queryKey: aiCoachKeys.dashboard(userId) });
+      queryClient.invalidateQueries({ queryKey: aiCoachKeys.pendingActions(userId) });
+    },
+  });
+}
+
+export function useAICoachCapabilities(userId?: string) {
+  return useQuery<AICoachAssistantCapabilities | null>({
+    queryKey: [...aiCoachKeys.all, 'capabilities', userId || ''],
+    queryFn: () => userId ? getAssistantCapabilities(userId) : Promise.resolve(null),
+    enabled: !!userId,
+    staleTime: Infinity,
+  });
+}
+
+export function useAICoachSettingsActions(userId?: string) {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: (input: { setting: 'unit_system'; value: 'imperial' | 'metric'; threadId?: string }) => {
+      if (!userId) throw new Error('User ID required');
+      return updateSetting({ userId, ...input });
+    },
+    onSuccess: () => {
+      if (!userId) return;
+      queryClient.invalidateQueries({ queryKey: aiCoachKeys.threads(userId) });
+      queryClient.invalidateQueries({ queryKey: [...aiCoachKeys.all, 'thread', userId] });
+      queryClient.invalidateQueries({ queryKey: aiCoachKeys.memory(userId) });
+      queryClient.invalidateQueries({ queryKey: aiCoachKeys.dashboard(userId) });
+    },
+  });
+}
+
+export function useExecuteAICoachLowRiskAction(userId?: string) {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: (input: { message: string; threadId?: string; contextMode?: 'auto' | 'minimal' | 'full' }) => {
+      if (!userId) throw new Error('User ID required');
+      return executeLowRiskAction({ userId, ...input });
+    },
+    onSuccess: () => {
+      if (!userId) return;
+      queryClient.invalidateQueries({ queryKey: aiCoachKeys.threads(userId) });
+      queryClient.invalidateQueries({ queryKey: [...aiCoachKeys.all, 'thread', userId] });
+      queryClient.invalidateQueries({ queryKey: aiCoachKeys.dashboard(userId) });
+      queryClient.invalidateQueries({ queryKey: aiCoachKeys.memory(userId) });
+    },
+  });
+}
+
+export function useAICoachWebSearch(userId?: string) {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: (input: { query: string; threadId?: string; contextMode?: 'auto' | 'minimal' | 'full' }) => {
+      if (!userId) throw new Error('User ID required');
+      return searchWeb({ userId, ...input });
+    },
+    onSuccess: () => {
+      if (!userId) return;
+      queryClient.invalidateQueries({ queryKey: aiCoachKeys.threads(userId) });
+      queryClient.invalidateQueries({ queryKey: [...aiCoachKeys.all, 'thread', userId] });
+    },
+  });
+}
+
+export function useAICoachToolReceipts(userId?: string, threadId?: string) {
+  return useQuery<AICoachToolReceipt[]>({
+    queryKey: [...aiCoachKeys.all, 'tool-receipts', userId || '', threadId || 'latest'],
+    queryFn: () => userId ? getAICoachToolReceipts(userId, threadId) : Promise.resolve([]),
+    enabled: !!userId,
+    staleTime: 30 * 1000,
+  });
 }

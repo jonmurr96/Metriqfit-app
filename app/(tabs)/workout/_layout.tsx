@@ -18,6 +18,7 @@ export default function WorkoutLayout() {
       <Stack.Screen name="program-builder-day" />
       <Stack.Screen name="program-builder-exercise" />
       <Stack.Screen name="import-plan" />
+      <Stack.Screen name="regenerate-plan" />
       <Stack.Screen name="adaptation" />
       <Stack.Screen name="active-session" />
       <Stack.Screen name="my-plan" />

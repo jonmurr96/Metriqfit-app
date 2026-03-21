@@ -19,7 +19,6 @@ import {
   deleteSet,
   updateSetTarget,
   checkAndUpdatePR,
-  type WorkoutTemplate,
   type WorkoutStats,
   getExerciseHistory,
   getWorkoutHistory,
@@ -35,6 +34,7 @@ import {
 
 export const workoutKeys = {
   all: ['workout'] as const,
+  mediaVersion: 'media-v2' as const,
   programs: () => [...workoutKeys.all, 'programs'] as const,
   program: (id: string) => [...workoutKeys.programs(), id] as const,
   exercises: (filters?: any) => [...workoutKeys.all, 'exercises', filters] as const,
@@ -82,7 +82,7 @@ export function useProgramWithDays(programId: string) {
  */
 export function useTemplateDay(dayId: string) {
   return useQuery({
-    queryKey: ['workout', 'template-day', dayId],
+    queryKey: ['workout', 'template-day', dayId, workoutKeys.mediaVersion],
     queryFn: () => getTemplateDay(dayId),
     enabled: !!dayId,
   });
@@ -157,7 +157,6 @@ export function useSessionDetails(sessionId: string) {
  */
 export function useLogSet() {
   const queryClient = useQueryClient();
-  const { user } = useAuth();
 
   return useMutation({
     mutationFn: async ({

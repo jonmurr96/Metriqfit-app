@@ -14,6 +14,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { CameraView, useCameraPermissions } from 'expo-camera';
 import { useTokens } from '../../../lib/theme';
 import { TabBarIcon } from '../../../components/navigation/TabBarIcon';
+import { MacroInlineSummary } from '../../../components/nutrition/MacroInlineSummary';
 import { NutritionEliteGate } from '../../../components/nutrition/NutritionEliteGate';
 import { useFeatureAccess } from '../../../hooks/useSubscription';
 import { useMenuScan } from '../../../hooks/useMenuScan';
@@ -324,9 +325,20 @@ export default function MenuScanScreen() {
                       <Text style={{ color: c.text, fontFamily: ty.body.familySemibold, fontSize: ty.sizes.md }}>
                         {index === 0 ? 'Best Choice' : `Runner-up ${index}`} • {item.name}
                       </Text>
-                      <Text style={{ color: c.textMuted, fontFamily: ty.body.family, fontSize: ty.sizes.xs, marginTop: 6 }}>
-                        {item.macros.calories} kcal • {item.macros.protein}P / {item.macros.carbs}C / {item.macros.fat}F • Sodium {item.macros.sodiumMg}mg
-                      </Text>
+                      <View style={{ marginTop: 6, gap: 4 }}>
+                        <MacroInlineSummary
+                          size="sm"
+                          items={[
+                            { macro: 'calories', value: item.macros.calories, unit: ' kcal' },
+                            { macro: 'protein', value: item.macros.protein, unit: 'g' },
+                            { macro: 'carbs', value: item.macros.carbs, unit: 'g' },
+                            { macro: 'fat', value: item.macros.fat, unit: 'g' },
+                          ]}
+                        />
+                        <Text style={{ color: c.textMuted, fontFamily: ty.body.family, fontSize: ty.sizes.xs }}>
+                          Sodium {item.macros.sodiumMg}mg
+                        </Text>
+                      </View>
                       {!!item.modifications?.length && (
                         <Text style={{ color: c.textMuted, fontFamily: ty.body.family, fontSize: ty.sizes.xs, marginTop: 6 }}>
                           {item.modifications[0]}

@@ -1,8 +1,7 @@
-import { StyleSheet, View, Text, Pressable, ScrollView, ActivityIndicator, TextInput } from 'react-native';
+import { ActivityIndicator, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
+import { useMemo, useState } from 'react';
 import { useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { useMemo, useState } from 'react';
-import { LinearGradient } from 'expo-linear-gradient';
 import { useTokens } from '../lib/theme';
 import { TabBarIcon } from '../components/navigation/TabBarIcon';
 import { useDailyWaterSummary, useLogWater } from '../hooks/useWater';
@@ -12,73 +11,79 @@ type WaterUnit = 'ml' | 'oz';
 
 const MIN_LOG_ML = 30;
 const MAX_LOG_ML = 5000;
-
-const COMMON_BOTTLE_PRESETS = [
-  { id: 'cup-8', label: 'Cup', amountMl: 237 },
-  { id: 'bottle-12', label: 'Bottle', amountMl: 355 },
-  { id: 'standard-17', label: 'Standard', amountMl: 500 },
-  { id: 'sport-20', label: 'Sport', amountMl: 591 },
-  { id: 'large-24', label: 'Large', amountMl: 710 },
-  { id: 'tumbler-32', label: 'Tumbler', amountMl: 946 },
-];
+const QUICK_LOG_PRESETS_ML = [250, 500, 750, 1000];
 
 function clamp(value: number, min: number, max: number) {
   return Math.min(max, Math.max(min, value));
 }
 
-function formatUnitAmount(amountMl: number, unit: WaterUnit) {
-  if (unit === 'ml') return `${Math.round(amountMl)} ml`;
-  return `${mlToOz(amountMl).toFixed(1)} oz`;
-}
-
-function formatInputValue(amountMl: number, unit: WaterUnit) {
+function formatDisplayValue(amountMl: number, unit: WaterUnit) {
   if (unit === 'ml') return Math.round(amountMl).toLocaleString();
   return mlToOz(amountMl).toFixed(1);
+}
+
+function formatUnitAmount(amountMl: number, unit: WaterUnit) {
+  return `${formatDisplayValue(amountMl, unit)} ${unit}`;
+}
+
+function formatInlineProgressLabel(completionPct: number, remainingMl: number, unit: WaterUnit) {
+  return {
+    left: `${completionPct}% today`,
+    right: `${formatUnitAmount(remainingMl, unit)} left`,
+  };
+}
+
+function formatLogTime(iso: string) {
+  const date = new Date(iso);
+  if (Number.isNaN(date.getTime())) return '--:--';
+  return date.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' });
 }
 
 export default function LogWaterSheet() {
   const { c, s, ty, r } = useTokens();
   const router = useRouter();
   const insets = useSafeAreaInsets();
+
   const [unit, setUnit] = useState<WaterUnit>('ml');
   const [amountMl, setAmountMl] = useState(500);
   const [manualInput, setManualInput] = useState('');
-  const logWaterMutation = useLogWater();
+  const [isRecentLogsExpanded, setIsRecentLogsExpanded] = useState(false);
+  const [activeQuickLogAmountMl, setActiveQuickLogAmountMl] = useState<number | null>(null);
+
   const today = new Date().toISOString().split('T')[0];
   const { data: dailySummary } = useDailyWaterSummary(today);
+  const logWaterMutation = useLogWater();
 
-  const totalLoggedToday = dailySummary?.totalMl || 0;
-  const dailyTarget = dailySummary?.targetMl || 2500;
+  const totalLoggedToday = Number(dailySummary?.totalMl || 0);
+  const dailyTarget = Number(dailySummary?.targetMl || 2500);
   const remainingMl = Math.max(0, dailyTarget - totalLoggedToday);
   const completionPct = Math.min(100, Math.round((totalLoggedToday / Math.max(1, dailyTarget)) * 100));
   const projectedPct = Math.min(100, Math.round(((totalLoggedToday + amountMl) / Math.max(1, dailyTarget)) * 100));
-  const selectedPreset = COMMON_BOTTLE_PRESETS.find((preset) => preset.amountMl === amountMl);
   const recentLogs = dailySummary?.logs?.slice(0, 5) || [];
+
+  const progressLabel = useMemo(
+    () => formatInlineProgressLabel(completionPct, remainingMl, unit),
+    [completionPct, remainingMl, unit],
+  );
 
   const adjustmentButtons = useMemo(
     () => (
       unit === 'ml'
         ? [
-            { label: '-100 ml', delta: -100 },
-            { label: '-50 ml', delta: -50 },
-            { label: '+50 ml', delta: 50 },
-            { label: '+100 ml', delta: 100 },
+            { label: '-100', delta: -100 },
+            { label: '-50', delta: -50 },
+            { label: '+50', delta: 50 },
+            { label: '+100', delta: 100 },
           ]
         : [
-            { label: '-4 oz', delta: -4 },
-            { label: '-2 oz', delta: -2 },
-            { label: '+2 oz', delta: 2 },
-            { label: '+4 oz', delta: 4 },
+            { label: '-4', delta: -4 },
+            { label: '-2', delta: -2 },
+            { label: '+2', delta: 2 },
+            { label: '+4', delta: 4 },
           ]
     ),
-    [unit]
+    [unit],
   );
-
-  const formatLogTime = (iso: string) => {
-    const date = new Date(iso);
-    if (Number.isNaN(date.getTime())) return '--:--';
-    return date.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' });
-  };
 
   const parsedManual = Number(manualInput.replace(',', '.'));
   const isManualValid = Number.isFinite(parsedManual) && parsedManual > 0;
@@ -86,129 +91,159 @@ export default function LogWaterSheet() {
     ? clamp(unit === 'ml' ? Math.round(parsedManual) : ozToMl(parsedManual), MIN_LOG_ML, MAX_LOG_ML)
     : null;
 
-  const applyManualAmount = () => {
-    if (!manualAmountMl) return;
-    setAmountMl(manualAmountMl);
-    setManualInput('');
-  };
-
-  const addManualNow = () => {
-    if (!manualAmountMl || logWaterMutation.isPending) return;
-    logWaterMutation.mutate(manualAmountMl, {
-      onSuccess: () => {
-        router.back();
-      },
-      onError: (err) => {
-        console.error('[LogWater] Error saving manual entry:', err);
-      },
-    });
+  const resetError = () => {
+    if (logWaterMutation.error) {
+      logWaterMutation.reset();
+    }
   };
 
   const changeAmount = (delta: number) => {
+    resetError();
     const deltaMl = unit === 'ml' ? delta : ozToMl(delta);
     setAmountMl((prev) => clamp(prev + deltaMl, MIN_LOG_ML, MAX_LOG_ML));
   };
 
-  const handleSave = () => {
-    logWaterMutation.mutate(amountMl, {
+  const handleQuickLog = (presetAmountMl: number) => {
+    if (logWaterMutation.isPending) return;
+
+    resetError();
+    setActiveQuickLogAmountMl(presetAmountMl);
+    logWaterMutation.mutate(presetAmountMl, {
       onSuccess: () => {
+        setActiveQuickLogAmountMl(null);
         router.back();
       },
-      onError: (err) => {
-        console.error('[LogWater] Error saving:', err);
+      onError: () => {
+        setActiveQuickLogAmountMl(null);
       },
     });
   };
 
+  const handleSave = () => {
+    if (logWaterMutation.isPending) return;
+
+    resetError();
+    setActiveQuickLogAmountMl(null);
+    logWaterMutation.mutate(amountMl, {
+      onSuccess: () => {
+        router.back();
+      },
+    });
+  };
+
+  const handleApplyManualAmount = () => {
+    if (!manualAmountMl || logWaterMutation.isPending) return;
+    resetError();
+    setAmountMl(manualAmountMl);
+    setManualInput('');
+  };
+
   return (
     <View style={[styles.container, { backgroundColor: c.bg }]}>
-      {/* Header */}
       <View
         style={[
           styles.header,
           {
+            paddingTop: s.md,
             paddingHorizontal: s.lg,
-            paddingTop: s.lg,
           },
         ]}
       >
         <View style={styles.handleBar}>
           <View style={[styles.handle, { backgroundColor: c.textSubtle }]} />
         </View>
+
         <View style={styles.headerRow}>
           <Pressable
-            onPress={() => router.back()}
-            style={[styles.closeButton, { backgroundColor: c.surface }]}
-            accessibilityLabel="Close"
             accessibilityRole="button"
+            accessibilityLabel="Close log water"
+            onPress={() => router.back()}
+            style={({ pressed }) => [
+              styles.closeButton,
+              {
+                borderRadius: r.pill,
+                borderWidth: 1,
+                borderColor: c.border,
+                backgroundColor: pressed ? c.surface2 : c.surface,
+              },
+            ]}
           >
-            <TabBarIcon name="close" color={c.text} size={20} />
+            <TabBarIcon name="close" color={c.text} size={18} />
           </Pressable>
-          <Text
-            style={{
-              color: c.text,
-              fontFamily: ty.heading.familySemibold,
-              fontSize: ty.sizes.xl,
-            }}
-          >
-            Log Water
-          </Text>
-          <View style={styles.placeholder} />
+
+          <View style={styles.headerCopy}>
+            <Text
+              style={{
+                color: c.text,
+                fontFamily: ty.heading.familySemibold,
+                fontSize: ty.sizes.xl,
+                textAlign: 'center',
+              }}
+            >
+              Log Water
+            </Text>
+            <Text
+              style={{
+                color: c.textMuted,
+                fontFamily: ty.body.family,
+                fontSize: ty.sizes.xs,
+                marginTop: 3,
+                textAlign: 'center',
+              }}
+            >
+              {formatUnitAmount(totalLoggedToday, unit)} / {formatUnitAmount(dailyTarget, unit)} today
+            </Text>
+          </View>
+
+          <View style={styles.headerSpacer} />
         </View>
       </View>
 
       <ScrollView
         style={styles.content}
+        showsVerticalScrollIndicator={false}
+        keyboardShouldPersistTaps="handled"
         contentContainerStyle={{
           paddingHorizontal: s.lg,
-          paddingTop: s.lg,
-          paddingBottom: s.xl,
-          gap: s.lg,
+          paddingTop: s.md,
+          paddingBottom: 154,
+          gap: s.md,
         }}
       >
         <View
           style={[
-            styles.progressCard,
+            styles.primaryZone,
             {
-              backgroundColor: c.surface,
+              borderRadius: r.xl,
+              borderWidth: 1,
               borderColor: c.border,
-              borderRadius: r.lg,
+              backgroundColor: c.surface,
+              padding: s.lg,
             },
           ]}
         >
-          <View style={styles.progressHeader}>
-            <Text style={{ color: c.text, fontFamily: ty.heading.familySemibold, fontSize: ty.sizes.md }}>
-              Hydration Today
+          <View style={styles.inlineProgressRow}>
+            <Text
+              style={{
+                color: c.textMuted,
+                fontFamily: ty.body.familySemibold,
+                fontSize: ty.sizes.xs,
+              }}
+            >
+              {progressLabel.left}
             </Text>
-            <View style={[styles.badge, { backgroundColor: c.opacity.primaryLight }]}>
-              <Text style={{ color: c.primary, fontFamily: ty.body.familySemibold, fontSize: ty.sizes.xs }}>
-                {completionPct}%
-              </Text>
-            </View>
+            <Text
+              style={{
+                color: c.textSubtle,
+                fontFamily: ty.body.family,
+                fontSize: ty.sizes.xs,
+              }}
+            >
+              {progressLabel.right}
+            </Text>
           </View>
 
-          <View style={styles.statsRow}>
-            <View style={styles.statItem}>
-              <Text style={{ color: c.textMuted, fontFamily: ty.body.family, fontSize: ty.sizes.xs }}>Logged</Text>
-              <Text style={{ color: c.text, fontFamily: ty.mono.family, fontSize: ty.sizes.lg }}>
-                {formatInputValue(totalLoggedToday, unit)} {unit}
-              </Text>
-            </View>
-            <View style={styles.statItem}>
-              <Text style={{ color: c.textMuted, fontFamily: ty.body.family, fontSize: ty.sizes.xs }}>Goal</Text>
-              <Text style={{ color: c.text, fontFamily: ty.mono.family, fontSize: ty.sizes.lg }}>
-                {formatInputValue(dailyTarget, unit)} {unit}
-              </Text>
-            </View>
-            <View style={styles.statItem}>
-              <Text style={{ color: c.textMuted, fontFamily: ty.body.family, fontSize: ty.sizes.xs }}>Remaining</Text>
-              <Text style={{ color: c.text, fontFamily: ty.mono.family, fontSize: ty.sizes.lg }}>
-                {formatInputValue(remainingMl, unit)} {unit}
-              </Text>
-            </View>
-          </View>
-
-          <View style={[styles.progressTrack, { backgroundColor: c.surface2 }]}>
+          <View style={[styles.progressTrack, { backgroundColor: c.bg, marginTop: s.sm }]}>
             <View
               style={[
                 styles.progressFill,
@@ -219,97 +254,163 @@ export default function LogWaterSheet() {
               ]}
             />
           </View>
-          <Text style={{ color: c.textMuted, fontFamily: ty.body.family, fontSize: ty.sizes.xs, marginTop: s.xs }}>
-            After this log: {projectedPct}% of daily target
-          </Text>
-        </View>
 
-        <View
-          style={[
-            styles.amountCard,
-            {
-              backgroundColor: c.surface,
-              borderRadius: r.lg,
-              borderColor: c.border,
-            },
-          ]}
-        >
-          <View style={[styles.toggle, { backgroundColor: c.bg, borderColor: c.border, borderRadius: r.xl }]}>
-            <Pressable
+          <View style={styles.amountWrap}>
+            <View
               style={[
-                styles.toggleButton,
-                unit === 'ml' && { backgroundColor: c.surface2, borderRadius: r.lg },
+                styles.unitToggle,
+                {
+                  borderRadius: r.pill,
+                  borderWidth: 1,
+                  borderColor: c.border,
+                  backgroundColor: c.bg,
+                },
               ]}
-              onPress={() => setUnit('ml')}
             >
-              <Text style={{ color: unit === 'ml' ? c.primary : c.textMuted, fontFamily: ty.body.familySemibold, fontSize: ty.sizes.xs }}>
-                ML
-              </Text>
-            </Pressable>
-            <Pressable
+              {(['ml', 'oz'] as WaterUnit[]).map((value) => {
+                const active = unit === value;
+                return (
+                  <Pressable
+                    key={value}
+                    accessibilityRole="button"
+                    accessibilityLabel={`Use ${value} for water amounts`}
+                    accessibilityState={{ selected: active }}
+                    onPress={() => {
+                      resetError();
+                      setUnit(value);
+                    }}
+                    style={({ pressed }) => [
+                      styles.unitToggleButton,
+                      {
+                        borderRadius: r.pill,
+                        backgroundColor: active ? c.surface2 : pressed ? c.surface2 : 'transparent',
+                      },
+                    ]}
+                  >
+                    <Text
+                      style={{
+                        color: active ? c.primary : c.textMuted,
+                        fontFamily: ty.body.familySemibold,
+                        fontSize: ty.sizes.xs,
+                      }}
+                    >
+                      {value.toUpperCase()}
+                    </Text>
+                  </Pressable>
+                );
+              })}
+            </View>
+
+            <View
               style={[
-                styles.toggleButton,
-                unit === 'oz' && { backgroundColor: c.surface2, borderRadius: r.lg },
+                styles.amountDial,
+                {
+                  borderRadius: 120,
+                  borderWidth: 1,
+                  borderColor: `${c.primary}2A`,
+                  backgroundColor: c.bg,
+                },
               ]}
-              onPress={() => setUnit('oz')}
             >
-              <Text style={{ color: unit === 'oz' ? c.primary : c.textMuted, fontFamily: ty.body.familySemibold, fontSize: ty.sizes.xs }}>
-                OZ
+              <Text
+                style={{
+                  color: c.text,
+                  fontFamily: ty.mono.family,
+                  fontSize: 54,
+                  letterSpacing: -1,
+                }}
+              >
+                {formatDisplayValue(amountMl, unit)}
               </Text>
-            </Pressable>
-          </View>
-          <View style={[styles.iconWrap, { backgroundColor: c.opacity.primaryLight }]}>
-            <TabBarIcon name="water" color={c.primary} size={30} />
-          </View>
-          <Text style={{ color: c.text, fontFamily: ty.mono.family, fontSize: 54, marginTop: s.sm }}>
-            {formatInputValue(amountMl, unit)}
-          </Text>
-          <Text style={{ color: c.textMuted, fontFamily: ty.body.familySemibold, fontSize: ty.sizes.lg }}>{unit}</Text>
-          <Text style={{ color: c.textSubtle, fontFamily: ty.body.family, fontSize: ty.sizes.sm, marginTop: s.xs }}>
-            {selectedPreset ? `${selectedPreset.label} size selected` : 'Custom amount selected'}
-          </Text>
-        </View>
+              <Text
+                style={{
+                  color: c.textMuted,
+                  fontFamily: ty.body.familySemibold,
+                  fontSize: ty.sizes.md,
+                  marginTop: 4,
+                }}
+              >
+                {unit}
+              </Text>
+              <Text
+                style={{
+                  color: c.textSubtle,
+                  fontFamily: ty.body.family,
+                  fontSize: ty.sizes.xs,
+                  marginTop: s.sm,
+                }}
+              >
+                After log: {projectedPct}%
+              </Text>
+            </View>
 
-        <View>
-          <Text style={{ color: c.textMuted, fontFamily: ty.body.familySemibold, fontSize: ty.sizes.xs, marginBottom: s.sm, letterSpacing: 0.8 }}>
-            COMMON BOTTLE SIZES
-          </Text>
-          <View style={styles.presetGrid}>
-            {COMMON_BOTTLE_PRESETS.map((preset) => {
-              const active = amountMl === preset.amountMl;
-              const primary = formatUnitAmount(preset.amountMl, unit);
-              const secondary = unit === 'ml'
-                ? `${mlToOz(preset.amountMl).toFixed(1)} oz`
-                : `${preset.amountMl} ml`;
-
-              return (
+            <View style={styles.stepperCluster}>
+              {adjustmentButtons.map((button) => (
                 <Pressable
-                  key={preset.id}
-                  onPress={() => setAmountMl(preset.amountMl)}
-                  style={[
-                    styles.presetButton,
+                  key={button.label}
+                  accessibilityRole="button"
+                  accessibilityLabel={`Adjust water amount ${button.label} ${unit}`}
+                  onPress={() => changeAmount(button.delta)}
+                  disabled={logWaterMutation.isPending}
+                  style={({ pressed }) => [
+                    styles.stepperChip,
                     {
-                      backgroundColor: active ? c.opacity.primaryMedium : c.surface,
-                      borderColor: active ? c.primary : c.border,
                       borderRadius: r.md,
+                      borderWidth: 1,
+                      borderColor: c.border,
+                      backgroundColor: pressed ? c.surface2 : c.bg,
+                      opacity: logWaterMutation.isPending ? 0.5 : 1,
                     },
                   ]}
                 >
                   <Text
                     style={{
                       color: c.text,
-                      fontFamily: ty.body.familySemibold,
-                      fontSize: ty.sizes.md,
+                      fontFamily: ty.mono.family,
+                      fontSize: ty.sizes.xs,
                     }}
                   >
-                    {primary}
+                    {button.label}
                   </Text>
-                  <Text style={{ color: c.textMuted, fontFamily: ty.body.family, fontSize: ty.sizes.xs }}>
-                    {preset.label}
-                  </Text>
-                  <Text style={{ color: c.textSubtle, fontFamily: ty.body.family, fontSize: ty.sizes.xs, marginTop: 2 }}>
-                    {secondary}
-                  </Text>
+                </Pressable>
+              ))}
+            </View>
+          </View>
+
+          <View style={styles.quickChipRow}>
+            {QUICK_LOG_PRESETS_ML.map((presetAmountMl) => {
+              const isActiveQuickLog = activeQuickLogAmountMl === presetAmountMl;
+              return (
+                <Pressable
+                  key={presetAmountMl}
+                  accessibilityRole="button"
+                  accessibilityLabel={`Log ${Math.round(presetAmountMl)} milliliters of water`}
+                  onPress={() => handleQuickLog(presetAmountMl)}
+                  disabled={logWaterMutation.isPending}
+                  style={({ pressed }) => [
+                    styles.quickChip,
+                    {
+                      borderRadius: r.pill,
+                      borderWidth: 1,
+                      borderColor: isActiveQuickLog ? `${c.primary}66` : c.border,
+                      backgroundColor: pressed || isActiveQuickLog ? c.surface2 : c.bg,
+                      opacity: logWaterMutation.isPending && !isActiveQuickLog ? 0.55 : 1,
+                    },
+                  ]}
+                >
+                  {isActiveQuickLog ? (
+                    <ActivityIndicator color={c.primary} />
+                  ) : (
+                    <Text
+                      style={{
+                        color: c.text,
+                        fontFamily: ty.body.familySemibold,
+                        fontSize: ty.sizes.sm,
+                      }}
+                    >
+                      {formatUnitAmount(presetAmountMl, unit)}
+                    </Text>
+                  )}
                 </Pressable>
               );
             })}
@@ -318,199 +419,253 @@ export default function LogWaterSheet() {
 
         <View
           style={[
-            styles.manualCard,
+            styles.secondaryZone,
             {
-              backgroundColor: c.surface,
+              borderRadius: r.lg,
+              borderWidth: 1,
               borderColor: c.border,
-              borderRadius: r.md,
+              backgroundColor: c.surface,
             },
           ]}
         >
-          <Text style={{ color: c.textMuted, fontFamily: ty.body.familySemibold, fontSize: ty.sizes.xs, marginBottom: s.sm }}>
-            MANUAL ADD
-          </Text>
-          <View style={styles.manualRow}>
+          <View style={[styles.customRow, { paddingHorizontal: s.md, paddingVertical: s.md }]}>
+            <View style={styles.customLabel}>
+              <Text
+                style={{
+                  color: c.text,
+                  fontFamily: ty.body.familySemibold,
+                  fontSize: ty.sizes.sm,
+                }}
+              >
+                Custom
+              </Text>
+              <Text
+                style={{
+                  color: c.textSubtle,
+                  fontFamily: ty.body.family,
+                  fontSize: ty.sizes.xs,
+                  marginTop: 2,
+                }}
+              >
+                Apply a precise amount
+              </Text>
+            </View>
+
             <TextInput
               value={manualInput}
-              onChangeText={setManualInput}
+              onChangeText={(value) => {
+                resetError();
+                setManualInput(value);
+              }}
               keyboardType="decimal-pad"
-              placeholder={`Enter amount (${unit})`}
+              placeholder={unit === 'ml' ? 'ml' : 'oz'}
               placeholderTextColor={c.textSubtle}
               style={[
-                styles.manualInput,
+                styles.customInput,
                 {
-                  backgroundColor: c.surface2,
+                  borderRadius: r.md,
+                  borderWidth: 1,
                   borderColor: c.border,
+                  backgroundColor: c.bg,
                   color: c.text,
                   fontFamily: ty.mono.family,
-                  borderRadius: r.sm,
                 },
               ]}
             />
+
             <Pressable
-              style={[
-                styles.manualApply,
+              accessibilityRole="button"
+              accessibilityLabel="Apply custom water amount"
+              onPress={handleApplyManualAmount}
+              disabled={!isManualValid || logWaterMutation.isPending}
+              style={({ pressed }) => [
+                styles.applyButton,
                 {
-                  backgroundColor: isManualValid ? c.primary : c.surface2,
-                  borderRadius: r.sm,
+                  borderRadius: r.md,
+                  backgroundColor: isManualValid ? (pressed ? `${c.primary}CC` : c.primary) : c.surface2,
                 },
               ]}
-              onPress={applyManualAmount}
-              disabled={!isManualValid || logWaterMutation.isPending}
             >
-              <Text style={{ color: isManualValid ? c.bg : c.textMuted, fontFamily: ty.body.familySemibold }}>
-                Use
-              </Text>
-            </Pressable>
-            <Pressable
-              style={[
-                styles.manualApply,
-                {
-                  backgroundColor: isManualValid ? c.accent : c.surface2,
-                  borderRadius: r.sm,
-                },
-              ]}
-              onPress={addManualNow}
-              disabled={!isManualValid || logWaterMutation.isPending}
-            >
-              <Text style={{ color: isManualValid ? c.bg : c.textMuted, fontFamily: ty.body.familySemibold }}>
-                Add
+              <Text
+                style={{
+                  color: isManualValid ? c.bg : c.textMuted,
+                  fontFamily: ty.body.familySemibold,
+                  fontSize: ty.sizes.sm,
+                }}
+              >
+                Apply
               </Text>
             </Pressable>
           </View>
-        </View>
 
+          {recentLogs.length ? (
+            <>
+              <View style={[styles.divider, { backgroundColor: c.border }]} />
+              <Pressable
+                accessibilityRole="button"
+                accessibilityLabel={isRecentLogsExpanded ? 'Collapse recent logs' : 'Expand recent logs'}
+                accessibilityState={{ expanded: isRecentLogsExpanded }}
+                onPress={() => setIsRecentLogsExpanded((current) => !current)}
+                style={({ pressed }) => [
+                  styles.recentHeader,
+                  {
+                    paddingHorizontal: s.md,
+                    paddingVertical: s.md,
+                    backgroundColor: pressed ? c.surface2 : 'transparent',
+                  },
+                ]}
+              >
+                <View>
+                  <Text
+                    style={{
+                      color: c.text,
+                      fontFamily: ty.body.familySemibold,
+                      fontSize: ty.sizes.sm,
+                    }}
+                  >
+                    Recent logs
+                  </Text>
+                  <Text
+                    style={{
+                      color: c.textSubtle,
+                      fontFamily: ty.body.family,
+                      fontSize: ty.sizes.xs,
+                      marginTop: 2,
+                    }}
+                  >
+                    {recentLogs.length} today
+                  </Text>
+                </View>
+                <View style={styles.recentHeaderRight}>
+                  <Text
+                    style={{
+                      color: c.textMuted,
+                      fontFamily: ty.body.family,
+                      fontSize: ty.sizes.xs,
+                    }}
+                  >
+                    {formatLogTime(recentLogs[0].logged_at)}
+                  </Text>
+                  <TabBarIcon
+                    name={isRecentLogsExpanded ? 'chevron-up' : 'chevron-down'}
+                    color={c.textMuted}
+                    size={18}
+                  />
+                </View>
+              </Pressable>
+
+              {isRecentLogsExpanded ? (
+                <View style={{ paddingHorizontal: s.md, paddingBottom: s.md, gap: s.xs }}>
+                  {recentLogs.map((log) => (
+                    <View key={log.id} style={styles.recentItem}>
+                      <Text
+                        style={{
+                          color: c.textMuted,
+                          fontFamily: ty.body.family,
+                          fontSize: ty.sizes.xs,
+                        }}
+                      >
+                        {formatLogTime(log.logged_at)}
+                      </Text>
+                      <Text
+                        style={{
+                          color: c.text,
+                          fontFamily: ty.mono.family,
+                          fontSize: ty.sizes.sm,
+                        }}
+                      >
+                        {formatUnitAmount(log.amount_ml, unit)}
+                      </Text>
+                    </View>
+                  ))}
+                </View>
+              ) : null}
+            </>
+          ) : null}
+        </View>
+      </ScrollView>
+
+      {logWaterMutation.error ? (
         <View
           style={[
-            styles.adjustCard,
+            styles.errorBanner,
             {
-              backgroundColor: c.surface,
-              borderColor: c.border,
+              marginHorizontal: s.lg,
+              marginBottom: s.sm,
               borderRadius: r.md,
+              backgroundColor: c.opacity.dangerLight,
+              borderWidth: 1,
+              borderColor: `${c.danger}33`,
             },
           ]}
         >
-          <Text style={{ color: c.textMuted, fontFamily: ty.body.familySemibold, fontSize: ty.sizes.xs, marginBottom: s.sm }}>
-            FINE TUNE
-          </Text>
-          <View style={styles.adjustRow}>
-            {adjustmentButtons.map((button) => (
-              <Pressable
-                key={button.label}
-                style={[
-                  styles.adjustButton,
-                  {
-                    backgroundColor: c.surface2,
-                    borderColor: c.border,
-                    borderRadius: r.sm,
-                  },
-                ]}
-                onPress={() => changeAmount(button.delta)}
-              >
-                <Text style={{ color: c.text, fontFamily: ty.mono.family, fontSize: ty.sizes.md }}>{button.label}</Text>
-              </Pressable>
-            ))}
-          </View>
-        </View>
-
-        {recentLogs.length ? (
-          <View
-            style={[
-              styles.recentCard,
-              {
-                backgroundColor: c.surface,
-                borderColor: c.border,
-                borderRadius: r.md,
-              },
-            ]}
+          <TabBarIcon name="alert-circle" color={c.danger} size={16} />
+          <Text
+            style={{
+              color: c.danger,
+              fontFamily: ty.body.familyMedium,
+              fontSize: ty.sizes.sm,
+              marginLeft: s.sm,
+              flex: 1,
+            }}
           >
-            <Text style={{ color: c.textMuted, fontFamily: ty.body.familySemibold, fontSize: ty.sizes.xs, marginBottom: s.sm }}>
-              RECENT LOGS
-            </Text>
-            <View style={styles.recentWrap}>
-              {recentLogs.map((log) => (
-                <View
-                  key={log.id}
-                  style={[
-                    styles.recentPill,
-                    {
-                      backgroundColor: c.surface2,
-                      borderColor: c.border,
-                      borderRadius: r.pill,
-                    },
-                  ]}
-                >
-                  <TabBarIcon name="time-outline" color={c.textMuted} size={14} />
-                  <Text style={{ color: c.textMuted, fontFamily: ty.body.family, fontSize: ty.sizes.xs }}>
-                    {formatLogTime(log.logged_at)}
-                  </Text>
-                  <Text style={{ color: c.text, fontFamily: ty.mono.family, fontSize: ty.sizes.xs }}>
-                    {formatUnitAmount(log.amount_ml, unit)}
-                  </Text>
-                </View>
-              ))}
-            </View>
-          </View>
-        ) : null}
-      </ScrollView>
-
-      {/* Error Message */}
-      {logWaterMutation.error && (
-        <View style={[styles.errorBanner, { backgroundColor: c.danger, marginHorizontal: s.lg }]}>
-          <Text style={{ color: '#fff', fontFamily: ty.body.family, fontSize: ty.sizes.sm, textAlign: 'center' }}>
-            Failed to save water. Please try again.
+            Couldn’t save water right now. Try again.
           </Text>
         </View>
-      )}
+      ) : null}
 
-      {/* Save Button */}
       <View
         style={[
           styles.footer,
           {
             paddingHorizontal: s.lg,
+            paddingTop: s.sm,
             paddingBottom: insets.bottom + s.lg,
-            paddingTop: s.lg,
+            borderTopWidth: 1,
+            borderTopColor: c.border,
+            backgroundColor: `${c.bg}F2`,
           },
         ]}
       >
-        <Pressable onPress={handleSave} disabled={logWaterMutation.isPending} style={({ pressed }) => [{ opacity: pressed ? 0.92 : 1 }]}>
-          <LinearGradient
-            colors={logWaterMutation.isPending ? [c.surface2, c.surface2] : [c.primary, c.accent]}
-            start={{ x: 0, y: 0 }}
-            end={{ x: 1, y: 0 }}
-            style={[styles.saveButton, { borderRadius: r.md }]}
-          >
-            {logWaterMutation.isPending ? (
-              <>
-                <ActivityIndicator color={c.bg} />
-                <Text
-                  style={{
-                    color: c.bg,
-                    fontFamily: ty.heading.familySemibold,
-                    fontSize: ty.sizes.lg,
-                    marginLeft: s.sm,
-                  }}
-                >
-                  Saving...
-                </Text>
-              </>
-            ) : (
-              <>
-                <TabBarIcon name="water" color={c.bg} size={20} />
-                <Text
-                  style={{
-                    color: c.bg,
-                    fontFamily: ty.heading.familySemibold,
-                    fontSize: ty.sizes.lg,
-                    marginLeft: s.sm,
-                  }}
-                >
-                  Log {formatUnitAmount(amountMl, unit)}
-                </Text>
-              </>
-            )}
-          </LinearGradient>
+        <Pressable
+          accessibilityRole="button"
+          accessibilityLabel={`Log ${formatUnitAmount(amountMl, unit)} of water`}
+          onPress={handleSave}
+          disabled={logWaterMutation.isPending}
+          style={({ pressed }) => [
+            styles.footerButton,
+            {
+              borderRadius: r.md,
+              backgroundColor: pressed ? `${c.primary}CC` : c.primary,
+              opacity: logWaterMutation.isPending ? 0.65 : 1,
+            },
+          ]}
+        >
+          {logWaterMutation.isPending && activeQuickLogAmountMl == null ? (
+            <>
+              <ActivityIndicator color={c.bg} />
+              <Text
+                style={{
+                  color: c.bg,
+                  fontFamily: ty.heading.familySemibold,
+                  fontSize: ty.sizes.lg,
+                  marginLeft: s.sm,
+                }}
+              >
+                Saving...
+              </Text>
+            </>
+          ) : (
+            <Text
+              style={{
+                color: c.bg,
+                fontFamily: ty.heading.familySemibold,
+                fontSize: ty.sizes.lg,
+              }}
+            >
+              Log {formatUnitAmount(amountMl, unit)}
+            </Text>
+          )}
         </Pressable>
       </View>
     </View>
@@ -524,10 +679,10 @@ const styles = StyleSheet.create({
   header: {},
   handleBar: {
     alignItems: 'center',
-    paddingBottom: 12,
+    paddingBottom: 8,
   },
   handle: {
-    width: 40,
+    width: 42,
     height: 4,
     borderRadius: 2,
     opacity: 0.4,
@@ -536,46 +691,35 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
+    minHeight: 44,
   },
   closeButton: {
-    width: 36,
-    height: 36,
-    borderRadius: 18,
+    width: 44,
+    height: 44,
     alignItems: 'center',
     justifyContent: 'center',
   },
-  placeholder: {
-    width: 36,
+  headerCopy: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: 8,
+  },
+  headerSpacer: {
+    width: 44,
   },
   content: {
     flex: 1,
   },
-  progressCard: {
-    borderWidth: 1,
-    padding: 16,
-  },
-  progressHeader: {
+  primaryZone: {},
+  inlineProgressRow: {
     flexDirection: 'row',
-    justifyContent: 'space-between',
     alignItems: 'center',
-  },
-  badge: {
-    paddingHorizontal: 10,
-    paddingVertical: 4,
-    borderRadius: 999,
-  },
-  statsRow: {
-    marginTop: 12,
-    flexDirection: 'row',
     justifyContent: 'space-between',
-    gap: 10,
-  },
-  statItem: {
-    flex: 1,
+    gap: 12,
   },
   progressTrack: {
-    marginTop: 14,
-    height: 8,
+    height: 6,
     borderRadius: 999,
     overflow: 'hidden',
   },
@@ -583,106 +727,115 @@ const styles = StyleSheet.create({
     height: '100%',
     borderRadius: 999,
   },
-  amountCard: {
-    borderWidth: 1,
+  amountWrap: {
     alignItems: 'center',
-    paddingVertical: 22,
-    paddingHorizontal: 16,
+    marginTop: 14,
   },
-  toggle: {
+  unitToggle: {
     flexDirection: 'row',
     padding: 4,
-    marginBottom: 12,
-    borderWidth: 1,
+    alignSelf: 'flex-end',
   },
-  toggleButton: {
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-  },
-  iconWrap: {
-    width: 56,
-    height: 56,
-    borderRadius: 28,
+  unitToggleButton: {
+    minHeight: 32,
+    minWidth: 46,
     alignItems: 'center',
     justifyContent: 'center',
+    paddingHorizontal: 10,
   },
-  presetGrid: {
+  amountDial: {
+    width: 204,
+    height: 204,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginTop: 10,
+    paddingHorizontal: 12,
+  },
+  stepperCluster: {
     flexDirection: 'row',
     flexWrap: 'wrap',
-    gap: 12,
-  },
-  presetButton: {
-    width: '48%',
-    borderWidth: 1,
-    paddingVertical: 16,
-    alignItems: 'center',
-  },
-  manualCard: {
-    borderWidth: 1,
-    padding: 14,
-  },
-  manualRow: {
-    flexDirection: 'row',
+    justifyContent: 'center',
     gap: 8,
+    marginTop: 14,
+  },
+  stepperChip: {
+    minWidth: 68,
+    minHeight: 40,
     alignItems: 'center',
-  },
-  manualInput: {
-    flex: 1,
-    borderWidth: 1,
+    justifyContent: 'center',
     paddingHorizontal: 12,
-    paddingVertical: 10,
-    fontSize: 16,
   },
-  manualApply: {
-    minWidth: 70,
+  quickChipRow: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    justifyContent: 'center',
+    gap: 8,
+    marginTop: 14,
+  },
+  quickChip: {
+    minWidth: 82,
     minHeight: 44,
     alignItems: 'center',
     justifyContent: 'center',
-    paddingHorizontal: 14,
+    paddingHorizontal: 12,
   },
-  adjustCard: {
-    borderWidth: 1,
-    padding: 14,
-  },
-  adjustRow: {
+  secondaryZone: {},
+  customRow: {
     flexDirection: 'row',
+    alignItems: 'center',
     gap: 8,
   },
-  adjustButton: {
+  customLabel: {
+    width: 88,
+  },
+  customInput: {
     flex: 1,
-    borderWidth: 1,
-    paddingVertical: 12,
-    alignItems: 'center',
+    minHeight: 44,
+    paddingHorizontal: 12,
+    fontSize: 16,
   },
-  recentCard: {
-    borderWidth: 1,
-    padding: 14,
-  },
-  recentWrap: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: 8,
-  },
-  recentPill: {
-    flexDirection: 'row',
-    gap: 6,
-    alignItems: 'center',
-    borderWidth: 1,
-    paddingHorizontal: 10,
-    paddingVertical: 6,
-  },
-  footer: {},
-  saveButton: {
-    minHeight: 54,
-    flexDirection: 'row',
-    paddingVertical: 14,
+  applyButton: {
+    minWidth: 78,
+    minHeight: 44,
     alignItems: 'center',
     justifyContent: 'center',
+    paddingHorizontal: 12,
+  },
+  divider: {
+    height: 1,
+    opacity: 0.9,
+  },
+  recentHeader: {
+    minHeight: 52,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: 12,
+  },
+  recentHeaderRight: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+  },
+  recentItem: {
+    minHeight: 34,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
   },
   errorBanner: {
+    minHeight: 46,
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 12,
     paddingVertical: 10,
+  },
+  footer: {},
+  footerButton: {
+    minHeight: 54,
+    alignItems: 'center',
+    justifyContent: 'center',
+    flexDirection: 'row',
     paddingHorizontal: 16,
-    borderRadius: 8,
-    marginBottom: 8,
   },
 });

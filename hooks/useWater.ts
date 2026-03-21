@@ -6,6 +6,7 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useAuth } from '../lib/auth/AuthProvider';
 import { progressMetricKeys } from './useProgressMetrics';
+import { nutritionDashboardKeys } from './useNutritionDashboard';
 import {
   logWater,
   getDailyWaterLogs,
@@ -80,8 +81,12 @@ export function useLogWater() {
   return useMutation({
     mutationFn: (amountMl: number) => logWater(user!.id, amountMl),
     onSuccess: () => {
+      const targetDate = new Date().toISOString().split('T')[0];
       queryClient.invalidateQueries({
         queryKey: waterKeys.all,
+      });
+      queryClient.invalidateQueries({
+        queryKey: nutritionDashboardKeys.today(user!.id, targetDate),
       });
       // Home and readiness surfaces derive hydration from progress snapshot.
       queryClient.invalidateQueries({
@@ -103,6 +108,9 @@ export function useDeleteWaterLog() {
       // Invalidate all water queries since we don't know the date
       queryClient.invalidateQueries({
         queryKey: waterKeys.all,
+      });
+      queryClient.invalidateQueries({
+        queryKey: nutritionDashboardKeys.all,
       });
     },
   });

@@ -138,7 +138,7 @@ const styles = StyleSheet.create({
     marginRight: 8,
   },
   bubble: {
-    maxWidth: '75%',
+    maxWidth: '84%',
     paddingVertical: 12,
     paddingHorizontal: 16,
   },

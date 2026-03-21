@@ -1,10 +1,25 @@
-import { useMemo, useState } from 'react';
-import { StyleSheet, View, Text, Pressable, ScrollView, TextInput, ActivityIndicator } from 'react-native';
+import { useMemo, useRef, useState } from 'react';
+import {
+  ActivityIndicator,
+  FlatList,
+  Pressable,
+  StyleSheet,
+  Text,
+  TextInput,
+  View,
+  type ViewToken,
+} from 'react-native';
 import { useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { useTokens } from '../../../lib/theme';
+
 import { TabBarIcon } from '../../../components/navigation/TabBarIcon';
+import { ExerciseMediaPreview } from '../../../components/workout/media/ExerciseMediaPreview';
+import { useTokens } from '../../../lib/theme';
 import { useExercises } from '../../../hooks/useWorkout';
+import {
+  trackExerciseDetailOpenedFromPreview,
+  trackExerciseMediaPreviewExpanded,
+} from '../../../lib/analytics';
 
 type LibraryScope = 'all' | 'program' | 'reference';
 
@@ -14,20 +29,71 @@ export default function ExerciseLibraryScreen() {
   const insets = useSafeAreaInsets();
   const [search, setSearch] = useState('');
   const [scope, setScope] = useState<LibraryScope>('all');
+  const [category, setCategory] = useState<string | undefined>(undefined);
+  const [equipment, setEquipment] = useState<string | undefined>(undefined);
+  const [provider, setProvider] = useState<string | undefined>(undefined);
+  const [hasMedia, setHasMedia] = useState<boolean | undefined>(undefined);
+  const [visibleIds, setVisibleIds] = useState<string[]>([]);
 
-  const filters = useMemo(() => {
+  const baseScopeFilter = useMemo(() => {
     const referenceOnly = scope === 'all' ? undefined : scope === 'reference';
-    return { search, referenceOnly };
-  }, [search, scope]);
+    return { referenceOnly };
+  }, [scope]);
 
-  const { data: exercises, isLoading } = useExercises(filters);
+  const { data: exerciseCatalog = [] } = useExercises(baseScopeFilter);
+  const { data: exercises = [], isLoading } = useExercises({
+    search,
+    category,
+    sourceProvider: provider,
+    hasMedia,
+    equipment: equipment ? [equipment] : undefined,
+    referenceOnly: baseScopeFilter.referenceOnly,
+  });
+
+  const categoryOptions = useMemo(
+    () => Array.from(new Set(exerciseCatalog.map((item) => item.category).filter(Boolean))).sort(),
+    [exerciseCatalog],
+  );
+  const equipmentOptions = useMemo(
+    () => Array.from(new Set(exerciseCatalog.flatMap((item) => item.equipment_required || []).filter(Boolean))).sort(),
+    [exerciseCatalog],
+  );
+  const providerOptions = useMemo(
+    () => Array.from(new Set(exerciseCatalog.map((item) => item.source_provider).filter(Boolean))).sort(),
+    [exerciseCatalog],
+  );
+
+  const onViewableItemsChanged = useRef(
+    ({ viewableItems }: { viewableItems: ViewToken[] }) => {
+      setVisibleIds(
+        viewableItems
+          .map((item) => item.item?.id)
+          .filter(Boolean),
+      );
+    },
+  ).current;
 
   const scopeCountLabel = useMemo(() => {
-    const total = exercises?.length ?? 0;
+    const total = exercises.length;
     if (scope === 'all') return `ALL (${total})`;
     if (scope === 'program') return `PROGRAM (${total})`;
     return `REFERENCE (${total})`;
-  }, [exercises?.length, scope]);
+  }, [exercises.length, scope]);
+
+  const openExerciseDetail = (exerciseId: string) => {
+    trackExerciseMediaPreviewExpanded({
+      source: 'exercise_library',
+      exercise_id: exerciseId,
+    });
+    trackExerciseDetailOpenedFromPreview({
+      source: 'exercise_library',
+      exercise_id: exerciseId,
+    });
+    router.push({
+      pathname: '/(tabs)/workout/exercise-detail',
+      params: { id: exerciseId, source: 'library_preview' },
+    });
+  };
 
   return (
     <View style={[styles.container, { backgroundColor: c.bg, paddingTop: insets.top }]}>
@@ -114,54 +180,180 @@ export default function ExerciseLibraryScreen() {
         })}
       </View>
 
-      <ScrollView style={styles.scrollView} contentContainerStyle={{ padding: s.lg, paddingBottom: 100 }}>
-        {isLoading ? (
-          <ActivityIndicator color={c.primary} />
-        ) : (
-          <View>
-            <Text style={{ color: c.textMuted, marginBottom: 8, fontSize: 12, letterSpacing: 1 }}>{scopeCountLabel}</Text>
-            {exercises?.map((ex) => (
-              <Pressable
-                key={ex.id}
-                style={[
-                  styles.exerciseCard,
-                  {
-                    backgroundColor: c.surface,
-                    borderRadius: r.md,
-                  },
-                ]}
-                onPress={() => router.push(`/(tabs)/workout/exercise-detail?id=${ex.id}`)}
-              >
-                <View style={{ flex: 1 }}>
-                  <Text style={{ color: c.text, fontFamily: ty.body.familySemibold }}>{ex.name}</Text>
-                  <Text style={{ color: c.textMuted, fontSize: 12, marginTop: 2 }}>
-                    {ex.category} • {ex.primary_muscle || 'Unknown'}
-                  </Text>
-                  <View style={styles.badgesRow}>
-                    {ex.is_reference_only ? (
-                      <View style={[styles.badge, { backgroundColor: `${c.primary}22`, borderColor: `${c.primary}66` }]}>
-                        <Text style={{ color: c.primary, fontSize: 10, fontFamily: ty.body.familySemibold }}>Reference</Text>
-                      </View>
-                    ) : null}
-                    {!ex.has_media ? (
-                      <View style={[styles.badge, { backgroundColor: `${c.danger}1A`, borderColor: `${c.danger}55` }]}>
-                        <Text style={{ color: c.danger, fontSize: 10, fontFamily: ty.body.familySemibold }}>No media</Text>
-                      </View>
-                    ) : null}
-                  </View>
-                </View>
-                <TabBarIcon name="chevron-forward" color={c.textMuted} size={16} />
-              </Pressable>
-            ))}
+      <FlatList
+        data={exercises}
+        keyExtractor={(item) => item.id}
+        viewabilityConfig={{ itemVisiblePercentThreshold: 65 }}
+        onViewableItemsChanged={onViewableItemsChanged}
+        ListHeaderComponent={
+          <View style={{ paddingHorizontal: s.lg, paddingTop: s.md }}>
+            <Text style={{ color: c.textMuted, marginBottom: s.sm, fontSize: 12, letterSpacing: 1 }}>
+              {scopeCountLabel}
+            </Text>
 
-            {exercises?.length === 0 ? (
-              <Text style={{ color: c.textMuted, textAlign: 'center', marginTop: 20 }}>
-                No exercises found.
-              </Text>
-            ) : null}
+            <FilterRow
+              label="Category"
+              options={categoryOptions}
+              selected={category}
+              onSelect={setCategory}
+            />
+            <FilterRow
+              label="Equipment"
+              options={equipmentOptions}
+              selected={equipment}
+              onSelect={setEquipment}
+            />
+            <FilterRow
+              label="Source"
+              options={providerOptions}
+              selected={provider}
+              onSelect={setProvider}
+            />
+            <FilterRow
+              label="Media"
+              options={['with_media', 'without_media']}
+              selected={
+                hasMedia === undefined ? undefined : hasMedia ? 'with_media' : 'without_media'
+              }
+              onSelect={(value) => {
+                if (!value) {
+                  setHasMedia(undefined);
+                  return;
+                }
+                setHasMedia(value === 'with_media');
+              }}
+            />
           </View>
+        }
+        renderItem={({ item }) => (
+          <Pressable
+            style={[
+              styles.exerciseCard,
+              {
+                backgroundColor: c.surface,
+                borderRadius: r.md,
+                borderColor: c.border,
+                marginHorizontal: s.lg,
+              },
+            ]}
+            onPress={() => openExerciseDetail(item.id)}
+          >
+            <ExerciseMediaPreview
+              exerciseId={item.id}
+              videoUrl={item.video_url}
+              gifUrl={item.gif_url}
+              imageUrl={item.image_url}
+              posterUrl={item.poster_url}
+              hasMedia={item.has_media}
+              autoplay={visibleIds.includes(item.id)}
+              fit="contain"
+              height={92}
+              borderRadius={r.md}
+              analyticsSource="exercise_library"
+              analyticsExerciseId={item.id}
+            />
+            <View style={{ flex: 1 }}>
+              <Text style={{ color: c.text, fontFamily: ty.body.familySemibold, fontSize: ty.sizes.sm }}>
+                {item.name}
+              </Text>
+              <Text style={{ color: c.textMuted, fontSize: ty.sizes.xs, marginTop: 2 }}>
+                {item.category} • {item.primary_muscle || 'Unknown'}
+              </Text>
+              <Text style={{ color: c.textMuted, fontSize: ty.sizes.xs, marginTop: 4 }} numberOfLines={1}>
+                {(item.equipment_required || []).slice(0, 3).join(' • ') || 'No equipment listed'}
+              </Text>
+              <View style={styles.badgesRow}>
+                {item.is_reference_only ? (
+                  <View style={[styles.badge, { backgroundColor: `${c.primary}22`, borderColor: `${c.primary}66` }]}>
+                    <Text style={{ color: c.primary, fontSize: 10, fontFamily: ty.body.familySemibold }}>Reference</Text>
+                  </View>
+                ) : null}
+                {!item.has_media ? (
+                  <View style={[styles.badge, { backgroundColor: `${c.danger}1A`, borderColor: `${c.danger}55` }]}>
+                    <Text style={{ color: c.danger, fontSize: 10, fontFamily: ty.body.familySemibold }}>No media</Text>
+                  </View>
+                ) : null}
+                {item.source_provider ? (
+                  <View style={[styles.badge, { backgroundColor: c.surface2, borderColor: c.border }]}>
+                    <Text style={{ color: c.textMuted, fontSize: 10, fontFamily: ty.body.familySemibold }}>{item.source_provider}</Text>
+                  </View>
+                ) : null}
+              </View>
+            </View>
+            <TabBarIcon name="chevron-forward" color={c.textMuted} size={16} />
+          </Pressable>
         )}
-      </ScrollView>
+        ListEmptyComponent={
+          isLoading ? (
+            <ActivityIndicator color={c.primary} style={{ marginTop: s.xl }} />
+          ) : (
+            <Text style={{ color: c.textMuted, textAlign: 'center', marginTop: s.xl }}>
+              No exercises found.
+            </Text>
+          )
+        }
+        contentContainerStyle={{ paddingBottom: insets.bottom + 100, gap: s.sm }}
+      />
+    </View>
+  );
+}
+
+function FilterRow({
+  label,
+  options,
+  selected,
+  onSelect,
+}: {
+  label: string;
+  options: string[];
+  selected?: string;
+  onSelect: (value: string | undefined) => void;
+}) {
+  const { c, s, ty, r } = useTokens();
+
+  if (!options.length) {
+    return null;
+  }
+
+  return (
+    <View style={{ marginBottom: s.sm }}>
+      <Text style={{ color: c.textMuted, fontFamily: ty.body.familySemibold, fontSize: ty.sizes.xs, marginBottom: 6 }}>
+        {label.toUpperCase()}
+      </Text>
+      <FlatList
+        horizontal
+        data={['all', ...options]}
+        keyExtractor={(item) => item}
+        showsHorizontalScrollIndicator={false}
+        renderItem={({ item }) => {
+          const active = (selected || 'all') === item;
+          const display = item === 'all' ? 'All' : item.replaceAll('_', ' ');
+          return (
+            <Pressable
+              onPress={() => onSelect(item === 'all' ? undefined : item)}
+              style={[
+                styles.filterChip,
+                {
+                  marginRight: 8,
+                  borderRadius: r.pill,
+                  borderColor: active ? c.primary : c.border,
+                  backgroundColor: active ? `${c.primary}22` : c.surface,
+                },
+              ]}
+            >
+              <Text
+                style={{
+                  color: active ? c.primary : c.textMuted,
+                  fontFamily: ty.body.familySemibold,
+                  fontSize: ty.sizes.xs,
+                }}
+              >
+                {display}
+              </Text>
+            </Pressable>
+          );
+        }}
+      />
     </View>
   );
 }
@@ -209,18 +401,16 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderRadius: 999,
   },
-  scrollView: {
-    flex: 1,
-  },
   exerciseCard: {
-    padding: 16,
-    marginBottom: 8,
+    padding: 12,
+    borderWidth: 1,
     flexDirection: 'row',
-    justifyContent: 'space-between',
     alignItems: 'center',
+    gap: 12,
   },
   badgesRow: {
     flexDirection: 'row',
+    flexWrap: 'wrap',
     gap: 6,
     marginTop: 8,
   },
@@ -230,5 +420,9 @@ const styles = StyleSheet.create({
     paddingHorizontal: 8,
     paddingVertical: 2,
   },
+  filterChip: {
+    borderWidth: 1,
+    paddingHorizontal: 10,
+    paddingVertical: 8,
+  },
 });
-

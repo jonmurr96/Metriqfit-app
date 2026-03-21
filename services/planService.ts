@@ -6,7 +6,22 @@
 
 import { supabase } from '../lib/supabase';
 import { Database } from '../lib/supabase/types';
-import { assertExerciseMatchesPlanDayFocus } from './workoutCoherenceService';
+import {
+  assertExerciseMatchesPlanDayFocus,
+  getWorkoutPlanCoherenceReport as loadWorkoutPlanCoherenceReport,
+  type WorkoutPlanCoherenceReport,
+} from './workoutCoherenceService';
+import {
+  normalizeWeeklyLayout,
+  summarizeWeeklyLayout,
+  type UserWorkoutPlanProgramMeta,
+} from '../lib/workout/program-catalog';
+import { buildWorkoutPlanDiff, type WorkoutPlanDiffResult } from '../lib/workout/plan-regeneration-diff';
+import { buildNutritionPlanDiff, type NutritionPlanDiffResult, type NutritionPlanComparable } from '../lib/nutrition/plan-regeneration-diff';
+import {
+  isPreviewNutritionPlanRecord,
+  normalizePreviewNutritionPlanName,
+} from '../lib/nutrition/plan-lifecycle';
 
 type WorkoutPlan = Database['public']['Tables']['user_workout_plans']['Row'];
 type WorkoutPlanDay = Database['public']['Tables']['user_workout_plan_days']['Row'];
@@ -16,10 +31,37 @@ type NutritionPlan = Database['public']['Tables']['user_nutrition_plans']['Row']
 type LegacyPlanGenerationStatus = 'pending' | 'success' | 'failed' | 'validation_failed';
 
 const db = supabase as any;
+const WORKOUT_PREVIEW_NAME_PREFIX = 'Preview · ';
+const WORKOUT_PLAN_DETAILS_SELECT = `
+      *,
+      days:user_workout_plan_days(
+        *,
+        exercises:user_workout_plan_exercises(
+          *,
+          exercise:exercises!exercise_id(
+            id,
+            name,
+            category,
+            equipment_required,
+            primary_muscle,
+            video_url,
+            gif_url,
+            image_url,
+            poster_url,
+            has_media,
+            source_provider
+          )
+        )
+      )
+    `;
 
 export interface WorkoutPlanWithDetails extends WorkoutPlan {
+  programMeta?: UserWorkoutPlanProgramMeta;
+  weeklyLayoutSummary?: string;
   days: Array<
     WorkoutPlanDay & {
+      day_type?: string;
+      estimated_duration_min?: number | null;
       exercises: Array<
         WorkoutPlanExercise & {
           exercise: {
@@ -29,6 +71,11 @@ export interface WorkoutPlanWithDetails extends WorkoutPlan {
             equipment_required: string[];
             primary_muscle: string | null;
             video_url: string | null;
+            gif_url?: string | null;
+            image_url?: string | null;
+            poster_url?: string | null;
+            has_media?: boolean;
+            source_provider?: string | null;
           };
         }
       >;
@@ -71,6 +118,133 @@ export interface PlanGenerationOptions {
   strict_macro_mode?: boolean;
   variety_profile?: 'moderate_rotation_4_5' | 'minimal' | 'high';
   strict_template_source?: boolean;
+  generation_mode?: 'initial' | 'regenerate';
+  activation_mode?: 'preview' | 'activate';
+  workout_regeneration?: WorkoutRegenerationRequest;
+  nutrition_regeneration?: NutritionRegenerationRequest;
+}
+
+export type WorkoutRegenerationReason =
+  | 'not_seeing_results'
+  | 'too_hard_to_recover'
+  | 'sessions_too_long'
+  | 'too_repetitive'
+  | 'schedule_changed'
+  | 'equipment_changed'
+  | 'pain_or_discomfort'
+  | 'want_different_split'
+  | 'other';
+
+export type WorkoutRegenerationIssueFlag =
+  | 'too_many_days'
+  | 'too_much_volume'
+  | 'wrong_exercise_selection'
+  | 'need_more_variety'
+  | 'need_more_structure';
+
+export interface WorkoutRegenerationRequest {
+  current_plan_id: string;
+  reason: WorkoutRegenerationReason;
+  issue_flags: WorkoutRegenerationIssueFlag[];
+  free_text?: string;
+  days_per_week_override?: number | null;
+  preferred_split_family?: string | null;
+  progression_preference?: string | null;
+  session_duration_target_min?: number | null;
+  goal_emphasis?: string | null;
+  preferred_days_off?: string[];
+  equipment_access?: string | null;
+  injuries?: string[];
+  avoid_exercise_names?: string[];
+  keep_exercise_names?: string[];
+  keep_current_split?: boolean;
+  start_fresh?: boolean;
+}
+
+export interface WorkoutAdherenceSummary {
+  completionRate28d: number;
+  missedSessions28d: number;
+  completedSessions28d: number;
+  avgLoggedDurationMin: number | null;
+  mostFrequentlySkippedDays: string[];
+}
+
+export interface WorkoutPlanPreview {
+  runId: string;
+  previewPlanId: string;
+  currentPlan: WorkoutPlanWithDetails;
+  previewPlan: WorkoutPlanWithDetails;
+  diff: WorkoutPlanDiffResult;
+  warnings: string[];
+}
+
+export interface WorkoutPlanPreviewValidationFailure {
+  status: 'validation_failed';
+  runId: string;
+  message: string;
+  warnings: string[];
+}
+
+export type WorkoutPlanPreviewResult = WorkoutPlanPreview | WorkoutPlanPreviewValidationFailure;
+export type { WorkoutPlanCoherenceReport };
+
+export type NutritionRegenerationReason =
+  | 'not_hitting_macros'
+  | 'too_repetitive'
+  | 'prep_takes_too_long'
+  | 'budget_changed'
+  | 'dietary_preferences_changed'
+  | 'allergy_or_food_issue'
+  | 'schedule_changed'
+  | 'want_different_meals'
+  | 'other';
+
+export type NutritionRegenerationIssueFlag =
+  | 'too_many_meals'
+  | 'too_few_meals'
+  | 'wrong_macros'
+  | 'need_more_variety'
+  | 'too_expensive'
+  | 'prep_too_complex'
+  | 'foods_i_wont_eat';
+
+export interface NutritionRegenerationRequest {
+  current_plan_id: string;
+  reason: NutritionRegenerationReason;
+  issue_flags: NutritionRegenerationIssueFlag[];
+  meals_per_day_override?: number | null;
+  dietary_preference_override?: string | null;
+  allergies?: string[];
+  refused_foods?: string[];
+  prep_time_target_min?: number | null;
+  budget_limit?: number | null;
+  keep_meal_slots?: boolean;
+  start_fresh?: boolean;
+}
+
+export interface NutritionPlanPreview {
+  runId: string;
+  previewPlanId: string;
+  currentPlan: NutritionPlanWithDetails;
+  previewPlan: NutritionPlanWithDetails;
+  diff: NutritionPlanDiffResult;
+  warnings: string[];
+}
+
+export interface NutritionPlanPreviewValidationFailure {
+  status: 'validation_failed';
+  runId: string;
+  message: string;
+  warnings: string[];
+}
+
+export type NutritionPlanPreviewResult = NutritionPlanPreview | NutritionPlanPreviewValidationFailure;
+
+export interface EditableNutritionPlanContext {
+  livePlan: NutritionPlanWithDetails | null;
+  previewPlan: NutritionPlanWithDetails | null;
+  editablePlan: NutritionPlanWithDetails | null;
+  source: 'live' | 'preview' | 'none';
 }
 
 export interface NutritionPlanMealVariantItem {
@@ -105,6 +279,8 @@ export interface NutritionPlanMealVariant {
   items: NutritionPlanMealVariantItem[];
 }
 
+export type NutritionMealMappingState = 'ready' | 'repairable' | 'unmapped';
+
 export interface NutritionPlanMeal {
   id: string;
   plan_id: string;
@@ -121,6 +297,9 @@ export interface NutritionPlanMeal {
   selected_variant_id: string | null;
   selected_variant: NutritionPlanMealVariant | null;
   variants: NutritionPlanMealVariant[];
+  can_direct_log: boolean;
+  mapping_state: NutritionMealMappingState;
+  unmapped_item_count: number;
 }
 
 export interface NutritionDayTotals {
@@ -203,7 +382,67 @@ export interface WorkoutScheduleEntry {
     day_number: number;
     name: string;
     focus: string | null;
+    day_type?: string;
+    estimated_duration_min?: number | null;
   } | null;
+}
+
+function buildPlanProgramMeta(plan: WorkoutPlanWithDetails): UserWorkoutPlanProgramMeta {
+  const planDays = (plan.days || []).map((day) => ({
+    id: day.id,
+    dayType: day.day_type || 'workout',
+  }));
+
+  const weeklyLayout = normalizeWeeklyLayout(
+    plan.weekly_layout_json,
+    planDays,
+    Number(plan.days_per_week || planDays.length || 0),
+    [],
+  );
+
+  return {
+    sourceModel: (plan.source_model as UserWorkoutPlanProgramMeta['sourceModel']) || 'generated',
+    programTemplateV2Id: plan.program_template_v2_id || null,
+    programFamilyKey: plan.program_family_key || null,
+    progressionModel: plan.progression_model || null,
+    trainingStyleTags: plan.training_style_tags || [],
+    goalTags: plan.goal_tags || [],
+    weeklyLayout,
+  };
+}
+
+function isPreviewWorkoutPlanRecord(plan: Partial<WorkoutPlan> | null | undefined) {
+  if (!plan) return false;
+  if ((plan as any).lifecycle_state === 'preview') return true;
+  return typeof plan.name === 'string' && plan.name.startsWith(WORKOUT_PREVIEW_NAME_PREFIX);
+}
+
+function normalizePreviewWorkoutPlanName(name: string | null | undefined) {
+  const raw = String(name || '');
+  return raw.startsWith(WORKOUT_PREVIEW_NAME_PREFIX)
+    ? raw.slice(WORKOUT_PREVIEW_NAME_PREFIX.length)
+    : raw;
+}
+
+function decorateWorkoutPlan(plan: WorkoutPlanWithDetails): WorkoutPlanWithDetails {
+  const normalizedPlan = {
+    ...plan,
+    name: normalizePreviewWorkoutPlanName(plan.name),
+  };
+  const programMeta = buildPlanProgramMeta(normalizedPlan);
+
+  return {
+    ...normalizedPlan,
+    programMeta,
+    weeklyLayoutSummary: summarizeWeeklyLayout(programMeta.weeklyLayout),
+  };
+}
+
+function decorateNutritionPlan(plan: NutritionPlanWithDetails): NutritionPlanWithDetails {
+  return {
+    ...plan,
+    name: normalizePreviewNutritionPlanName(plan.name),
+  };
 }
 
 export interface ConsistencyRecord {
@@ -243,6 +482,303 @@ const MEAL_SLOT_INDEX: Record<NutritionMealSlot, number> = {
   snack: 3,
 };
 
+function normalizeFoodLookupName(value: string | null | undefined) {
+  return String(value || '')
+    .trim()
+    .toLowerCase()
+    .replace(/[%/(),.-]+/g, ' ')
+    .replace(/\s+/g, ' ');
+}
+
+function tokenizeFoodLookupName(value: string | null | undefined) {
+  return normalizeFoodLookupName(value)
+    .split(' ')
+    .filter(Boolean);
+}
+
+type FoodLookupEntry = {
+  id: string;
+  name: string;
+  isVerified: boolean;
+  normalizedName: string;
+  tokens: string[];
+};
+
+type FoodLookupContext = {
+  exact: Map<string, FoodLookupEntry>;
+  all: FoodLookupEntry[];
+};
+
+const FOOD_LOOKUP_ALIASES: Record<string, string[]> = {
+  'pea protein': ['plant protein powder pea'],
+  'cottage cheese': ['cottage cheese low fat', 'cottage cheese full fat'],
+  'chicken breast': ['chicken breast skinless cooked', 'rotisserie chicken breast'],
+  'rice cakes': ['rice cakes plain'],
+  almonds: ['almonds raw'],
+  'whole eggs': ['eggs whole cooked'],
+  tuna: ['tuna canned in water'],
+  walnuts: ['walnuts raw'],
+  'olive oil': ['olive oil extra virgin'],
+  'rolled oats': ['instant oats dry', 'oatmeal cooked', 'oats'],
+  banana: ['banana'],
+};
+
+function scoreFoodLookupEntry(
+  entry: FoodLookupEntry,
+  searchTokens: string[],
+) {
+  const matchedTokens = searchTokens.filter((token) => entry.tokens.includes(token)).length;
+  const coverage = searchTokens.length ? matchedTokens / searchTokens.length : 0;
+  const exactBoost = entry.normalizedName === searchTokens.join(' ') ? 4 : 0;
+  const prefixBoost = entry.normalizedName.startsWith(searchTokens.join(' ')) ? 2 : 0;
+
+  return (coverage * 100) + (entry.isVerified ? 5 : 0) + prefixBoost + exactBoost;
+}
+
+function buildFoodLookupMap(
+  foods: Array<{ id: string; name: string; is_verified?: boolean | null }>,
+) {
+  const exact = new Map<string, FoodLookupEntry>();
+  const all: FoodLookupEntry[] = [];
+
+  for (const food of foods) {
+    const normalizedName = normalizeFoodLookupName(food.name);
+    if (!normalizedName) continue;
+
+    const candidate: FoodLookupEntry = {
+      id: food.id,
+      name: food.name,
+      isVerified: !!food.is_verified,
+      normalizedName,
+      tokens: tokenizeFoodLookupName(food.name),
+    };
+    all.push(candidate);
+
+    const current = exact.get(normalizedName);
+    if (!current || (!current.isVerified && candidate.isVerified)) {
+      exact.set(normalizedName, candidate);
+    }
+  }
+
+  return { exact, all };
+}
+
+function findBestFoodLookupMatch(
+  value: string | null | undefined,
+  foodLookup: FoodLookupContext,
+) {
+  const normalizedValue = normalizeFoodLookupName(value);
+  if (!normalizedValue) return null;
+
+  const exactMatch = foodLookup.exact.get(normalizedValue);
+  if (exactMatch) return exactMatch;
+
+  const searchPhrases = [normalizedValue, ...(FOOD_LOOKUP_ALIASES[normalizedValue] || [])];
+  const phraseMatches = foodLookup.all.filter((entry) =>
+    searchPhrases.some((phrase) => {
+      const phraseTokens = tokenizeFoodLookupName(phrase);
+      return phraseTokens.length > 0 && phraseTokens.every((token) => entry.tokens.includes(token));
+    }),
+  );
+
+  if (phraseMatches.length) {
+    return phraseMatches.sort((left, right) => {
+      const leftScore = scoreFoodLookupEntry(left, tokenizeFoodLookupName(searchPhrases[0]));
+      const rightScore = scoreFoodLookupEntry(right, tokenizeFoodLookupName(searchPhrases[0]));
+      if (rightScore !== leftScore) return rightScore - leftScore;
+      return left.name.length - right.name.length;
+    })[0];
+  }
+
+  const queryTokens = tokenizeFoodLookupName(normalizedValue);
+  const fuzzyMatches = foodLookup.all
+    .filter((entry) => queryTokens.length > 0 && queryTokens.every((token) => entry.tokens.includes(token)))
+    .sort((left, right) => {
+      const leftScore = scoreFoodLookupEntry(left, queryTokens);
+      const rightScore = scoreFoodLookupEntry(right, queryTokens);
+      if (rightScore !== leftScore) return rightScore - leftScore;
+      return left.name.length - right.name.length;
+    });
+
+  return fuzzyMatches[0] || null;
+}
+
+async function getFoodLookupMap() {
+  const { data, error } = await supabase
+    .from('food_items')
+    .select('id, name, is_verified')
+    .order('is_verified', { ascending: false })
+    .order('name');
+
+  if (error) {
+    throw new Error(error.message || 'Failed to load food lookup');
+  }
+
+  return buildFoodLookupMap(data || []);
+}
+
+type NutritionPlanRepairSummary = {
+  planId?: string | null;
+  mealIds: string[];
+  totalItems: number;
+  mappedItems: number;
+  remainingUnmappedItems: number;
+  affectedMealIds: string[];
+};
+
+async function repairNutritionPlanMappingsForMealIds(
+  mealIds: string[],
+): Promise<NutritionPlanRepairSummary> {
+  if (!mealIds.length) {
+    return {
+      planId: null,
+      mealIds: [],
+      totalItems: 0,
+      mappedItems: 0,
+      remainingUnmappedItems: 0,
+      affectedMealIds: [],
+    };
+  }
+
+  const { data: variants, error: variantError } = await db
+    .from('user_nutrition_plan_meal_variants')
+    .select('id, plan_meal_id')
+    .in('plan_meal_id', mealIds)
+    .eq('is_active', true);
+
+  if (variantError) {
+    throw new Error(variantError.message || 'Failed to load meal variants');
+  }
+
+  const variantIds = (variants || []).map((variant: any) => variant.id);
+  const variantToMeal = new Map<string, string>(
+    (variants || []).map((variant: any) => [variant.id, variant.plan_meal_id]),
+  );
+
+  if (!variantIds.length) {
+    return {
+      planId: null,
+      mealIds,
+      totalItems: 0,
+      mappedItems: 0,
+      remainingUnmappedItems: 0,
+      affectedMealIds: [],
+    };
+  }
+
+  const { data: allItems, error: itemError } = await db
+    .from('user_nutrition_plan_meal_variant_items')
+    .select('id, variant_id, item_name, grams, food_item_id')
+    .in('variant_id', variantIds);
+
+  if (itemError) {
+    throw new Error(itemError.message || 'Failed to load meal items');
+  }
+
+  const zeroGramItemIds = (allItems || [])
+    .filter((item: any) => typeof item.grams === 'number' && item.grams <= 0)
+    .map((item: any) => item.id);
+
+  if (zeroGramItemIds.length) {
+    const { error: deleteError } = await db
+      .from('user_nutrition_plan_meal_variant_items')
+      .delete()
+      .in('id', zeroGramItemIds);
+
+    if (deleteError) {
+      throw new Error(deleteError.message || 'Failed to remove invalid zero-gram meal items');
+    }
+  }
+
+  const unmappedItems = (allItems || []).filter((item: any) =>
+    !item.food_item_id && typeof item.grams === 'number' && item.grams > 0,
+  );
+
+  if (!unmappedItems.length) {
+    return {
+      planId: null,
+      mealIds,
+      totalItems: 0,
+      mappedItems: 0,
+      remainingUnmappedItems: 0,
+      affectedMealIds: [],
+    };
+  }
+
+  const foodLookup = await getFoodLookupMap();
+  let mappedItems = 0;
+  const affectedMealIds = new Set<string>();
+
+  for (const item of unmappedItems as Array<{ id: string; variant_id: string; item_name: string }>) {
+    const match = findBestFoodLookupMatch(item.item_name, foodLookup);
+    if (!match) continue;
+
+    const { error: updateError } = await db
+      .from('user_nutrition_plan_meal_variant_items')
+      .update({ food_item_id: match.id })
+      .eq('id', item.id);
+
+    if (updateError) {
+      console.error('Failed to repair meal item mapping:', updateError);
+      continue;
+    }
+
+    mappedItems += 1;
+    const mealId = variantToMeal.get(item.variant_id);
+    if (mealId) affectedMealIds.add(mealId);
+  }
+
+  const { count: remainingUnmappedItems } = await db
+    .from('user_nutrition_plan_meal_variant_items')
+    .select('*', { count: 'exact', head: true })
+    .in('variant_id', variantIds)
+    .is('food_item_id', null);
+
+  return {
+    planId: null,
+    mealIds,
+    totalItems: unmappedItems.length + zeroGramItemIds.length,
+    mappedItems,
+    remainingUnmappedItems: remainingUnmappedItems || 0,
+    affectedMealIds: Array.from(affectedMealIds),
+  };
+}
+
+function getMealMappingReadiness(
+  meal: Pick<NutritionPlanMeal, 'selected_variant'>,
+  foodLookup: FoodLookupContext,
+): Pick<NutritionPlanMeal, 'can_direct_log' | 'mapping_state' | 'unmapped_item_count'> {
+  const items = (meal.selected_variant?.items || []).filter((item) => item.grams == null || item.grams > 0);
+
+  if (!items.length) {
+    return {
+      can_direct_log: false,
+      mapping_state: 'unmapped',
+      unmapped_item_count: 0,
+    };
+  }
+
+  const unmappedItems = items.filter((item) => !item.food_item_id || !item.grams || item.grams <= 0);
+  if (!unmappedItems.length) {
+    return {
+      can_direct_log: true,
+      mapping_state: 'ready',
+      unmapped_item_count: 0,
+    };
+  }
+
+  const repairableItems = unmappedItems.filter((item) => {
+    if (!item.grams || item.grams <= 0) return false;
+    return !!findBestFoodLookupMatch(item.item_name, foodLookup);
+  });
+
+  return {
+    can_direct_log: false,
+    mapping_state: repairableItems.length === unmappedItems.length ? 'repairable' : 'unmapped',
+    unmapped_item_count: unmappedItems.length,
+  };
+}
+
 function todayDate() {
   return new Date().toISOString().split('T')[0];
 }
@@ -259,6 +795,8 @@ function dateRange(days: number) {
 
 async function getSelectedVariantMap(mealIds: string[]) {
   if (!mealIds.length) return new Map<string, NutritionPlanMealVariant[]>();
+
+  await repairNutritionPlanMappingsForMealIds(mealIds);
 
   const { data: variants, error: variantError } = await db
     .from('user_nutrition_plan_meal_variants')
@@ -341,25 +879,7 @@ export async function getActiveWorkoutPlan(
 ): Promise<WorkoutPlanWithDetails | null> {
   const { data, error } = await supabase
     .from('user_workout_plans')
-    .select(
-      `
-      *,
-      days:user_workout_plan_days(
-        *,
-        exercises:user_workout_plan_exercises(
-          *,
-          exercise:exercises!exercise_id(
-            id,
-            name,
-            category,
-            equipment_required,
-            primary_muscle,
-            video_url
-          )
-        )
-      )
-    `,
-    )
+    .select(WORKOUT_PLAN_DETAILS_SELECT)
     .eq('user_id', userId)
     .eq('is_active', true)
     .order('created_at', { ascending: false })
@@ -370,7 +890,34 @@ export async function getActiveWorkoutPlan(
     return null;
   }
 
-  return data as WorkoutPlanWithDetails | null;
+  if (!data) {
+    return null;
+  }
+
+  return decorateWorkoutPlan(data as WorkoutPlanWithDetails);
+}
+
+export async function getWorkoutPlanById(
+  userId: string,
+  planId: string,
+): Promise<WorkoutPlanWithDetails | null> {
+  const { data, error } = await supabase
+    .from('user_workout_plans')
+    .select(WORKOUT_PLAN_DETAILS_SELECT)
+    .eq('user_id', userId)
+    .eq('id', planId)
+    .maybeSingle();
+
+  if (error) {
+    console.error('Failed to fetch workout plan by id:', error);
+    return null;
+  }
+
+  if (!data) {
+    return null;
+  }
+
+  return decorateWorkoutPlan(data as WorkoutPlanWithDetails);
 }
 
 /**
@@ -392,7 +939,44 @@ export async function getActiveNutritionPlan(
     return null;
   }
 
-  return data as NutritionPlanWithDetails | null;
+  return data ? decorateNutritionPlan(data as NutritionPlanWithDetails) : null;
+}
+
+export async function repairNutritionPlanMappings(planId: string): Promise<NutritionPlanRepairSummary> {
+  const { data: meals, error } = await db
+    .from('user_nutrition_plan_meals')
+    .select('id')
+    .eq('plan_id', planId);
+
+  if (error) {
+    throw new Error(error.message || 'Failed to load plan meals');
+  }
+
+  const mealIds = (meals || []).map((meal: any) => meal.id);
+  const summary = await repairNutritionPlanMappingsForMealIds(mealIds);
+  return {
+    ...summary,
+    planId,
+  };
+}
+
+export async function getNutritionPlanById(
+  userId: string,
+  planId: string,
+): Promise<NutritionPlanWithDetails | null> {
+  const { data, error } = await supabase
+    .from('user_nutrition_plans')
+    .select('*')
+    .eq('user_id', userId)
+    .eq('id', planId)
+    .maybeSingle();
+
+  if (error) {
+    console.error('Failed to fetch nutrition plan by id:', error);
+    return null;
+  }
+
+  return data ? decorateNutritionPlan(data as NutritionPlanWithDetails) : null;
 }
 
 /**
@@ -422,15 +1006,17 @@ export async function getNutritionPlanMealsForDay(
     return null;
   }
 
-  const mealsRaw = (mealRows || []) as Array<any>;
+  const mealsRaw = (mealRows || []) as any[];
   const mealIds = mealsRaw.map((meal) => meal.id);
   const variantMap = await getSelectedVariantMap(mealIds);
+  const foodLookup = await getFoodLookupMap();
 
   const meals: NutritionPlanMeal[] = mealsRaw.map((meal) => {
     const variants = variantMap.get(meal.id) || [];
     const selected = variants.find((variant) => variant.id === meal.selected_variant_id)
       || variants.find((variant) => variant.variant_type === 'default')
       || null;
+    const readiness = getMealMappingReadiness({ selected_variant: selected }, foodLookup);
 
     return {
       id: meal.id,
@@ -448,6 +1034,9 @@ export async function getNutritionPlanMealsForDay(
       selected_variant_id: meal.selected_variant_id,
       selected_variant: selected,
       variants,
+      can_direct_log: readiness.can_direct_log,
+      mapping_state: readiness.mapping_state,
+      unmapped_item_count: readiness.unmapped_item_count,
     };
   });
 
@@ -497,6 +1086,11 @@ export async function getNutritionPlanMeal(
 
   const variantMap = await getSelectedVariantMap([meal.id]);
   const variants = variantMap.get(meal.id) || [];
+  const selectedVariant = variants.find((variant) => variant.id === meal.selected_variant_id)
+    || variants.find((variant) => variant.variant_type === 'default')
+    || null;
+  const foodLookup = await getFoodLookupMap();
+  const readiness = getMealMappingReadiness({ selected_variant: selectedVariant }, foodLookup);
 
   return {
     id: meal.id,
@@ -512,10 +1106,11 @@ export async function getNutritionPlanMeal(
     prep_time_min: meal.prep_time_min,
     is_user_modified: meal.is_user_modified,
     selected_variant_id: meal.selected_variant_id,
-    selected_variant: variants.find((variant) => variant.id === meal.selected_variant_id)
-      || variants.find((variant) => variant.variant_type === 'default')
-      || null,
+    selected_variant: selectedVariant,
     variants,
+    can_direct_log: readiness.can_direct_log,
+    mapping_state: readiness.mapping_state,
+    unmapped_item_count: readiness.unmapped_item_count,
   };
 }
 
@@ -978,7 +1573,7 @@ export async function getWorkoutPlanHistory(userId: string): Promise<WorkoutPlan
     return [];
   }
 
-  return data || [];
+  return (data || []).filter((plan) => !isPreviewWorkoutPlanRecord(plan));
 }
 
 /**
@@ -996,7 +1591,7 @@ export async function getNutritionPlanHistory(userId: string): Promise<Nutrition
     return [];
   }
 
-  return data || [];
+  return ((data || []) as NutritionPlan[]).filter((plan) => !isPreviewNutritionPlanRecord(plan));
 }
 
 /**
@@ -1112,14 +1707,31 @@ export async function activateWorkoutPlan(planId: string, userId: string): Promi
  * Activate a specific nutrition plan version
  */
 export async function activateNutritionPlan(planId: string, userId: string): Promise<void> {
+  const { data: targetPlan } = await supabase
+    .from('user_nutrition_plans')
+    .select('id, name, lifecycle_state')
+    .eq('id', planId)
+    .eq('user_id', userId)
+    .maybeSingle();
+
   await supabase
     .from('user_nutrition_plans')
-    .update({ is_active: false })
+    .update({
+      is_active: false,
+      ...(targetPlan?.lifecycle_state ? { lifecycle_state: 'archived' } : {}),
+    })
     .eq('user_id', userId);
+
+  const updates: Record<string, unknown> = { is_active: true };
+  if (targetPlan?.lifecycle_state) {
+    updates.lifecycle_state = 'live';
+    updates.replaces_plan_id = null;
+    updates.name = normalizePreviewNutritionPlanName(targetPlan.name);
+  }
 
   const { error } = await supabase
     .from('user_nutrition_plans')
-    .update({ is_active: true })
+    .update(updates)
     .eq('id', planId)
     .eq('user_id', userId);
 
@@ -1145,6 +1757,11 @@ export async function getWorkoutPlanDay(
             equipment_required: string[];
             primary_muscle: string | null;
             video_url: string | null;
+            gif_url?: string | null;
+            image_url?: string | null;
+            poster_url?: string | null;
+            has_media?: boolean;
+            source_provider?: string | null;
           };
         }
       >;
@@ -1166,7 +1783,12 @@ export async function getWorkoutPlanDay(
             category,
             equipment_required,
             primary_muscle,
-            video_url
+            video_url,
+            gif_url,
+            image_url,
+            poster_url,
+            has_media,
+            source_provider
           )
         )
       )
@@ -1273,6 +1895,696 @@ export async function triggerPlanGeneration(
   }
 }
 
+export async function buildNutritionPlanComparableSnapshot(
+  userId: string,
+  plan: NutritionPlanWithDetails,
+): Promise<NutritionPlanComparable> {
+  const { data: mealRows, error: mealError } = await db
+    .from('user_nutrition_plan_meals')
+    .select('*')
+    .eq('plan_id', plan.id)
+    .order('day_of_week', { ascending: true });
+
+  if (mealError) {
+    console.error('Failed to fetch nutrition plan meals for diff:', mealError);
+    throw new Error('Failed to load nutrition plan meals');
+  }
+
+  const mealsRaw = (mealRows || []) as Array<any>;
+  const variantMap = await getSelectedVariantMap(mealsRaw.map((meal) => meal.id));
+  const foodLookup = await getFoodLookupMap();
+
+  const dayMeals = new Map<number, NutritionPlanMeal[]>();
+  for (const meal of mealsRaw) {
+    const variants = variantMap.get(meal.id) || [];
+    const selected = variants.find((variant) => variant.id === meal.selected_variant_id)
+      || variants.find((variant) => variant.variant_type === 'default')
+      || null;
+    const readiness = getMealMappingReadiness({ selected_variant: selected }, foodLookup);
+    const dayOfWeek = Number(meal.day_of_week);
+    if (!Number.isFinite(dayOfWeek)) continue;
+
+    const meals = dayMeals.get(dayOfWeek) || [];
+    meals.push({
+      id: meal.id,
+      plan_id: meal.plan_id,
+      meal_slot: meal.meal_slot,
+      day_of_week: meal.day_of_week,
+      name: meal.name,
+      description: meal.description,
+      target_calories: meal.target_calories,
+      target_protein: meal.target_protein,
+      target_carbs: meal.target_carbs,
+      target_fat: meal.target_fat,
+      prep_time_min: meal.prep_time_min,
+      is_user_modified: meal.is_user_modified,
+      selected_variant_id: meal.selected_variant_id,
+      selected_variant: selected,
+      variants,
+      can_direct_log: readiness.can_direct_log,
+      mapping_state: readiness.mapping_state,
+      unmapped_item_count: readiness.unmapped_item_count,
+    });
+    dayMeals.set(dayOfWeek, meals);
+  }
+
+  const { data: targetsData } = await supabase
+    .from('user_targets')
+    .select('calories, protein_g, carbs_g, fat_g')
+    .eq('user_id', userId)
+    .maybeSingle();
+
+  const targets = {
+    calories: Number(targetsData?.calories || 0),
+    protein: Number(targetsData?.protein_g || 0),
+    carbs: Number(targetsData?.carbs_g || 0),
+    fat: Number(targetsData?.fat_g || 0),
+  };
+
+  const days = Array.from(dayMeals.entries())
+    .sort(([left], [right]) => left - right)
+    .map(([dayOfWeek, meals]) => {
+      const orderedMeals = [...meals].sort(
+        (left, right) => (MEAL_SLOT_INDEX[left.meal_slot] ?? 99) - (MEAL_SLOT_INDEX[right.meal_slot] ?? 99),
+      );
+      const computed = computeDayTotalsFromMeals(orderedMeals, targets);
+      return {
+        dayOfWeek,
+        meals: orderedMeals.map((meal) => ({
+          id: meal.id,
+          meal_slot: meal.meal_slot,
+          name: meal.name,
+          target_calories: meal.target_calories,
+          target_protein: meal.target_protein,
+          target_carbs: meal.target_carbs,
+          target_fat: meal.target_fat,
+          selected_variant: meal.selected_variant
+            ? {
+                id: meal.selected_variant.id,
+                name: meal.selected_variant.name,
+                items: meal.selected_variant.items.map((item) => ({
+                  item_name: item.item_name,
+                  grams: item.grams,
+                  calories: item.calories,
+                  protein: item.protein,
+                  carbs: item.carbs,
+                  fat: item.fat,
+                })),
+              }
+            : null,
+        })),
+        totals: computed.totals,
+        targets,
+        delta: computed.delta,
+      };
+    });
+
+  return {
+    id: plan.id,
+    name: plan.name,
+    days,
+  };
+}
+
+export async function getLatestNutritionPlanPreview(
+  userId: string,
+  replacesPlanId?: string | null,
+): Promise<NutritionPlanWithDetails | null> {
+  const { data, error } = await supabase
+    .from('user_nutrition_plans')
+    .select('*')
+    .eq('user_id', userId)
+    .eq('is_active', false)
+    .order('created_at', { ascending: false })
+    .limit(10);
+
+  if (error) {
+    console.error('Failed to fetch nutrition plan preview:', error);
+    return null;
+  }
+
+  const preview = ((data || []) as NutritionPlanWithDetails[]).find((plan) => {
+    if (!isPreviewNutritionPlanRecord(plan)) return false;
+    if (replacesPlanId && (plan as any).replaces_plan_id && (plan as any).replaces_plan_id !== replacesPlanId) {
+      return false;
+    }
+    return true;
+  });
+
+  return preview ? decorateNutritionPlan(preview) : null;
+}
+
+export async function generateNutritionPlanPreview(
+  userId: string,
+  nutritionRegeneration: NutritionRegenerationRequest,
+): Promise<NutritionPlanPreviewResult> {
+  const currentPlan = await getActiveNutritionPlan(userId);
+  if (!currentPlan) {
+    throw new Error('No active nutrition plan to regenerate');
+  }
+
+  const {
+    data: { session },
+  } = await supabase.auth.getSession();
+
+  if (!session) {
+    throw new Error('Authentication required. Please sign in again.');
+  }
+
+  const { data, error } = await supabase.functions.invoke('generate-user-plans', {
+    headers: {
+      Authorization: `Bearer ${session.access_token}`,
+    },
+    body: {
+      user_id: userId,
+      plan_type: 'nutrition',
+      generation_horizon_days: { nutrition: 7 },
+      generation_mode: 'regenerate',
+      activation_mode: 'preview',
+      nutrition_regeneration: nutritionRegeneration,
+    } satisfies PlanGenerationOptions & Record<string, unknown>,
+  });
+
+  if (error) {
+    console.error('Nutrition preview generation failed:', error);
+    throw new Error(error.message || 'Failed to generate nutrition preview');
+  }
+
+  const runId = data?.runId || data?.run_id;
+  const validationStatus = data?.status || 'preview_ready';
+  const warnings = data?.warnings || [];
+
+  if (validationStatus === 'validation_failed') {
+    return {
+      status: 'validation_failed',
+      runId,
+      warnings,
+      message: data?.message || 'We need more direction to build a meaningfully different nutrition plan.',
+    };
+  }
+
+  const previewPlanId = data?.nutritionPlanId || data?.nutrition_plan_id;
+  if (!previewPlanId) {
+    throw new Error('Preview generation returned no nutrition plan');
+  }
+
+  const previewPlan = await getNutritionPlanById(userId, previewPlanId);
+  if (!previewPlan) {
+    throw new Error('Preview nutrition plan could not be loaded');
+  }
+
+  const [currentComparable, previewComparable] = await Promise.all([
+    buildNutritionPlanComparableSnapshot(userId, currentPlan),
+    buildNutritionPlanComparableSnapshot(userId, previewPlan),
+  ]);
+
+  const diff = buildNutritionPlanDiff({
+    currentPlan: currentComparable,
+    previewPlan: previewComparable,
+  });
+
+  if (!diff.isMateriallyDifferent) {
+    await discardNutritionPlanPreview(previewPlanId);
+    return {
+      status: 'validation_failed',
+      runId,
+      warnings,
+      message: 'We need more direction to build a meaningfully different nutrition plan.',
+    };
+  }
+
+  return {
+    runId,
+    previewPlanId,
+    currentPlan,
+    previewPlan,
+    diff,
+    warnings,
+  };
+}
+
+export async function applyNutritionPlanPreview(previewPlanId: string): Promise<void> {
+  try {
+    const { error } = await supabase.rpc('apply_nutrition_plan_preview', {
+      preview_plan_id: previewPlanId,
+    });
+    if (!error) {
+      return;
+    }
+    console.warn('apply_nutrition_plan_preview RPC unavailable, using fallback:', error.message);
+  } catch (error) {
+    console.warn('apply_nutrition_plan_preview RPC failed, using fallback:', error);
+  }
+
+  const userId = await getAuthenticatedUserId();
+  const { data: previewPlan, error: previewError } = await supabase
+    .from('user_nutrition_plans')
+    .select('*')
+    .eq('id', previewPlanId)
+    .eq('user_id', userId)
+    .maybeSingle();
+
+  if (previewError || !previewPlan || !isPreviewNutritionPlanRecord(previewPlan)) {
+    throw new Error(previewError?.message || 'Nutrition preview not found');
+  }
+
+  await supabase
+    .from('user_nutrition_plans')
+    .update({
+      is_active: false,
+      ...(previewPlan.lifecycle_state ? { lifecycle_state: 'archived' } : {}),
+    })
+    .eq('user_id', userId)
+    .eq('is_active', true);
+
+  const previewUpdates: Record<string, unknown> = {
+    is_active: true,
+    name: normalizePreviewNutritionPlanName(previewPlan.name),
+  };
+
+  if (previewPlan.lifecycle_state) {
+    previewUpdates.lifecycle_state = 'live';
+    previewUpdates.replaces_plan_id = null;
+  }
+
+  const { error: activateError } = await supabase
+    .from('user_nutrition_plans')
+    .update(previewUpdates)
+    .eq('id', previewPlanId)
+    .eq('user_id', userId);
+
+  if (activateError) {
+    throw new Error(activateError.message || 'Failed to activate nutrition preview');
+  }
+}
+
+export async function discardNutritionPlanPreview(previewPlanId: string): Promise<void> {
+  try {
+    const { error } = await supabase.rpc('discard_nutrition_plan_preview', {
+      preview_plan_id: previewPlanId,
+    });
+    if (!error) {
+      return;
+    }
+    console.warn('discard_nutrition_plan_preview RPC unavailable, using fallback:', error.message);
+  } catch (error) {
+    console.warn('discard_nutrition_plan_preview RPC failed, using fallback:', error);
+  }
+
+  const userId = await getAuthenticatedUserId();
+  const { data: previewPlan, error: previewError } = await supabase
+    .from('user_nutrition_plans')
+    .select('*')
+    .eq('id', previewPlanId)
+    .eq('user_id', userId)
+    .maybeSingle();
+
+  if (previewError || !previewPlan || !isPreviewNutritionPlanRecord(previewPlan)) {
+    throw new Error(previewError?.message || 'Nutrition preview not found');
+  }
+
+  const { error: deleteError } = await supabase
+    .from('user_nutrition_plans')
+    .delete()
+    .eq('id', previewPlanId)
+    .eq('user_id', userId);
+
+  if (deleteError) {
+    throw new Error(deleteError.message || 'Failed to discard nutrition preview');
+  }
+}
+
+export async function getEditableNutritionPlanContext(userId: string): Promise<EditableNutritionPlanContext> {
+  const livePlan = await getActiveNutritionPlan(userId);
+  const previewPlan = await getLatestNutritionPlanPreview(userId, livePlan?.id);
+
+  if (previewPlan) {
+    return {
+      livePlan,
+      previewPlan,
+      editablePlan: previewPlan,
+      source: 'preview',
+    };
+  }
+
+  if (livePlan) {
+    return {
+      livePlan,
+      previewPlan: null,
+      editablePlan: livePlan,
+      source: 'live',
+    };
+  }
+
+  return {
+    livePlan: null,
+    previewPlan: null,
+    editablePlan: null,
+    source: 'none',
+  };
+}
+
+export async function getLatestWorkoutPlanPreview(
+  userId: string,
+  replacesPlanId?: string | null,
+): Promise<WorkoutPlanWithDetails | null> {
+  const { data, error } = await supabase
+    .from('user_workout_plans')
+    .select(WORKOUT_PLAN_DETAILS_SELECT)
+    .eq('user_id', userId)
+    .eq('is_active', false)
+    .order('created_at', { ascending: false })
+    .limit(10);
+
+  if (error) {
+    console.error('Failed to fetch workout plan preview:', error);
+    return null;
+  }
+
+  const preview = ((data || []) as WorkoutPlanWithDetails[]).find((plan) => {
+    if (!isPreviewWorkoutPlanRecord(plan)) return false;
+    if (replacesPlanId && (plan as any).replaces_plan_id && (plan as any).replaces_plan_id !== replacesPlanId) {
+      return false;
+    }
+    return true;
+  });
+
+  return preview ? decorateWorkoutPlan(preview) : null;
+}
+
+export async function generateWorkoutPlanPreview(
+  userId: string,
+  workoutRegeneration: WorkoutRegenerationRequest,
+): Promise<WorkoutPlanPreviewResult> {
+  const currentPlan = await getActiveWorkoutPlan(userId);
+  if (!currentPlan) {
+    throw new Error('No active workout plan to regenerate');
+  }
+
+  const {
+    data: { session },
+  } = await supabase.auth.getSession();
+
+  if (!session) {
+    throw new Error('Authentication required. Please sign in again.');
+  }
+
+  const { data, error } = await supabase.functions.invoke('generate-user-plans', {
+    headers: {
+      Authorization: `Bearer ${session.access_token}`,
+    },
+    body: {
+      user_id: userId,
+      plan_type: 'workout',
+      generation_horizon_days: { workout: 28 },
+      generation_mode: 'regenerate',
+      activation_mode: 'preview',
+      workout_regeneration: workoutRegeneration,
+    } satisfies PlanGenerationOptions & Record<string, unknown>,
+  });
+
+  if (error) {
+    console.error('Workout preview generation failed:', error);
+    throw new Error(error.message || 'Failed to generate workout preview');
+  }
+
+  const runId = data?.runId || data?.run_id;
+  const validationStatus = data?.status || 'preview_ready';
+  const warnings = data?.warnings || [];
+
+  if (validationStatus === 'validation_failed') {
+    return {
+      status: 'validation_failed',
+      runId,
+      warnings,
+      message: data?.message || 'We need more direction to build a meaningfully different plan.',
+    };
+  }
+
+  const previewPlanId = data?.workoutPlanId || data?.workout_plan_id;
+  if (!previewPlanId) {
+    throw new Error('Preview generation returned no workout plan');
+  }
+
+  const previewPlan = await getWorkoutPlanById(userId, previewPlanId);
+  if (!previewPlan) {
+    throw new Error('Preview plan could not be loaded');
+  }
+
+  return {
+    runId,
+    previewPlanId,
+    currentPlan,
+    previewPlan,
+    diff: buildWorkoutPlanDiff({
+      currentPlan: {
+        id: currentPlan.id,
+        familyKey: currentPlan.programMeta?.programFamilyKey || currentPlan.program_family_key,
+        progressionModel: currentPlan.programMeta?.progressionModel || currentPlan.progression_model,
+        daysPerWeek: currentPlan.days_per_week,
+        weeklyLayout: currentPlan.programMeta?.weeklyLayout,
+        days: currentPlan.days.map((day) => ({
+          id: day.id,
+          name: day.name,
+          focus: day.focus,
+          estimatedDurationMin: day.estimated_duration_min || null,
+          exercises: day.exercises.map((exercise) => ({
+            exerciseId: exercise.exercise_id,
+            name: exercise.exercise?.name || null,
+          })),
+        })),
+      },
+      previewPlan: {
+        id: previewPlan.id,
+        familyKey: previewPlan.programMeta?.programFamilyKey || previewPlan.program_family_key,
+        progressionModel: previewPlan.programMeta?.progressionModel || previewPlan.progression_model,
+        daysPerWeek: previewPlan.days_per_week,
+        weeklyLayout: previewPlan.programMeta?.weeklyLayout,
+        days: previewPlan.days.map((day) => ({
+          id: day.id,
+          name: day.name,
+          focus: day.focus,
+          estimatedDurationMin: day.estimated_duration_min || null,
+          exercises: day.exercises.map((exercise) => ({
+            exerciseId: exercise.exercise_id,
+            name: exercise.exercise?.name || null,
+          })),
+        })),
+      },
+      minorRefinement: !!workoutRegeneration.keep_current_split && !workoutRegeneration.start_fresh,
+    }),
+    warnings,
+  };
+}
+
+export async function getWorkoutPlanCoherenceReport(
+  planId: string,
+): Promise<WorkoutPlanCoherenceReport> {
+  return loadWorkoutPlanCoherenceReport(planId);
+}
+
+async function getAuthenticatedUserId() {
+  const {
+    data: { user },
+    error,
+  } = await supabase.auth.getUser();
+
+  if (error || !user) {
+    throw new Error('Authentication required. Please sign in again.');
+  }
+
+  return user.id;
+}
+
+export async function repairWorkoutPlanCoherencePreview(
+  planId: string,
+): Promise<WorkoutPlanPreviewResult> {
+  const userId = await getAuthenticatedUserId();
+  const currentPlan = await getWorkoutPlanById(userId, planId);
+
+  if (!currentPlan) {
+    throw new Error('Workout plan not found');
+  }
+
+  const {
+    data: { session },
+  } = await supabase.auth.getSession();
+
+  if (!session) {
+    throw new Error('Authentication required. Please sign in again.');
+  }
+
+  const { data, error } = await supabase.functions.invoke('repair-workout-plan-coherence', {
+    headers: {
+      Authorization: `Bearer ${session.access_token}`,
+    },
+    body: {
+      plan_id: planId,
+      mode: 'preview',
+    },
+  });
+
+  if (error) {
+    console.error('Workout coherence repair preview failed:', error);
+    throw new Error(error.message || 'Failed to build repair preview');
+  }
+
+  if (data?.status === 'no_violations') {
+    return {
+      status: 'validation_failed',
+      runId: 'repair-noop',
+      message: 'This workout plan does not currently need a repair preview.',
+      warnings: [],
+    };
+  }
+
+  const previewPlanId = data?.workoutPlanId || data?.workout_plan_id;
+  if (!previewPlanId) {
+    throw new Error(data?.error || 'Repair preview returned no workout plan');
+  }
+
+  const previewPlan = await getWorkoutPlanById(userId, previewPlanId);
+  if (!previewPlan) {
+    throw new Error('Repair preview plan could not be loaded');
+  }
+
+  return {
+    runId: data?.runId || data?.run_id || 'repair-preview',
+    previewPlanId,
+    currentPlan,
+    previewPlan,
+    diff: buildWorkoutPlanDiff({
+      currentPlan: {
+        id: currentPlan.id,
+        familyKey: currentPlan.programMeta?.programFamilyKey || currentPlan.program_family_key,
+        progressionModel: currentPlan.programMeta?.progressionModel || currentPlan.progression_model,
+        daysPerWeek: currentPlan.days_per_week,
+        weeklyLayout: currentPlan.programMeta?.weeklyLayout,
+        days: currentPlan.days.map((day) => ({
+          id: day.id,
+          name: day.name,
+          focus: day.focus,
+          estimatedDurationMin: day.estimated_duration_min || null,
+          exercises: day.exercises.map((exercise) => ({
+            exerciseId: exercise.exercise_id,
+            name: exercise.exercise?.name || null,
+          })),
+        })),
+      },
+      previewPlan: {
+        id: previewPlan.id,
+        familyKey: previewPlan.programMeta?.programFamilyKey || previewPlan.program_family_key,
+        progressionModel: previewPlan.programMeta?.progressionModel || previewPlan.progression_model,
+        daysPerWeek: previewPlan.days_per_week,
+        weeklyLayout: previewPlan.programMeta?.weeklyLayout,
+        days: previewPlan.days.map((day) => ({
+          id: day.id,
+          name: day.name,
+          focus: day.focus,
+          estimatedDurationMin: day.estimated_duration_min || null,
+          exercises: day.exercises.map((exercise) => ({
+            exerciseId: exercise.exercise_id,
+            name: exercise.exercise?.name || null,
+          })),
+        })),
+      },
+      minorRefinement: false,
+    }),
+    warnings: data?.warnings || [],
+  };
+}
+
+export async function applyWorkoutPlanPreview(previewPlanId: string): Promise<void> {
+  try {
+    const { error } = await supabase.rpc('apply_workout_plan_preview', {
+      preview_plan_id: previewPlanId,
+    });
+    if (!error) {
+      return;
+    }
+    console.warn('apply_workout_plan_preview RPC unavailable, using fallback:', error.message);
+  } catch (error) {
+    console.warn('apply_workout_plan_preview RPC failed, using fallback:', error);
+  }
+
+  const userId = await getAuthenticatedUserId();
+  const { data: previewPlan, error: previewError } = await supabase
+    .from('user_workout_plans')
+    .select('*')
+    .eq('id', previewPlanId)
+    .eq('user_id', userId)
+    .maybeSingle();
+
+  if (previewError || !previewPlan || !isPreviewWorkoutPlanRecord(previewPlan)) {
+    throw new Error(previewError?.message || 'Workout preview not found');
+  }
+
+  await supabase
+    .from('user_workout_plans')
+    .update({
+      is_active: false,
+      ...(previewPlan.lifecycle_state ? { lifecycle_state: 'archived' } : {}),
+    })
+    .eq('user_id', userId)
+    .eq('is_active', true);
+
+  const previewUpdates: Record<string, unknown> = {
+    is_active: true,
+    name: normalizePreviewWorkoutPlanName(previewPlan.name),
+  };
+
+  if (previewPlan.lifecycle_state) {
+    previewUpdates.lifecycle_state = 'live';
+    previewUpdates.replaces_plan_id = null;
+  }
+
+  const { error: activateError } = await supabase
+    .from('user_workout_plans')
+    .update(previewUpdates)
+    .eq('id', previewPlanId)
+    .eq('user_id', userId);
+
+  if (activateError) {
+    throw new Error(activateError.message || 'Failed to activate workout preview');
+  }
+}
+
+export async function discardWorkoutPlanPreview(previewPlanId: string): Promise<void> {
+  try {
+    const { error } = await supabase.rpc('discard_workout_plan_preview', {
+      preview_plan_id: previewPlanId,
+    });
+    if (!error) {
+      return;
+    }
+    console.warn('discard_workout_plan_preview RPC unavailable, using fallback:', error.message);
+  } catch (error) {
+    console.warn('discard_workout_plan_preview RPC failed, using fallback:', error);
+  }
+
+  const userId = await getAuthenticatedUserId();
+  const { data: previewPlan, error: previewError } = await supabase
+    .from('user_workout_plans')
+    .select('*')
+    .eq('id', previewPlanId)
+    .eq('user_id', userId)
+    .maybeSingle();
+
+  if (previewError || !previewPlan || !isPreviewWorkoutPlanRecord(previewPlan)) {
+    throw new Error(previewError?.message || 'Workout preview not found');
+  }
+
+  const { error: deleteError } = await supabase
+    .from('user_workout_plans')
+    .delete()
+    .eq('id', previewPlanId)
+    .eq('user_id', userId);
+
+  if (deleteError) {
+    throw new Error(deleteError.message || 'Failed to discard workout preview');
+  }
+}
+
 /**
  * Get plan history by type (workout or nutrition)
  */
@@ -1293,7 +2605,11 @@ export async function getPlanHistory(
     return [];
   }
 
-  return data || [];
+  if (planType === 'workout') {
+    return ((data || []) as WorkoutPlan[]).filter((plan) => !isPreviewWorkoutPlanRecord(plan));
+  }
+
+  return ((data || []) as NutritionPlan[]).filter((plan) => !isPreviewNutritionPlanRecord(plan));
 }
 
 /**
@@ -1364,7 +2680,7 @@ export async function getTodayWorkoutScheduleEntry(
   if (data.plan_day_id) {
     const { data: dayRow } = await supabase
       .from('user_workout_plan_days')
-      .select('id, day_number, name, focus')
+      .select('id, day_number, name, focus, day_type, estimated_duration_min')
       .eq('id', data.plan_day_id)
       .maybeSingle();
     if (dayRow) {
@@ -1679,7 +2995,7 @@ export async function getWorkoutSchedule(
   if (dayIds.length) {
     const { data: dayRows } = await supabase
       .from('user_workout_plan_days')
-      .select('id, day_number, name, focus')
+      .select('id, day_number, name, focus, day_type, estimated_duration_min')
       .in('id', dayIds);
 
     for (const day of dayRows || []) {

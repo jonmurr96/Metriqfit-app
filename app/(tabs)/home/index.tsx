@@ -20,7 +20,7 @@ import { HomeWeeklyMomentumCard } from '../../../components/home/HomeWeeklyMomen
 import { HomeTomorrowPreviewCard } from '../../../components/home/HomeTomorrowPreviewCard';
 import { HomeHabitDock } from '../../../components/home/HomeHabitDock';
 import { useNutritionPlanDay, useTodayWorkoutScheduleEntry, useTodaysWorkout, useWorkoutSchedule } from '../../../hooks/usePlan';
-import { useOnboardingAnswers, useStreak } from '../../../hooks/useUser';
+import { useOnboardingAnswers, useStreak, useProfile } from '../../../hooks/useUser';
 import { useDailyMeals, useDailyTotals } from '../../../hooks/useNutrition';
 import { useDailyWaterSummary, useQuickAddWater } from '../../../hooks/useWater';
 import { usePrepCoachState } from '../../../hooks/usePrepCoach';
@@ -56,6 +56,7 @@ export default function HomeScreen() {
   const { data: todaySchedule } = useTodayWorkoutScheduleEntry();
   const { data: tomorrowSchedule } = useWorkoutSchedule(tomorrowDate, tomorrowDate);
   const { data: streak } = useStreak();
+  const { data: profile } = useProfile();
   const { data: onboardingAnswers } = useOnboardingAnswers();
   const { data: dailyTotals } = useDailyTotals();
   const { data: waterSummary } = useDailyWaterSummary(todayDate);
@@ -454,7 +455,7 @@ export default function HomeScreen() {
     <PremiumBackground>
       <ScrollView
         style={styles.container}
-        contentContainerStyle={[styles.content, { paddingTop: insets.top + s.lg, paddingBottom: 100 }]}
+        contentContainerStyle={[styles.content, { paddingTop: insets.top + s.lg, paddingBottom: 120 }]}
       >
         <MotiView
           from={{ opacity: 0, translateY: -20 }}
@@ -475,19 +476,22 @@ export default function HomeScreen() {
                 },
               ]}
             >
-              {"Today's Goals"}
+              {now.getHours() < 12 ? 'Good Morning' : now.getHours() < 17 ? 'Good Afternoon' : 'Good Evening'}
             </Text>
             <Text
+              numberOfLines={1}
+              adjustsFontSizeToFit
               style={[
                 styles.title,
                 {
                   color: c.text,
                   fontFamily: ty.heading.family,
                   fontSize: ty.sizes.h2,
+                  maxWidth: 240,
                 },
               ]}
             >
-              MetriqFit
+              {profile?.first_name || 'Athlete'}
             </Text>
           </View>
           <View style={styles.headerButtons}>

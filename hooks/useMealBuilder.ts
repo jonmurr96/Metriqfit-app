@@ -4,6 +4,7 @@ import { buildMealsFromConstraints, applyMealsBatch } from '../services/mealBuil
 import { planKeys } from './usePlan';
 import { groceryKeys } from './useGrocery';
 import { pantryKeys } from './usePantry';
+import { nutritionDashboardKeys } from './useNutritionDashboard';
 
 export const mealBuilderKeys = {
   all: ['meal-builder'] as const,
@@ -19,6 +20,7 @@ export function useBuildMealsFromConstraints() {
       if (user?.id) {
         queryClient.invalidateQueries({ queryKey: groceryKeys.lists(user.id) });
         queryClient.invalidateQueries({ queryKey: pantryKeys.items(user.id) });
+        queryClient.invalidateQueries({ queryKey: nutritionDashboardKeys.tools(user.id) });
       }
     },
   });
@@ -34,6 +36,8 @@ export function useApplyMealsBatch() {
       if (user?.id) {
         queryClient.invalidateQueries({ queryKey: planKeys.nutrition() });
         queryClient.invalidateQueries({ queryKey: planKeys.nutritionActive(user.id) });
+        queryClient.invalidateQueries({ queryKey: planKeys.nutritionEditable(user.id) });
+        queryClient.invalidateQueries({ queryKey: nutritionDashboardKeys.all });
       }
     },
   });

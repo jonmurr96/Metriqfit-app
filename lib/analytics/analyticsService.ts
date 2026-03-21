@@ -222,6 +222,82 @@ export function trackWorkoutFinishEarlyConfirmed(properties?: Record<string, any
   trackEvent('workout_finish_early_confirmed', properties);
 }
 
+export function trackWorkoutProgramFamilySelected(properties?: Record<string, any>) {
+  trackEvent('workout_program_family_selected', properties);
+}
+
+export function trackWorkoutProgramTemplateViewed(properties?: Record<string, any>) {
+  trackEvent('workout_program_template_viewed', properties);
+}
+
+export function trackWorkoutProgramTemplateCloned(properties?: Record<string, any>) {
+  trackEvent('workout_program_template_cloned', properties);
+}
+
+export function trackWorkoutProgramWeeklyLayoutUpdated(properties?: Record<string, any>) {
+  trackEvent('workout_program_weekly_layout_updated', properties);
+}
+
+export function trackWorkoutProgramPublishBlocked(properties?: Record<string, any>) {
+  trackEvent('workout_program_publish_blocked', properties);
+}
+
+export function trackWorkoutPlanRegenerationOpened(properties?: Record<string, any>) {
+  trackEvent('workout_plan_regeneration_opened', properties);
+}
+
+export function trackWorkoutPlanRegenerationReasonSelected(properties?: Record<string, any>) {
+  trackEvent('workout_plan_regeneration_reason_selected', properties);
+}
+
+export function trackWorkoutPlanRegenerationPreviewRequested(properties?: Record<string, any>) {
+  trackEvent('workout_plan_regeneration_preview_requested', properties);
+}
+
+export function trackWorkoutPlanRegenerationPreviewGenerated(properties?: Record<string, any>) {
+  trackEvent('workout_plan_regeneration_preview_generated', properties);
+}
+
+export function trackWorkoutPlanRegenerationNoopBlocked(properties?: Record<string, any>) {
+  trackEvent('workout_plan_regeneration_noop_blocked', properties);
+}
+
+export function trackWorkoutPlanRegenerationPreviewAccepted(properties?: Record<string, any>) {
+  trackEvent('workout_plan_regeneration_preview_accepted', properties);
+}
+
+export function trackWorkoutPlanRegenerationPreviewDiscarded(properties?: Record<string, any>) {
+  trackEvent('workout_plan_regeneration_preview_discarded', properties);
+}
+
+export function trackWorkoutPlanBuilderOpenedFromMyPlan(properties?: Record<string, any>) {
+  trackEvent('workout_plan_builder_opened_from_my_plan', properties);
+}
+
+export function trackWorkoutPlanImportOpenedFromMyPlan(properties?: Record<string, any>) {
+  trackEvent('workout_plan_import_opened_from_my_plan', properties);
+}
+
+export function trackExerciseMediaPreviewVisible(properties?: Record<string, any>) {
+  trackEvent('exercise_media_preview_visible', properties);
+}
+
+export function trackExerciseMediaPreviewExpanded(properties?: Record<string, any>) {
+  trackEvent('exercise_media_preview_expanded', properties);
+}
+
+export function trackExerciseDetailOpenedFromPreview(properties?: Record<string, any>) {
+  trackEvent('exercise_detail_opened_from_preview', properties);
+}
+
+export function trackActiveSessionMediaCollapsed(properties?: Record<string, any>) {
+  trackEvent('active_session_media_collapsed', properties);
+}
+
+export function trackActiveSessionMediaExpanded(properties?: Record<string, any>) {
+  trackEvent('active_session_media_expanded', properties);
+}
+
 // Nutrition Analytics
 export function trackFoodLogged(source?: string) {
   trackEvent('food_logged', { source });
@@ -320,4 +396,96 @@ export function trackProgressPhotoCompareViewed(properties?: Record<string, any>
 
 export function trackProgressHistoryRangeChanged(properties?: Record<string, any>) {
   trackEvent('progress_history_range_changed', properties);
+}
+
+export function trackProgressDashboardRangeChanged(properties?: Record<string, any>) {
+  trackEvent('progress_dashboard_range_changed', properties);
+}
+
+export function trackProgressDashboardCardTapped(properties?: Record<string, any>) {
+  trackEvent('progress_dashboard_card_tapped', properties);
+}
+
+export function trackProgressStatusHeroRendered(properties?: Record<string, any>) {
+  trackEvent('progress_status_hero_rendered', properties);
+}
+
+export function trackProgressTrendsRangeChanged(properties?: Record<string, any>) {
+  trackEvent('progress_trends_range_changed', properties);
+}
+
+export function trackProgressPrHighlightOpened(properties?: Record<string, any>) {
+  trackEvent('progress_pr_highlight_opened', properties);
+}
+
+export function trackProgressPrimarySectionChanged(properties?: Record<string, any>) {
+  trackEvent('progress_primary_section_changed', properties);
+}
+
+export function trackProgressSecondarySectionChanged(properties?: Record<string, any>) {
+  trackEvent('progress_secondary_section_changed', properties);
+}
+
+export function trackProgressDailyReviewViewed(properties?: Record<string, any>) {
+  trackEvent('progress_daily_review_viewed', properties);
+}
+
+export function trackProgressWeeklyReviewViewed(properties?: Record<string, any>) {
+  trackEvent('progress_weekly_review_viewed', properties);
+}
+
+export function trackProgressBodyTimelineViewed(properties?: Record<string, any>) {
+  trackEvent('progress_body_timeline_viewed', properties);
+}
+
+export function trackProgressBodyCheckpointSelected(properties?: Record<string, any>) {
+  trackEvent('progress_body_checkpoint_selected', properties);
+}
+
+export function trackProgressPhotoComparePairChanged(properties?: Record<string, any>) {
+  trackEvent('progress_photo_compare_pair_changed', properties);
+}
+
+export function trackProgressReviewCtaTapped(properties?: Record<string, any>) {
+  trackEvent('progress_review_cta_tapped', properties);
+}
+
+export function trackProgressBodyCtaTapped(properties?: Record<string, any>) {
+  trackEvent('progress_body_cta_tapped', properties);
+}
+
+export function trackNutritionPrimarySectionChanged(properties?: Record<string, any>) {
+  trackEvent('nutrition_primary_section_changed', properties);
+}
+
+export function trackNutritionTodayStatusRendered(properties?: Record<string, any>) {
+  trackEvent('nutrition_today_status_rendered', properties);
+}
+
+export function trackNutritionQuickLogTapped(properties?: Record<string, any>) {
+  trackEvent('nutrition_quick_log_tapped', properties);
+}
+
+export function trackNutritionMealDetailOpened(properties?: Record<string, any>) {
+  trackEvent('nutrition_meal_detail_opened', properties);
+}
+
+export function trackNutritionPlanPreviewOpened(properties?: Record<string, any>) {
+  trackEvent('nutrition_plan_preview_opened', properties);
+}
+
+export function trackNutritionPlanPreviewApplied(properties?: Record<string, any>) {
+  trackEvent('nutrition_plan_preview_applied', properties);
+}
+
+export function trackNutritionPlanPreviewDiscarded(properties?: Record<string, any>) {
+  trackEvent('nutrition_plan_preview_discarded', properties);
+}
+
+export function trackNutritionToolOpened(properties?: Record<string, any>) {
+  trackEvent('nutrition_tool_opened', properties);
+}
+
+export function trackNutritionToolGateViewed(properties?: Record<string, any>) {
+  trackEvent('nutrition_tool_gate_viewed', properties);
 }

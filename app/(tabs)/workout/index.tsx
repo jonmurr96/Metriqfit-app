@@ -36,6 +36,14 @@ import {
   trackWorkoutTomorrowPreviewTapped,
 } from '../../../lib/analytics';
 
+function humanizeProgramMeta(value?: string | null) {
+  if (!value) {
+    return null;
+  }
+
+  return value.replaceAll('_', ' ').replace(/\b\w/g, (match) => match.toUpperCase());
+}
+
 type RoutePath =
   | '/(tabs)/workout/active-session'
   | '/(tabs)/workout/adaptation'
@@ -256,6 +264,20 @@ export default function WorkoutHomeScreen() {
     [router],
   );
 
+  const programContextLabel = useMemo(() => {
+    const meta = dashboard.raw.activePlan?.programMeta;
+    if (!meta) {
+      return null;
+    }
+
+    const parts = [
+      humanizeProgramMeta(meta.programFamilyKey),
+      humanizeProgramMeta(meta.progressionModel),
+    ].filter(Boolean);
+
+    return parts.length > 0 ? parts.join(' • ') : null;
+  }, [dashboard.raw.activePlan?.programMeta]);
+
   const isInitialLoading =
     dashboard.isLoading
     && !dashboard.raw.activePlan
@@ -293,7 +315,7 @@ export default function WorkoutHomeScreen() {
           transition={{ type: 'timing', duration: animation.duration.normal }}
           style={[styles.header, { paddingHorizontal: s.lg }]}
         >
-          <View style={{ gap: s.xs }}>
+          <View style={{ gap: s.xs, flex: 1, minWidth: 0, paddingRight: s.sm }}>
             <Text
               style={{
                 color: c.textMuted,
@@ -305,6 +327,9 @@ export default function WorkoutHomeScreen() {
               WORKOUT
             </Text>
             <Text
+              numberOfLines={1}
+              adjustsFontSizeToFit
+              minimumFontScale={0.7}
               style={{
                 color: c.text,
                 fontFamily: ty.heading.family,
@@ -324,9 +349,14 @@ export default function WorkoutHomeScreen() {
               backgroundColor: `${c.primary}14`,
               borderWidth: 1,
               borderColor: `${c.primary}33`,
+              flexShrink: 0,
+              maxWidth: '38%',
             }}
           >
             <Text
+              numberOfLines={1}
+              adjustsFontSizeToFit
+              minimumFontScale={0.75}
               style={{
                 color: c.primary,
                 fontFamily: ty.body.familySemibold,
@@ -391,6 +421,7 @@ export default function WorkoutHomeScreen() {
             <>
               <WorkoutPrimaryHeroCard
                 state={dashboard.state.hero}
+                contextLabel={programContextLabel}
                 onPrimaryPress={() => runAction(dashboard.state.hero.primaryAction)}
                 onSecondaryPress={
                   dashboard.state.hero.secondaryAction
@@ -403,6 +434,7 @@ export default function WorkoutHomeScreen() {
               {dashboard.raw.activePlan ? (
                 <WorkoutTomorrowPreviewCard
                   state={dashboard.state.tomorrow}
+                  contextLabel={programContextLabel}
                   onPress={() => runAction(dashboard.state.tomorrow.action)}
                 />
               ) : null}

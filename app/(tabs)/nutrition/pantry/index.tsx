@@ -53,7 +53,7 @@ export default function PantryScreen() {
         </Pressable>
       </View>
 
-      <ScrollView contentContainerStyle={{ padding: s.lg, paddingBottom: insets.bottom + s.xl }}>
+      <ScrollView contentContainerStyle={{ padding: s.lg, paddingBottom: insets.bottom + 120 }}>
         {!access.isLoading && !access.hasAccess ? (
           <NutritionEliteGate
             title="Elite Pantry"

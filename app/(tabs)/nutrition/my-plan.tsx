@@ -19,6 +19,8 @@ import { useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useTokens } from '../../../lib/theme';
 import { TabBarIcon } from '../../../components/navigation/TabBarIcon';
+import { MacroInlineSummary } from '../../../components/nutrition/MacroInlineSummary';
+import { MacroStatCard } from '../../../components/nutrition/MacroStatCard';
 import {
   useActiveNutritionPlan,
   useNutritionPlanHistory,
@@ -35,13 +37,28 @@ function round1(n: number) {
   return Math.round(n * 10) / 10;
 }
 
+function getTargetStatus(current: number, target: number, unit: string, tolerance = 1) {
+  const delta = round1(current - target);
+
+  if (Math.abs(delta) <= tolerance) {
+    return 'On target';
+  }
+
+  if (delta < 0) {
+    return `${round1(Math.abs(delta))}${unit} under`;
+  }
+
+  return `${round1(delta)}${unit} over`;
+}
+
 export default function MyNutritionPlanScreen() {
   const { c, s, ty, r } = useTokens();
   const router = useRouter();
   const insets = useSafeAreaInsets();
+  const todayDay = new Date().getDay();
 
   const [showHistory, setShowHistory] = useState(false);
-  const [selectedDay, setSelectedDay] = useState(new Date().getDay());
+  const [selectedDay, setSelectedDay] = useState(todayDay);
 
   const { targets, loading: targetsLoading, refetch: refetchTargets } = useTargets();
 
@@ -143,6 +160,18 @@ export default function MyNutritionPlanScreen() {
       fat: targets.fat_g || 0,
     };
   }, [targets]);
+  const isTodaySelected = selectedDay === todayDay;
+
+  const handleOpenMeal = (mealId: string, mealSlot: string) => {
+    router.push({
+      pathname: '/(tabs)/nutrition/meal-detail',
+      params: {
+        mealId,
+        mealSlot,
+        mode: isTodaySelected ? 'today' : 'plan',
+      },
+    });
+  };
 
   if (isLoading) {
     return (
@@ -329,25 +358,41 @@ export default function MyNutritionPlanScreen() {
 
             <View style={[styles.planCard, { backgroundColor: c.surface, borderRadius: r.md, padding: s.md, marginBottom: s.md }]}> 
               <Text style={{ color: c.text, fontFamily: ty.body.familySemibold, fontSize: ty.sizes.md }}>
-                Daily Macro Totals vs Target
+                Day totals
               </Text>
               <Text style={{ color: c.textMuted, marginTop: s.xs, fontFamily: ty.body.family, fontSize: ty.sizes.xs }}>
-                Values reflect selected variants for {DAY_LABELS[selectedDay]}.
+                {DAY_LABELS[selectedDay]} selected variants against your daily target.
               </Text>
 
-              <View style={{ marginTop: s.sm, gap: s.xs }}>
-                <Text style={{ color: c.text, fontFamily: ty.body.family, fontSize: ty.sizes.sm }}>
-                  Calories: {Math.round(dayPlan?.totals.calories || 0)} / {Math.round(todayTarget.calories)}
-                </Text>
-                <Text style={{ color: c.text, fontFamily: ty.body.family, fontSize: ty.sizes.sm }}>
-                  Protein: {round1(dayPlan?.totals.protein || 0)}g / {round1(todayTarget.protein)}g
-                </Text>
-                <Text style={{ color: c.text, fontFamily: ty.body.family, fontSize: ty.sizes.sm }}>
-                  Carbs: {round1(dayPlan?.totals.carbs || 0)}g / {round1(todayTarget.carbs)}g
-                </Text>
-                <Text style={{ color: c.text, fontFamily: ty.body.family, fontSize: ty.sizes.sm }}>
-                  Fat: {round1(dayPlan?.totals.fat || 0)}g / {round1(todayTarget.fat)}g
-                </Text>
+              <View style={[styles.totalsGrid, { marginTop: s.sm }]}>
+                <MacroStatCard
+                  macro="calories"
+                  label="Calories"
+                  primaryValue={`${Math.round(dayPlan?.totals.calories || 0)} / ${Math.round(todayTarget.calories)}`}
+                  statusText={getTargetStatus(dayPlan?.totals.calories || 0, todayTarget.calories, ' kcal', 15)}
+                  compact
+                />
+                <MacroStatCard
+                  macro="protein"
+                  label="Protein"
+                  primaryValue={`${round1(dayPlan?.totals.protein || 0)}g / ${round1(todayTarget.protein)}g`}
+                  statusText={getTargetStatus(dayPlan?.totals.protein || 0, todayTarget.protein, 'g')}
+                  compact
+                />
+                <MacroStatCard
+                  macro="carbs"
+                  label="Carbs"
+                  primaryValue={`${round1(dayPlan?.totals.carbs || 0)}g / ${round1(todayTarget.carbs)}g`}
+                  statusText={getTargetStatus(dayPlan?.totals.carbs || 0, todayTarget.carbs, 'g')}
+                  compact
+                />
+                <MacroStatCard
+                  macro="fat"
+                  label="Fat"
+                  primaryValue={`${round1(dayPlan?.totals.fat || 0)}g / ${round1(todayTarget.fat)}g`}
+                  statusText={getTargetStatus(dayPlan?.totals.fat || 0, todayTarget.fat, 'g')}
+                  compact
+                />
               </View>
             </View>
 
@@ -368,28 +413,50 @@ export default function MyNutritionPlanScreen() {
                           {meal.selected_variant?.name || meal.name}
                         </Text>
                       </View>
-                      <Pressable
-                        onPress={() => router.push({ pathname: '/(tabs)/nutrition/plan-meal-editor', params: { mealId: meal.id } })}
-                        style={[styles.swapButton, { borderColor: c.primary }]}
-                      >
-                        <TabBarIcon name="create-outline" color={c.primary} size={14} />
-                        <Text style={{ color: c.primary, fontFamily: ty.body.familySemibold, fontSize: ty.sizes.xs, marginLeft: s.xs }}>
-                          Customize
-                        </Text>
-                      </Pressable>
+                      <View style={{ flexDirection: 'row', alignItems: 'center', gap: s.xs }}>
+                        <Pressable
+                          onPress={() => handleOpenMeal(meal.id, meal.meal_slot)}
+                          style={[styles.swapButton, { borderColor: c.border }]}
+                        >
+                          <TabBarIcon name="eye-outline" color={c.textMuted} size={14} />
+                          <Text style={{ color: c.textMuted, fontFamily: ty.body.familySemibold, fontSize: ty.sizes.xs, marginLeft: s.xs }}>
+                            {isTodaySelected ? 'Open today' : 'View'}
+                          </Text>
+                        </Pressable>
+                        <Pressable
+                          onPress={() => router.push({ pathname: '/(tabs)/nutrition/plan-meal-editor', params: { mealId: meal.id } })}
+                          style={[styles.swapButton, { borderColor: c.primary }]}
+                        >
+                          <TabBarIcon name="create-outline" color={c.primary} size={14} />
+                          <Text style={{ color: c.primary, fontFamily: ty.body.familySemibold, fontSize: ty.sizes.xs, marginLeft: s.xs }}>
+                            Customize
+                          </Text>
+                        </Pressable>
+                      </View>
                     </View>
 
-                    <View style={{ marginTop: s.sm }}>
-                      {(meal.selected_variant?.items || []).map((item) => (
+                    <View style={{ marginTop: s.sm, gap: 2 }}>
+                      {(meal.selected_variant?.items || []).slice(0, 4).map((item) => (
                         <Text key={item.id} style={{ color: c.textMuted, fontFamily: ty.body.family, fontSize: ty.sizes.xs, marginBottom: 2 }}>
                           • {item.quantity_value}{item.quantity_unit} {item.item_name} ({Math.round(item.calories || 0)} kcal)
                         </Text>
                       ))}
+                      {(meal.selected_variant?.items?.length || 0) > 4 && (
+                        <Text style={{ color: c.textSubtle, fontFamily: ty.body.family, fontSize: ty.sizes.xs }}>
+                          +{(meal.selected_variant?.items?.length || 0) - 4} more items
+                        </Text>
+                      )}
                     </View>
 
-                    <Text style={{ color: c.text, fontFamily: ty.body.familyMedium, fontSize: ty.sizes.xs, marginTop: s.sm }}>
-                      Meal Macros: {Math.round(meal.selected_variant?.target_calories || meal.target_calories || 0)} kcal • P {round1(Number(meal.selected_variant?.target_protein || meal.target_protein || 0))}g • C {round1(Number(meal.selected_variant?.target_carbs || meal.target_carbs || 0))}g • F {round1(Number(meal.selected_variant?.target_fat || meal.target_fat || 0))}g
-                    </Text>
+                    <MacroInlineSummary
+                      style={{ marginTop: s.sm }}
+                      items={[
+                        { macro: 'calories', value: Math.round(meal.selected_variant?.target_calories || meal.target_calories || 0), unit: ' kcal' },
+                        { macro: 'protein', value: round1(Number(meal.selected_variant?.target_protein || meal.target_protein || 0)), unit: 'g' },
+                        { macro: 'carbs', value: round1(Number(meal.selected_variant?.target_carbs || meal.target_carbs || 0)), unit: 'g' },
+                        { macro: 'fat', value: round1(Number(meal.selected_variant?.target_fat || meal.target_fat || 0)), unit: 'g' },
+                      ]}
+                    />
 
                     {(meal.variants || []).filter((variant) => variant.id !== meal.selected_variant_id).length > 0 && (
                       <View style={{ marginTop: s.sm }}>
@@ -499,6 +566,11 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   planCard: {},
+  totalsGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 10,
+  },
   mealCard: {},
   badge: {
     paddingHorizontal: 10,

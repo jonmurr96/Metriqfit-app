@@ -17,6 +17,7 @@ import { NutritionEliteGate } from '../../../components/nutrition/NutritionElite
 import { useFeatureAccess } from '../../../hooks/useSubscription';
 import { useBuildMealsFromConstraints, useApplyMealsBatch } from '../../../hooks/useMealBuilder';
 import { useGroceryLists } from '../../../hooks/useGrocery';
+import { useEditableNutritionPlanContext } from '../../../hooks/usePlan';
 
 export default function GroceryPlannerScreen() {
   const { c, s, ty, r } = useTokens();
@@ -27,6 +28,9 @@ export default function GroceryPlannerScreen() {
   const buildMutation = useBuildMealsFromConstraints();
   const applyBatchMutation = useApplyMealsBatch();
   const groceryListsQuery = useGroceryLists();
+  const editableContextQuery = useEditableNutritionPlanContext();
+  const editablePlan = editableContextQuery.data?.editablePlan;
+  const editableSource = editableContextQuery.data?.source || 'none';
 
   const [mealCount, setMealCount] = useState('3');
   const [mealSlot, setMealSlot] = useState<'breakfast' | 'lunch' | 'dinner' | 'snack'>('lunch');
@@ -36,7 +40,7 @@ export default function GroceryPlannerScreen() {
   const [nutFree, setNutFree] = useState(true);
   const [selectedIndexes, setSelectedIndexes] = useState<number[]>([]);
 
-  const generatedMeals = buildMutation.data?.meals || [];
+  const generatedMeals = useMemo(() => buildMutation.data?.meals ?? [], [buildMutation.data?.meals]);
 
   const effectiveSelected = useMemo(() => {
     if (!generatedMeals.length) return [] as number[];
@@ -100,6 +104,7 @@ export default function GroceryPlannerScreen() {
 
     try {
       await applyBatchMutation.mutateAsync({
+        planId: editablePlan?.id,
         dayOfWeek: new Date().getDay(),
         meals: selectedMeals,
       });
@@ -133,6 +138,11 @@ export default function GroceryPlannerScreen() {
         ) : (
           <>
             <View style={[styles.card, { backgroundColor: c.surface, borderRadius: r.lg, padding: s.md }]}> 
+              {editableSource === 'preview' ? (
+                <Text style={{ color: c.accent, fontFamily: ty.body.familySemibold, fontSize: ty.sizes.xs, marginBottom: s.sm }}>
+                  Applying selected meals to preview nutrition plan
+                </Text>
+              ) : null}
               <Text style={[styles.label, { color: c.textMuted, fontFamily: ty.mono.family }]}>Constraints</Text>
 
               <View style={{ flexDirection: 'row', gap: s.sm, marginTop: s.sm }}>

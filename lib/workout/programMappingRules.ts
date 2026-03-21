@@ -25,6 +25,8 @@ export type ProgramExercise = {
 
 export type DayFocusPolicy = {
   focusTags: WorkoutFocusTag[];
+  primaryFocusTags: WorkoutFocusTag[];
+  supportFocusTags: WorkoutFocusTag[];
   allowedPrimaryFocuses: ExerciseFocusTag[];
   accessoryFocuses: ExerciseFocusTag[];
   mixed: boolean;
@@ -238,6 +240,26 @@ const DAY_LABEL_FALLBACK_BLUEPRINTS: Record<string, WorkoutFocusTag[][]> = {
   ],
 };
 
+const FAMILY_NAME_HINTS: Array<{ familyKey: string; patterns: string[] }> = [
+  { familyKey: 'bro_split_5', patterns: ['bro split'] },
+  { familyKey: 'arnold_split_6', patterns: ['arnold split', 'arnold'] },
+  { familyKey: 'phat_5', patterns: ['phat'] },
+  { familyKey: 'phul_4', patterns: ['phul'] },
+  { familyKey: 'powerbuilding_5', patterns: ['powerbuilding'] },
+  { familyKey: 'ppl_ul_hybrid_5', patterns: ['ppl ul hybrid', 'push pull legs upper lower'] },
+  { familyKey: 'ppl_6', patterns: ['push pull legs 6', 'ppl 6'] },
+  { familyKey: 'ppl_3', patterns: ['push pull legs', 'ppl'] },
+  { familyKey: 'upper_lower_5', patterns: ['upper lower 5', 'upper lower five'] },
+  { familyKey: 'upper_lower_4', patterns: ['upper lower 4', 'upper lower four', 'upper lower'] },
+  { familyKey: 'home_dumbbell_4', patterns: ['home dumbbell'] },
+  { familyKey: 'bodyweight_only_3', patterns: ['bodyweight only'] },
+  { familyKey: 'minimalist_full_body_2', patterns: ['minimalist full body'] },
+  { familyKey: 'full_body_strength_3', patterns: ['full body strength'] },
+  { familyKey: 'full_body_beginner_3', patterns: ['full body beginner'] },
+  { familyKey: 'conditioning_hybrid_4', patterns: ['conditioning hybrid'] },
+  { familyKey: 'rehab_resilience_3', patterns: ['rehab resilience', 'rehab'] },
+];
+
 const DEFAULT_DERIVED_BLUEPRINT: WorkoutFocusTag[][] = [
   ['legs', 'chest', 'back', 'core'],
   ['back', 'arms', 'core'],
@@ -331,6 +353,68 @@ function inferTagsFromText(dayName: string, dayFocus: string | null): WorkoutFoc
 
 export function inferWorkoutFocusTags(dayName: string, dayFocus: string | null): WorkoutFocusTag[] {
   return inferTagsFromText(dayName, dayFocus);
+}
+
+export function inferProgramFamilyKeyFromPlanIdentity(input: {
+  planName?: string | null;
+  dayNames?: string[] | null;
+  daysPerWeek?: number | null;
+}) {
+  const normalizedName = normalizeWorkoutToken(String(input.planName || ''));
+  const targetDaysPerWeek = Number(input.daysPerWeek || input.dayNames?.length || 0);
+
+  for (const hint of FAMILY_NAME_HINTS) {
+    if (!hint.patterns.some((pattern) => normalizedName.includes(normalizeWorkoutToken(pattern)))) {
+      continue;
+    }
+
+    const blueprint = DAY_LABEL_FALLBACK_BLUEPRINTS[hint.familyKey];
+    if (!blueprint?.length) continue;
+    if (targetDaysPerWeek > 0 && blueprint.length !== targetDaysPerWeek) continue;
+    return hint.familyKey;
+  }
+
+  const normalizedDayNames = (input.dayNames || []).map((dayName) => inferWorkoutFocusTags(dayName, null));
+  if (!normalizedDayNames.length) {
+    return null;
+  }
+
+  let bestMatch: { familyKey: string; score: number } | null = null;
+
+  for (const [familyKey, blueprint] of Object.entries(DAY_LABEL_FALLBACK_BLUEPRINTS)) {
+    if (!blueprint.length) continue;
+    if (targetDaysPerWeek > 0 && blueprint.length !== targetDaysPerWeek) continue;
+
+    let score = 0;
+    let comparableDays = 0;
+
+    for (let index = 0; index < Math.min(blueprint.length, normalizedDayNames.length); index += 1) {
+      const inferredTags = normalizedDayNames[index];
+      if (!inferredTags.length) continue;
+
+      comparableDays += 1;
+      const targetTags = new Set(blueprint[index] || []);
+      const overlap = inferredTags.filter((tag) => targetTags.has(tag)).length;
+
+      if (!overlap) {
+        score -= 2;
+        continue;
+      }
+
+      score += overlap * 3;
+      if (inferredTags.length === 1 && targetTags.has(inferredTags[0])) {
+        score += 2;
+      }
+    }
+
+    if (comparableDays === 0 || score <= 0) continue;
+
+    if (!bestMatch || score > bestMatch.score) {
+      bestMatch = { familyKey, score };
+    }
+  }
+
+  return bestMatch?.score && bestMatch.score >= 6 ? bestMatch.familyKey : null;
 }
 
 function isMixedFocusLabel(dayName: string, dayFocus: string | null) {
@@ -427,6 +511,94 @@ function expandAllowedPrimaryFocuses(focusTags: WorkoutFocusTag[]): ExerciseFocu
   return Array.from(allowed);
 }
 
+function expandPrimaryFocusTags(focusTags: WorkoutFocusTag[]): WorkoutFocusTag[] {
+  const expanded = new Set<WorkoutFocusTag>();
+
+  for (const tag of focusTags) {
+    if (tag === 'legs') {
+      expanded.add('legs');
+      expanded.add('hamstrings');
+      expanded.add('glutes');
+      continue;
+    }
+
+    if (tag === 'hamstrings') {
+      expanded.add('hamstrings');
+      expanded.add('glutes');
+      expanded.add('legs');
+      continue;
+    }
+
+    if (tag === 'glutes') {
+      expanded.add('glutes');
+      expanded.add('hamstrings');
+      expanded.add('legs');
+      continue;
+    }
+
+    expanded.add(tag);
+  }
+
+  return Array.from(expanded);
+}
+
+function deriveSupportFocusTags(primaryFocusTags: WorkoutFocusTag[]): WorkoutFocusTag[] {
+  const support = new Set<WorkoutFocusTag>();
+  const primarySet = new Set(primaryFocusTags);
+
+  if (primarySet.has('chest')) {
+    support.add('shoulders');
+    support.add('arms');
+  }
+
+  if (primarySet.has('back')) {
+    support.add('arms');
+  }
+
+  if (primarySet.has('shoulders')) {
+    support.add('arms');
+  }
+
+  if (primarySet.has('legs') || primarySet.has('hamstrings') || primarySet.has('glutes')) {
+    support.add('core');
+  }
+
+  for (const tag of primarySet) {
+    support.delete(tag);
+  }
+
+  return Array.from(support);
+}
+
+function buildDayFocusPolicy(
+  focusTags: WorkoutFocusTag[],
+  source: DayFocusPolicy['source'],
+  blueprintGap: boolean,
+  rationale: string,
+  mixed: boolean,
+): DayFocusPolicy {
+  const primaryFocusTags = expandPrimaryFocusTags(focusTags);
+  const supportFocusTags = deriveSupportFocusTags(primaryFocusTags);
+
+  return {
+    focusTags,
+    primaryFocusTags,
+    supportFocusTags,
+    allowedPrimaryFocuses: unique([
+      ...expandAllowedPrimaryFocuses(primaryFocusTags),
+      ...expandAllowedPrimaryFocuses(supportFocusTags),
+    ]),
+    accessoryFocuses: unique<ExerciseFocusTag>([
+      'core',
+      ...(supportFocusTags.includes('core') ? [] : []),
+    ]),
+    mixed,
+    source,
+    blueprintGap,
+    rationale,
+  };
+}
+
 export function resolveDayFocusPolicy(input: {
   dayName: string;
   dayFocus: string | null;
@@ -435,50 +607,76 @@ export function resolveDayFocusPolicy(input: {
   daysPerWeek?: number | null;
   goalTags?: string[] | null;
 }): DayFocusPolicy {
-  const focusFromLabel = inferTagsFromText(input.dayName, input.dayFocus);
-  if (focusFromLabel.length > 0) {
-    return {
-      focusTags: focusFromLabel,
-      allowedPrimaryFocuses: expandAllowedPrimaryFocuses(focusFromLabel),
-      accessoryFocuses: ['core'],
-      mixed: isMixedFocusLabel(input.dayName, input.dayFocus) || focusFromLabel.length > 1,
-      source: 'label',
-      blueprintGap: false,
-      rationale: 'Parsed focus directly from day label/focus copy.',
-    };
-  }
-
   const normalizedFamily = normalizeEquipmentTag(String(input.familyKey || ''));
   const explicitBlueprint = normalizedFamily ? DAY_LABEL_FALLBACK_BLUEPRINTS[normalizedFamily] : null;
   if (explicitBlueprint && explicitBlueprint.length) {
     const tags = cycleBlueprint(explicitBlueprint, input.dayIndex);
-    return {
-      focusTags: tags,
-      allowedPrimaryFocuses: expandAllowedPrimaryFocuses(tags),
-      accessoryFocuses: ['core'],
-      mixed: tags.length > 1,
-      source: 'blueprint',
-      blueprintGap: false,
-      rationale: 'Used explicit family blueprint for generic day labeling.',
-    };
+    return buildDayFocusPolicy(
+      tags,
+      'blueprint',
+      false,
+      'Used explicit family blueprint as the authoritative day-focus source.',
+      tags.length > 1,
+    );
+  }
+
+  const focusFromLabel = inferTagsFromText(input.dayName, input.dayFocus);
+  if (focusFromLabel.length > 0) {
+    return buildDayFocusPolicy(
+      focusFromLabel,
+      'label',
+      false,
+      'Parsed focus directly from day label/focus copy.',
+      isMixedFocusLabel(input.dayName, input.dayFocus) || focusFromLabel.length > 1,
+    );
   }
 
   const derivedBlueprint = autoDeriveBlueprint(normalizedFamily, Number(input.daysPerWeek || 0), input.goalTags || []);
   const derivedTags = cycleBlueprint(derivedBlueprint, input.dayIndex);
 
-  return {
-    focusTags: derivedTags,
-    allowedPrimaryFocuses: expandAllowedPrimaryFocuses(derivedTags),
-    accessoryFocuses: ['core'],
-    mixed: derivedTags.length > 1,
-    source: 'auto_derived',
-    blueprintGap: true,
-    rationale: 'Auto-derived blueprint because explicit family/day mapping was unavailable.',
-  };
+  return buildDayFocusPolicy(
+    derivedTags,
+    'auto_derived',
+    true,
+    'Auto-derived blueprint because explicit family/day mapping was unavailable.',
+    derivedTags.length > 1,
+  );
 }
 
-function inferFocusFromDescriptorTokens(descriptor: string, primary: string, pattern: string): ExerciseFocusTag | null {
+function inferFocusFromDescriptorTokens(
+  descriptor: string,
+  primary: string,
+  pattern: string,
+  category: string,
+): ExerciseFocusTag | null {
   const normalizedPattern = normalizeWorkoutToken(pattern || '');
+  const normalizedCategory = normalizeWorkoutToken(category || '');
+
+  const lowerBodySignal = (
+    primary.includes('calf')
+    || primary.includes('quad')
+    || primary.includes('hamstring')
+    || primary.includes('glute')
+    || primary.includes('adductor')
+    || primary.includes('abductor')
+    || normalizedCategory.includes('lower body')
+    || descriptor.includes('calf raise')
+    || descriptor.includes('leg curl')
+    || descriptor.includes('leg extension')
+    || descriptor.includes('squat')
+    || descriptor.includes('lunge')
+  );
+
+  if (lowerBodySignal && (
+    normalizedPattern.includes('shoulder')
+    || normalizedPattern.includes('bicep')
+    || normalizedPattern.includes('tricep')
+    || normalizedPattern.includes('grip')
+  )) {
+    if (primary.includes('hamstring') || descriptor.includes('leg curl')) return 'hamstrings';
+    if (primary.includes('glute') || descriptor.includes('hip thrust') || descriptor.includes('glute bridge')) return 'glutes';
+    return 'legs';
+  }
 
   if (
     normalizedPattern.includes('cardio')
@@ -505,12 +703,72 @@ function inferFocusFromDescriptorTokens(descriptor: string, primary: string, pat
   }
 
   if (
+    primary.includes('hamstring')
+    || descriptor.includes('leg curl')
+    || descriptor.includes('nordic')
+    || descriptor.includes('good morning')
+  ) {
+    return 'hamstrings';
+  }
+
+  if (
+    primary.includes('glute')
+    || descriptor.includes('hip thrust')
+    || descriptor.includes('glute bridge')
+    || descriptor.includes('kickback')
+  ) {
+    return 'glutes';
+  }
+
+  if (
+    primary.includes('quad')
+    || primary.includes('calf')
+    || primary.includes('adductor')
+    || primary.includes('abductor')
+    || normalizedCategory.includes('lower body')
+    || descriptor.includes('calf raise')
+    || descriptor.includes('squat')
+    || descriptor.includes('lunge')
+    || descriptor.includes('leg press')
+    || descriptor.includes('leg extension')
+  ) {
+    return 'legs';
+  }
+
+  if (
+    primary.includes('chest')
+    || primary.includes('pec')
+  ) {
+    return 'chest';
+  }
+
+  if (
+    primary.includes('lat')
+    || primary.includes('back')
+    || primary.includes('trap')
+  ) {
+    return 'back';
+  }
+
+  if (
+    primary.includes('shoulder')
+    || primary.includes('delt')
+  ) {
+    return 'shoulders';
+  }
+
+  if (
+    primary.includes('bicep')
+    || primary.includes('tricep')
+    || primary.includes('forearm')
+  ) {
+    return 'arms';
+  }
+
+  if (
     normalizedPattern.includes('biceps')
     || normalizedPattern.includes('triceps')
     || normalizedPattern.includes('grip')
-    || primary.includes('bicep')
-    || primary.includes('tricep')
-    || primary.includes('forearm')
     || descriptor.includes('curl')
     || descriptor.includes('pushdown')
     || descriptor.includes('skull crusher')
@@ -523,8 +781,6 @@ function inferFocusFromDescriptorTokens(descriptor: string, primary: string, pat
     || normalizedPattern.includes('lateral raise')
     || normalizedPattern.includes('front raise')
     || normalizedPattern.includes('shoulder accessory')
-    || primary.includes('shoulder')
-    || primary.includes('delt')
   ) {
     return 'shoulders';
   }
@@ -532,8 +788,6 @@ function inferFocusFromDescriptorTokens(descriptor: string, primary: string, pat
   if (
     normalizedPattern.includes('horizontal push')
     || normalizedPattern.includes('chest isolation')
-    || primary.includes('chest')
-    || primary.includes('pec')
     || descriptor.includes('bench press')
     || descriptor.includes('push up')
     || descriptor.includes('pec deck')
@@ -546,9 +800,6 @@ function inferFocusFromDescriptorTokens(descriptor: string, primary: string, pat
     || normalizedPattern.includes('vertical pull')
     || normalizedPattern.includes('rear delt isolation')
     || normalizedPattern.includes('shrug')
-    || primary.includes('lat')
-    || primary.includes('back')
-    || primary.includes('trap')
     || descriptor.includes('row')
     || descriptor.includes('pulldown')
     || descriptor.includes('pull up')
@@ -556,21 +807,11 @@ function inferFocusFromDescriptorTokens(descriptor: string, primary: string, pat
   ) {
     return 'back';
   }
-
-  if (
-    normalizedPattern.includes('ham isolation')
-    || normalizedPattern.includes('hinge')
-    || primary.includes('hamstring')
-  ) {
+  if (normalizedPattern.includes('ham isolation') || normalizedPattern.includes('hinge')) {
     return 'hamstrings';
   }
 
-  if (
-    normalizedPattern.includes('glute isolation')
-    || primary.includes('glute')
-    || descriptor.includes('hip thrust')
-    || descriptor.includes('glute bridge')
-  ) {
+  if (normalizedPattern.includes('glute isolation')) {
     return 'glutes';
   }
 
@@ -579,10 +820,6 @@ function inferFocusFromDescriptorTokens(descriptor: string, primary: string, pat
     || normalizedPattern.includes('unilateral lower')
     || normalizedPattern.includes('knee isolation')
     || normalizedPattern.includes('calves')
-    || primary.includes('quad')
-    || primary.includes('calf')
-    || primary.includes('adductor')
-    || primary.includes('abductor')
     || descriptor.includes('leg press')
     || descriptor.includes('lunge')
   ) {
@@ -598,8 +835,46 @@ export function inferPrimaryExerciseFocus(exercise: ProgramExercise): ExerciseFo
   );
   const primary = normalizeWorkoutToken(exercise.primary_muscle || '');
   const pattern = normalizeWorkoutToken(exercise.pattern || '');
+  const category = normalizeWorkoutToken(exercise.category || '');
 
-  return inferFocusFromDescriptorTokens(descriptor, primary, pattern);
+  return inferFocusFromDescriptorTokens(descriptor, primary, pattern, category);
+}
+
+export function inferExerciseMovementFamily(exercise: ProgramExercise): string | null {
+  const descriptor = normalizeWorkoutToken(
+    `${exercise.name || ''} ${exercise.category || ''} ${exercise.primary_muscle || ''} ${exercise.pattern || ''}`,
+  );
+
+  const families: Array<[string, string[]]> = [
+    ['calf_raise', ['calf raise']],
+    ['leg_curl', ['leg curl', 'ham curl', 'nordic']],
+    ['leg_extension', ['leg extension']],
+    ['squat', ['squat', 'hack squat', 'split squat', 'lunge']],
+    ['hinge', ['deadlift', 'rdl', 'romanian deadlift', 'good morning', 'hip hinge']],
+    ['hip_thrust', ['hip thrust', 'glute bridge']],
+    ['bench_press', ['bench press', 'chest press', 'push up', 'dip']],
+    ['flye', ['flye', 'fly', 'pec deck', 'cable crossover']],
+    ['row', ['row', 'seal row', 't bar']],
+    ['pulldown', ['pulldown', 'pull up', 'chin up']],
+    ['shoulder_press', ['shoulder press', 'overhead press', 'arnold press', 'landmine press']],
+    ['lateral_raise', ['lateral raise', 'rear delt', 'front raise', 'upright row', 'y raise']],
+    ['biceps_curl', ['curl', 'preacher', 'hammer curl', 'concentration curl']],
+    ['triceps_extension', ['pushdown', 'skull crusher', 'skullcrusher', 'triceps extension', 'dip']],
+    ['carry_core', ['carry', 'pallof', 'plank', 'crunch', 'dead bug', 'leg raise', 'ab wheel']],
+  ];
+
+  for (const [family, patterns] of families) {
+    if (patterns.some((pattern) => descriptor.includes(pattern))) {
+      return family;
+    }
+  }
+
+  const focus = inferPrimaryExerciseFocus(exercise);
+  if (focus) {
+    return `${focus}_${normalizeWorkoutToken(exercise.pattern || exercise.name || '').split(' ').slice(0, 2).join('_') || 'generic'}`;
+  }
+
+  return normalizeWorkoutToken(exercise.name || '').split(' ').slice(0, 3).join('_') || null;
 }
 
 export function exerciseMatchesWorkoutFocus(

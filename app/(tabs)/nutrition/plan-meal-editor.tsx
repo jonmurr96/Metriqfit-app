@@ -13,6 +13,7 @@ import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { TabBarIcon } from '../../../components/navigation/TabBarIcon';
 import { useTokens } from '../../../lib/theme';
+import { MacroStatCard } from '../../../components/nutrition/MacroStatCard';
 import { useApplyMealPlanChange, useNutritionPlanMeal } from '../../../hooks/usePlan';
 import { useSetReviewSectionAccepted } from '../../../hooks/useOnboardingReview';
 
@@ -40,6 +41,18 @@ function safeNum(value: string | number | undefined | null) {
 
 function round1(n: number) {
   return Math.round(n * 10) / 10;
+}
+
+function buildDeltaStatus(delta: number, unit: string, neutralLabel = 'On target') {
+  if (Math.abs(delta) <= 1) {
+    return neutralLabel;
+  }
+
+  if (delta > 0) {
+    return `+${round1(delta)}${unit} over`;
+  }
+
+  return `${round1(Math.abs(delta))}${unit} under`;
 }
 
 export default function NutritionPlanMealEditorScreen() {
@@ -301,19 +314,39 @@ export default function NutritionPlanMealEditorScreen() {
             Totals update as you edit ingredient quantities.
           </Text>
 
-          <View style={{ marginTop: s.md, gap: s.xs }}>
-            <Text style={{ color: c.text, fontFamily: ty.body.family, fontSize: ty.sizes.sm }}>
-              Calories: {Math.round(totals.calories)} / {Math.round(target.calories)} ({delta.calories >= 0 ? '+' : ''}{Math.round(delta.calories)})
-            </Text>
-            <Text style={{ color: c.text, fontFamily: ty.body.family, fontSize: ty.sizes.sm }}>
-              Protein: {round1(totals.protein)}g / {round1(target.protein)}g ({delta.protein >= 0 ? '+' : ''}{round1(delta.protein)}g)
-            </Text>
-            <Text style={{ color: c.text, fontFamily: ty.body.family, fontSize: ty.sizes.sm }}>
-              Carbs: {round1(totals.carbs)}g / {round1(target.carbs)}g ({delta.carbs >= 0 ? '+' : ''}{round1(delta.carbs)}g)
-            </Text>
-            <Text style={{ color: c.text, fontFamily: ty.body.family, fontSize: ty.sizes.sm }}>
-              Fat: {round1(totals.fat)}g / {round1(target.fat)}g ({delta.fat >= 0 ? '+' : ''}{round1(delta.fat)}g)
-            </Text>
+          <View style={[styles.deltaGrid, { marginTop: s.md }]}>
+            <MacroStatCard
+              macro="calories"
+              label="Calories"
+              primaryValue={`${Math.round(totals.calories)} / ${Math.round(target.calories)}`}
+              secondaryValue={`${delta.calories >= 0 ? '+' : ''}${Math.round(delta.calories)} kcal`}
+              statusText={buildDeltaStatus(delta.calories, ' kcal')}
+              compact
+            />
+            <MacroStatCard
+              macro="protein"
+              label="Protein"
+              primaryValue={`${round1(totals.protein)}g / ${round1(target.protein)}g`}
+              secondaryValue={`${delta.protein >= 0 ? '+' : ''}${round1(delta.protein)}g`}
+              statusText={buildDeltaStatus(delta.protein, 'g')}
+              compact
+            />
+            <MacroStatCard
+              macro="carbs"
+              label="Carbs"
+              primaryValue={`${round1(totals.carbs)}g / ${round1(target.carbs)}g`}
+              secondaryValue={`${delta.carbs >= 0 ? '+' : ''}${round1(delta.carbs)}g`}
+              statusText={buildDeltaStatus(delta.carbs, 'g')}
+              compact
+            />
+            <MacroStatCard
+              macro="fat"
+              label="Fat"
+              primaryValue={`${round1(totals.fat)}g / ${round1(target.fat)}g`}
+              secondaryValue={`${delta.fat >= 0 ? '+' : ''}${round1(delta.fat)}g`}
+              statusText={buildDeltaStatus(delta.fat, 'g')}
+              compact
+            />
           </View>
         </View>
 
@@ -437,6 +470,11 @@ const styles = StyleSheet.create({
     paddingHorizontal: 12,
   },
   card: {},
+  deltaGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 10,
+  },
   input: {
     borderWidth: 1,
     borderRadius: 10,

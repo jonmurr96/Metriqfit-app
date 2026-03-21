@@ -18,6 +18,7 @@ export default function NutritionLayout() {
       <Stack.Screen name="barcode-scanner" />
       <Stack.Screen name="food-detail" />
       <Stack.Screen name="meal-detail" />
+      <Stack.Screen name="today-plan" />
       <Stack.Screen name="plan-meal-editor" />
       <Stack.Screen name="recipe-import" />
       <Stack.Screen name="menu-scan" />

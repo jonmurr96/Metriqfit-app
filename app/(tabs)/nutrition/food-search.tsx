@@ -1,46 +1,519 @@
-import { StyleSheet, View, Text, Pressable, ScrollView, TextInput, ActivityIndicator, Platform, Alert } from 'react-native';
-import { useRouter } from 'expo-router';
+import { StyleSheet, View, Text, Pressable, ScrollView, TextInput, ActivityIndicator, Alert } from 'react-native';
+import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { LinearGradient } from 'expo-linear-gradient'; // Added LinearGradient
+import { LinearGradient } from 'expo-linear-gradient';
 
 import { useTokens } from '../../../lib/theme';
 import { TabBarIcon } from '../../../components/navigation/TabBarIcon';
-import { searchFoods } from '../../../services/nutritionService';
-import { GlassCard } from '../../../components/premium/GlassCard'; // Added GlassCard
-
+import { GlassCard } from '../../../components/premium/GlassCard';
+import { MacroRow } from '../../../components/nutrition/MacroRow';
+import { getMealSlotLabel, normalizeDateKey, normalizeMealSlot } from '../../../lib/nutrition/meal-slots';
 import { useAuth } from '../../../lib/auth/AuthProvider';
+import {
+  useAddFavoriteFood,
+  useFavoriteFoodIds,
+  useFavoriteFoods,
+  useLogFood,
+  useRemoveFavoriteFood,
+  useSearchExternalFoods,
+  useSearchFoods,
+} from '../../../hooks/useNutrition';
+import type {
+  ExternalFoodSearchResult,
+  FavoriteFood,
+  FoodItem,
+  MealSlot,
+} from '../../../services/nutritionService';
+
+type ViewMode = 'foods' | 'recipes' | 'saved';
 
 export default function FoodSearchScreen() {
-  const { c, s, ty, r, glass } = useTokens();
+  const { c, s, ty, r } = useTokens();
   const router = useRouter();
+  const params = useLocalSearchParams<{
+    mealSlot?: string | string[];
+    date?: string | string[];
+    source?: string | string[];
+    query?: string | string[];
+    preselectedFoodId?: string | string[];
+  }>();
   const insets = useSafeAreaInsets();
   const [searchQuery, setSearchQuery] = useState('');
-  const [viewMode, setViewMode] = useState<'foods' | 'recipes'>('foods');
+  const [debouncedSearchQuery, setDebouncedSearchQuery] = useState('');
+  const [viewMode, setViewMode] = useState<ViewMode>('foods');
+  const handledPreselectedFood = useRef(false);
 
-  // Search foods from database (seeded + any user-added)
-  const { data: searchResults, isLoading } = useQuery({
-    queryKey: ['food-search', searchQuery],
-    queryFn: () => searchFoods(searchQuery, 20),
-    enabled: searchQuery.length >= 2,
-    staleTime: 5 * 60 * 1000,
+  const mealSlot = normalizeMealSlot(params.mealSlot);
+  const date = normalizeDateKey(params.date);
+  const source = Array.isArray(params.source) ? params.source[0] : params.source;
+  const queryParam = Array.isArray(params.query) ? params.query[0] : params.query;
+  const preselectedFoodId = Array.isArray(params.preselectedFoodId)
+    ? params.preselectedFoodId[0]
+    : params.preselectedFoodId;
+  const mealSlotLabel = mealSlot ? getMealSlotLabel(mealSlot) : null;
+  const headerTitle = mealSlotLabel ? `Add Food to ${mealSlotLabel}` : 'Search Food';
+
+  const { data: searchResults = [], isLoading: isLoadingLocal } = useSearchFoods(debouncedSearchQuery, {
+    enabled: viewMode === 'foods',
   });
+  const { data: externalResults = [], isLoading: isLoadingExternal } = useSearchExternalFoods(
+    debouncedSearchQuery,
+    {
+      enabled: viewMode === 'foods',
+    },
+  );
+  const searchResultIds = useMemo(() => searchResults.map((food) => food.id), [searchResults]);
+  const { data: favoriteResultIds = [] } = useFavoriteFoodIds(searchResultIds, {
+    enabled: viewMode === 'foods' && searchResultIds.length > 0,
+  });
+  const favoriteResultIdSet = useMemo(
+    () => new Set(favoriteResultIds),
+    [favoriteResultIds],
+  );
+
+  const { data: favoriteFoods = [], isLoading: isLoadingFavorites } = useFavoriteFoods(searchQuery, {
+    enabled: viewMode === 'saved',
+  });
+
+  const addFavoriteMutation = useAddFavoriteFood();
+  const removeFavoriteMutation = useRemoveFavoriteFood();
+  const logFoodMutation = useLogFood();
+
+  useEffect(() => {
+    const timeout = setTimeout(() => {
+      setDebouncedSearchQuery(searchQuery.trim());
+    }, 300);
+
+    return () => clearTimeout(timeout);
+  }, [searchQuery]);
+
+  useEffect(() => {
+    if (queryParam) {
+      setSearchQuery(queryParam);
+    }
+  }, [queryParam]);
+
+  useEffect(() => {
+    if (!preselectedFoodId || handledPreselectedFood.current) return;
+
+    handledPreselectedFood.current = true;
+    openFoodDetail(preselectedFoodId, true);
+  }, [preselectedFoodId]);
+
+  const openFoodDetail = (foodId: string, replace = false) => {
+    const nextRoute = {
+      pathname: '/(tabs)/nutrition/food-detail' as const,
+      params: {
+        id: foodId,
+        ...(mealSlot ? { mealSlot } : {}),
+        ...(date ? { date } : {}),
+        ...(source ? { source } : {}),
+      },
+    };
+
+    if (replace || source === 'home-slider') {
+      router.replace(nextRoute);
+      return;
+    }
+
+    router.push(nextRoute);
+  };
+
+  const openCamera = () => {
+    router.push({
+      pathname: '/(tabs)/nutrition/food-camera',
+      params: {
+        ...(mealSlot ? { mealSlot } : {}),
+        ...(date ? { date } : {}),
+        ...(source ? { source } : {}),
+      },
+    });
+  };
+
+  const openExternalFoodPreview = (food: ExternalFoodSearchResult) => {
+    router.push({
+      pathname: '/(tabs)/nutrition/food-detail',
+      params: {
+        externalProvider: food.provider,
+        externalId: food.externalId,
+        externalName: food.name,
+        ...(food.brand ? { externalBrand: food.brand } : {}),
+        ...(food.imageUrl ? { externalImageUrl: food.imageUrl } : {}),
+        externalCaloriesPer100g: String(food.caloriesPer100g),
+        externalProteinPer100g: String(food.proteinPer100g),
+        externalCarbsPer100g: String(food.carbsPer100g),
+        externalFatPer100g: String(food.fatPer100g),
+        ...(food.servingSizeG ? { externalServingSizeG: String(food.servingSizeG) } : {}),
+        ...(food.servingDescription ? { externalServingDescription: food.servingDescription } : {}),
+        ...(mealSlot ? { mealSlot } : {}),
+        ...(date ? { date } : {}),
+        ...(source ? { source } : {}),
+      },
+    });
+  };
+
+  const toggleFavorite = async (foodId: string, isFavorite: boolean) => {
+    try {
+      if (isFavorite) {
+        await removeFavoriteMutation.mutateAsync(foodId);
+      } else {
+        await addFavoriteMutation.mutateAsync(foodId);
+      }
+    } catch (error: any) {
+      Alert.alert(
+        isFavorite ? 'Remove failed' : 'Save failed',
+        error?.message || 'Try again in a moment.',
+      );
+    }
+  };
+
+  const dedupedExternalResults = useMemo(() => {
+    const localExternalKeys = new Set(
+      searchResults
+        .filter((food) => food.externalSourceId)
+        .map((food) => `${food.source}:${food.externalSourceId}`),
+    );
+    const localBarcodes = new Set(
+      searchResults
+        .map((food) => food.barcode?.trim())
+        .filter((barcode): barcode is string => Boolean(barcode)),
+    );
+
+    return externalResults.filter((food) => {
+      const externalKey = `${food.provider}:${food.externalId}`;
+      const barcode = food.barcode?.trim();
+
+      if (localExternalKeys.has(externalKey)) {
+        return false;
+      }
+
+      if (barcode && localBarcodes.has(barcode)) {
+        return false;
+      }
+
+      return true;
+    });
+  }, [externalResults, searchResults]);
+
+  const quickLogFavorite = (food: FoodItem) => {
+    if (!mealSlot) return;
+
+    const grams = food.servingSizeG && food.servingSizeG > 0 ? food.servingSizeG : 100;
+    logFoodMutation.mutate(
+      {
+        foodItemId: food.id,
+        mealSlot,
+        grams,
+        ...(date ? { date } : {}),
+      },
+      {
+        onSuccess: () => {
+          router.back();
+        },
+        onError: (error: any) => {
+          Alert.alert('Log failed', error?.message || 'Could not log this food right now.');
+        },
+      },
+    );
+  };
+
+  const getFoodSourceLabel = (food: FoodItem) => {
+    if (food.source === 'usda_fdc') return 'USDA';
+    if (food.source === 'openfoodfacts') return 'OpenFoodFacts';
+    if (food.source === 'manual') return 'Custom';
+    return 'MetriqFit';
+  };
+
+  const renderFoodsTab = () => (
+    <ScrollView
+      style={styles.scrollView}
+      contentContainerStyle={{ paddingHorizontal: s.lg, paddingBottom: 100 }}
+    >
+      {debouncedSearchQuery.length < 2 && searchQuery.length < 2 ? (
+        <View style={{ alignItems: 'center', paddingTop: s.xxl }}>
+          <View
+            style={{
+              width: 80,
+              height: 80,
+              borderRadius: 40,
+              backgroundColor: c.surface2,
+              alignItems: 'center',
+              justifyContent: 'center',
+              marginBottom: s.md,
+            }}
+          >
+            <TabBarIcon name="search" color={c.textSubtle} size={40} />
+          </View>
+          <Text
+            style={{
+              color: c.textMuted,
+              fontFamily: ty.body.family,
+              fontSize: ty.sizes.md,
+              textAlign: 'center',
+            }}
+          >
+            {mealSlotLabel
+              ? `Search foods to add to ${mealSlotLabel.toLowerCase()} from MetriqFit, USDA, and OpenFoodFacts.`
+              : 'Search foods across MetriqFit, USDA, and OpenFoodFacts.'}
+          </Text>
+        </View>
+      ) : searchResults.length || dedupedExternalResults.length || isLoadingLocal || isLoadingExternal ? (
+        <>
+          {searchResults.length ? (
+            <>
+              <Text
+                style={{
+                  color: c.textMuted,
+                  fontFamily: ty.body.familySemibold,
+                  fontSize: ty.sizes.sm,
+                  letterSpacing: 1,
+                  marginBottom: s.sm,
+                }}
+              >
+                YOUR FOODS & DATABASE FOODS
+              </Text>
+              {searchResults.map((food) => {
+                const isFavorite = favoriteResultIdSet.has(food.id);
+
+                return (
+                  <GlassCard
+                    key={food.id}
+                    intensity="light"
+                    style={{ marginBottom: s.sm, padding: 0 }}
+                  >
+                    <View style={[styles.resultCard, { padding: s.md }]}>
+                      <Pressable
+                        style={styles.resultTextArea}
+                        onPress={() => openFoodDetail(food.id)}
+                      >
+                        <Text
+                          numberOfLines={2}
+                          style={[
+                            styles.resultTitle,
+                            {
+                              color: c.text,
+                              fontFamily: ty.body.familyMedium,
+                              fontSize: ty.sizes.md,
+                            },
+                          ]}
+                        >
+                          {food.name}
+                        </Text>
+                        <Text
+                          numberOfLines={1}
+                          style={[
+                            styles.resultSubtitle,
+                            {
+                              color: c.textMuted,
+                              fontFamily: ty.body.family,
+                              fontSize: ty.sizes.sm,
+                            },
+                          ]}
+                        >
+                          {food.caloriesPer100g} cal / 100g
+                          {food.brand ? ` • ${food.brand}` : ''}
+                        </Text>
+
+                        <MacroRow
+                          size="sm"
+                          emphasis="outlined"
+                          items={[
+                            { macro: 'protein', value: Math.round(food.proteinPer100g), unit: 'g' },
+                            { macro: 'carbs', value: Math.round(food.carbsPer100g), unit: 'g' },
+                            { macro: 'fat', value: Math.round(food.fatPer100g), unit: 'g' },
+                          ]}
+                        />
+                      </Pressable>
+
+                      <View style={styles.resultFooter}>
+                        <View style={styles.resultTags}>
+                          <View
+                            style={[
+                              styles.providerBadge,
+                              {
+                                borderRadius: r.pill,
+                                borderColor: `${c.primary}28`,
+                                backgroundColor: `${c.primary}10`,
+                              },
+                            ]}
+                          >
+                            <Text
+                              style={{
+                                color: c.primary,
+                                fontFamily: ty.body.familySemibold,
+                                fontSize: ty.sizes.xs,
+                              }}
+                            >
+                              {getFoodSourceLabel(food)}
+                            </Text>
+                          </View>
+                        </View>
+
+                        <View style={styles.resultFooterActions}>
+                          <Pressable
+                            onPress={() => toggleFavorite(food.id, isFavorite)}
+                            accessibilityRole="button"
+                            accessibilityLabel={isFavorite ? 'Remove from saved foods' : 'Save food'}
+                            style={styles.iconAction}
+                          >
+                            <TabBarIcon
+                              name={isFavorite ? 'star' : 'star-outline'}
+                              color={isFavorite ? c.primary : c.textMuted}
+                              size={20}
+                            />
+                          </Pressable>
+                          <Pressable
+                            onPress={() => openFoodDetail(food.id)}
+                            accessibilityRole="button"
+                            accessibilityLabel={`Open ${food.name}`}
+                            style={[styles.iconAction, { backgroundColor: c.surface2 }]}
+                          >
+                            <TabBarIcon name="add" color={c.primary} size={18} />
+                          </Pressable>
+                        </View>
+                      </View>
+                    </View>
+                  </GlassCard>
+                );
+              })}
+            </>
+          ) : null}
+
+          {dedupedExternalResults.length ? (
+            <>
+              <View style={styles.sectionHeader}>
+                <Text
+                  style={{
+                    color: c.textMuted,
+                    fontFamily: ty.body.familySemibold,
+                    fontSize: ty.sizes.sm,
+                    letterSpacing: 1,
+                    marginBottom: s.sm,
+                    marginTop: searchResults.length ? s.md : 0,
+                  }}
+                >
+                  MORE FROM USDA & OPENFOODFACTS
+                </Text>
+              </View>
+
+              {dedupedExternalResults.map((food) => (
+                <ExternalFoodRow
+                  key={`${food.provider}:${food.externalId}`}
+                  food={food}
+                  onOpen={() => openExternalFoodPreview(food)}
+                />
+              ))}
+            </>
+          ) : null}
+
+          {!searchResults.length && !dedupedExternalResults.length && (isLoadingLocal || isLoadingExternal) ? (
+            <View style={{ alignItems: 'center', paddingTop: s.xxl }}>
+              <ActivityIndicator size="large" color={c.primary} />
+              <Text style={{ color: c.textMuted, marginTop: s.md }}>Searching...</Text>
+            </View>
+          ) : null}
+        </>
+      ) : (
+        <View style={{ alignItems: 'center', paddingTop: s.xxl }}>
+          <TabBarIcon name="close-circle" color={c.textSubtle} size={48} />
+          <Text
+            style={{
+              color: c.textMuted,
+              fontFamily: ty.body.familyMedium,
+              fontSize: ty.sizes.md,
+              marginTop: s.md,
+            }}
+          >
+            {`No foods found for "${searchQuery}"`}
+          </Text>
+          <Text
+            style={{
+              color: c.textSubtle,
+              fontFamily: ty.body.family,
+              fontSize: ty.sizes.sm,
+              marginTop: s.xs,
+              textAlign: 'center',
+            }}
+          >
+            Search the food database or use Camera above if you do not see your item.
+          </Text>
+        </View>
+      )}
+    </ScrollView>
+  );
+
+  const renderSavedFoodsTab = () => (
+    <ScrollView
+      style={styles.scrollView}
+      contentContainerStyle={{ paddingHorizontal: s.lg, paddingBottom: 100 }}
+    >
+      {isLoadingFavorites ? (
+        <View style={{ alignItems: 'center', paddingTop: s.xxl }}>
+          <ActivityIndicator size="large" color={c.primary} />
+          <Text style={{ color: c.textMuted, marginTop: s.md }}>Loading saved foods...</Text>
+        </View>
+      ) : !favoriteFoods.length ? (
+        <View style={{ alignItems: 'center', paddingTop: s.xxl }}>
+          <View
+            style={{
+              width: 80,
+              height: 80,
+              borderRadius: 40,
+              backgroundColor: c.surface2,
+              alignItems: 'center',
+              justifyContent: 'center',
+              marginBottom: s.md,
+            }}
+          >
+            <TabBarIcon name="star-outline" color={c.textSubtle} size={40} />
+          </View>
+          <Text
+            style={{
+              color: c.text,
+              fontFamily: ty.body.familySemibold,
+              fontSize: ty.sizes.md,
+              marginBottom: s.xs,
+            }}
+          >
+            No saved foods yet
+          </Text>
+          <Text
+            style={{
+              color: c.textMuted,
+              fontFamily: ty.body.family,
+              fontSize: ty.sizes.md,
+              textAlign: 'center',
+            }}
+          >
+            Tap the star on foods you eat often so you can log them faster later.
+          </Text>
+        </View>
+      ) : (
+        favoriteFoods.map((favorite) => (
+          <SavedFoodRow
+            key={favorite.favoriteId}
+            favorite={favorite}
+            canQuickLog={!!mealSlot}
+            isLogging={logFoodMutation.isPending && logFoodMutation.variables?.foodItemId === favorite.food.id}
+            onOpen={() => openFoodDetail(favorite.food.id)}
+            onUnsave={() => toggleFavorite(favorite.food.id, true)}
+            onLog={() => quickLogFavorite(favorite.food)}
+          />
+        ))
+      )}
+    </ScrollView>
+  );
 
   return (
     <View style={[styles.container, { backgroundColor: c.bg }]}>
-      <LinearGradient
-        colors={[c.bg, '#0a101f']}
-        style={StyleSheet.absoluteFill}
-      />
-
-      {/* Safe Area Spacer */}
+      <LinearGradient colors={[c.bg, '#0a101f']} style={StyleSheet.absoluteFill} />
       <View style={{ height: insets.top }} />
 
-      {/* Header */}
       <View style={[styles.header, { paddingHorizontal: s.lg }]}>
         <Pressable
-          onPress={() => router.back()}
+          onPress={() => router.push('/(tabs)/nutrition')}
           style={[styles.backButton, { backgroundColor: c.surface }]}
           accessibilityLabel="Go back"
           accessibilityRole="button"
@@ -57,50 +530,117 @@ export default function FoodSearchScreen() {
             },
           ]}
         >
-          Search Food
+          {headerTitle}
         </Text>
         <View style={styles.placeholder} />
       </View>
 
-      {/* Search Bar (Glass Input) */}
       <View style={[styles.searchContainer, { paddingHorizontal: s.lg }]}>
-        <GlassCard
-          intensity="light"
-          style={{ ...styles.searchBarCard, borderRadius: r.md, padding: 0 }}
-          glowEffect
+        <Text
+          style={{
+            color: c.text,
+            fontFamily: ty.body.familySemibold,
+            fontSize: ty.sizes.md,
+            marginBottom: s.sm,
+          }}
         >
-          <View style={styles.searchBarContent}>
-            <TabBarIcon name="search" color={c.primary} size={20} />
-            <TextInput
-              style={[
-                styles.searchInput,
-                {
-                  color: c.text,
-                  fontFamily: ty.body.family,
-                  fontSize: ty.sizes.md,
-                },
-              ]}
-              placeholder="Search foods..."
-              placeholderTextColor={c.textSubtle}
-              value={searchQuery}
-              onChangeText={setSearchQuery}
-              autoCapitalize="none"
-              autoCorrect={false}
-            />
-          </View>
-        </GlassCard>
+          Search foods
+        </Text>
+
+        <View
+          style={{
+            minHeight: 56,
+            flexDirection: 'row',
+            alignItems: 'center',
+            borderRadius: r.xl,
+            borderWidth: 1.5,
+            borderColor: `${c.primary}90`,
+            backgroundColor: c.surface,
+            paddingHorizontal: 16,
+          }}
+        >
+          <TabBarIcon name="search" color={c.primary} size={22} />
+          <TextInput
+            style={[
+              styles.searchInput,
+              {
+                color: c.text,
+                fontFamily: ty.body.family,
+                fontSize: ty.sizes.md,
+              },
+            ]}
+            placeholder={mealSlotLabel ? `Search foods for ${mealSlotLabel.toLowerCase()}` : 'Search foods'}
+            placeholderTextColor={c.textSubtle}
+            value={searchQuery}
+            onChangeText={setSearchQuery}
+            autoCapitalize="none"
+            autoCorrect={false}
+            autoFocus
+            selectionColor={c.primary}
+          />
+          {searchQuery.length > 0 ? (
+            <Pressable
+              onPress={() => setSearchQuery('')}
+              accessibilityRole="button"
+              accessibilityLabel="Clear search"
+              style={{ marginLeft: 8, padding: 4 }}
+            >
+              <TabBarIcon name="close-circle" color={c.textMuted} size={22} />
+            </Pressable>
+          ) : null}
+        </View>
       </View>
 
-      {/* Quick Actions (Glass Buttons) */}
-      <View style={[styles.quickActions, { paddingHorizontal: s.lg, marginBottom: s.lg }]}>
-        <GlassCard
-          intensity="light"
-          style={{ borderRadius: r.sm, flex: 1, padding: 0 }}
-        >
+      {viewMode === 'foods' ? (
+        <View style={{ paddingHorizontal: s.lg, marginTop: s.sm, marginBottom: s.md }}>
           <Pressable
-            style={styles.quickAction}
-            onPress={() => router.push('/(tabs)/nutrition/food-camera')}
+            onPress={openCamera}
+            accessibilityRole="button"
+            accessibilityLabel="Open camera to add food from a photo"
+            style={{
+              flexDirection: 'row',
+              alignItems: 'center',
+              justifyContent: 'space-between',
+              gap: s.sm,
+              paddingHorizontal: s.md,
+              paddingVertical: s.sm,
+              borderRadius: r.md,
+              borderWidth: 1,
+              borderColor: `${c.primary}35`,
+              backgroundColor: `${c.surface}CC`,
+            }}
           >
+            <View style={{ flexDirection: 'row', alignItems: 'center', flex: 1 }}>
+              <TabBarIcon name="camera" color={c.primary} size={18} />
+              <Text
+                style={{
+                  color: c.textMuted,
+                  fontFamily: ty.body.family,
+                  fontSize: ty.sizes.sm,
+                  lineHeight: 20,
+                  marginLeft: s.sm,
+                  flex: 1,
+                }}
+              >
+                Can&apos;t find your food? Use Camera to snap a photo and add it that way.
+              </Text>
+            </View>
+            <Text
+              style={{
+                color: c.primary,
+                fontFamily: ty.body.familySemibold,
+                fontSize: ty.sizes.xs,
+              }}
+            >
+              Open Camera
+            </Text>
+          </Pressable>
+        </View>
+      ) : null}
+
+      <View style={[styles.quickActions, { paddingHorizontal: s.lg, marginBottom: s.lg }]}>
+        <GlassCard intensity="light" style={{ borderRadius: r.sm, flex: 1, padding: 0 }}>
+          <Pressable style={styles.quickAction} onPress={openCamera}>
             <TabBarIcon name="camera" color={c.primary} size={20} />
             <Text
               style={{
@@ -110,158 +650,265 @@ export default function FoodSearchScreen() {
                 marginLeft: s.xs,
               }}
             >
-              Scan Meal
+              Camera
             </Text>
           </Pressable>
         </GlassCard>
+      </View>
 
-        <GlassCard
-          intensity="light"
-          style={{ borderRadius: r.sm, flex: 1, padding: 0 }}
-        >
-          <Pressable
-            style={styles.quickAction}
-            onPress={() => router.push('/(tabs)/nutrition/barcode-scanner')}
-          >
-            <TabBarIcon name="barcode" color={c.primary} size={20} />
+      <View style={{ flex: 1 }}>
+        <View style={{ flexDirection: 'row', marginHorizontal: s.lg, marginBottom: s.md }}>
+          <SearchTab
+            label="Foods"
+            active={viewMode === 'foods'}
+            onPress={() => setViewMode('foods')}
+          />
+          <SearchTab
+            label="My Recipes"
+            active={viewMode === 'recipes'}
+            onPress={() => setViewMode('recipes')}
+          />
+          <SearchTab
+            label="Saved Foods"
+            active={viewMode === 'saved'}
+            onPress={() => setViewMode('saved')}
+          />
+        </View>
+
+        {viewMode === 'foods' ? renderFoodsTab() : null}
+        {viewMode === 'recipes' ? <RecipeList /> : null}
+        {viewMode === 'saved' ? renderSavedFoodsTab() : null}
+      </View>
+    </View>
+  );
+}
+
+function SearchTab({
+  label,
+  active,
+  onPress,
+}: {
+  label: string;
+  active: boolean;
+  onPress: () => void;
+}) {
+  const { c, ty } = useTokens();
+
+  return (
+    <Pressable
+      onPress={onPress}
+      style={{
+        flex: 1,
+        paddingVertical: 10,
+        borderBottomWidth: 2,
+        borderBottomColor: active ? c.primary : 'transparent',
+        alignItems: 'center',
+      }}
+    >
+      <Text
+        style={{
+          color: active ? c.text : c.textMuted,
+          fontFamily: ty.body.familySemibold,
+        }}
+      >
+        {label}
+      </Text>
+    </Pressable>
+  );
+}
+
+function SavedFoodRow({
+  favorite,
+  canQuickLog,
+  isLogging,
+  onOpen,
+  onUnsave,
+  onLog,
+}: {
+  favorite: FavoriteFood;
+  canQuickLog: boolean;
+  isLogging: boolean;
+  onOpen: () => void;
+  onUnsave: () => void;
+  onLog: () => void;
+}) {
+  const { c, s, ty, r } = useTokens();
+  const servingLabel = favorite.food.servingSizeG && favorite.food.servingSizeG > 0
+    ? favorite.food.servingDescription || `${Math.round(favorite.food.servingSizeG)}g serving`
+    : '100g default';
+
+  return (
+    <GlassCard intensity="light" style={{ marginBottom: s.sm, padding: 0 }}>
+      <View style={styles.savedRow}>
+        <Pressable style={[styles.foodOpenArea, { padding: s.md }]} onPress={onOpen}>
+          <View style={styles.foodInfo}>
             <Text
               style={{
                 color: c.text,
                 fontFamily: ty.body.familyMedium,
-                fontSize: ty.sizes.sm,
-                marginLeft: s.xs,
+                fontSize: ty.sizes.md,
               }}
             >
-              Scan Barcode
+              {favorite.food.name}
             </Text>
-          </Pressable>
-        </GlassCard>
-      </View>
+            <Text
+              style={{
+                color: c.textMuted,
+                fontFamily: ty.body.family,
+                fontSize: ty.sizes.sm,
+              }}
+            >
+              {favorite.food.brand ? `${favorite.food.brand} • ` : ''}
+              {favorite.food.caloriesPer100g} cal / 100g • {servingLabel}
+            </Text>
 
-      {/* Content */}
-      <View style={{ flex: 1 }}>
-        {/* Tabs */}
-        <View style={{ flexDirection: 'row', marginHorizontal: s.lg, marginBottom: s.md }}>
+            <MacroRow
+              style={{ marginTop: 8 }}
+              size="sm"
+              emphasis="outlined"
+              items={[
+                { macro: 'protein', value: Math.round(favorite.food.proteinPer100g), unit: 'g' },
+                { macro: 'carbs', value: Math.round(favorite.food.carbsPer100g), unit: 'g' },
+                { macro: 'fat', value: Math.round(favorite.food.fatPer100g), unit: 'g' },
+              ]}
+            />
+          </View>
+        </Pressable>
+
+        <View style={[styles.savedActions, { paddingRight: s.md }]}>
+          {canQuickLog ? (
+            <Pressable
+              onPress={onLog}
+              disabled={isLogging}
+              style={[
+                styles.savedLogButton,
+                {
+                  backgroundColor: isLogging ? c.textMuted : c.primary,
+                  borderRadius: r.pill,
+                },
+              ]}
+            >
+              {isLogging ? (
+                <ActivityIndicator size="small" color={c.bg} />
+              ) : (
+                <Text
+                  style={{
+                    color: c.bg,
+                    fontFamily: ty.body.familySemibold,
+                    fontSize: ty.sizes.xs,
+                  }}
+                >
+                  Log
+                </Text>
+              )}
+            </Pressable>
+          ) : null}
+
           <Pressable
-            onPress={() => setViewMode('foods')}
-            style={{ flex: 1, paddingVertical: 10, borderBottomWidth: 2, borderBottomColor: viewMode === 'foods' ? c.primary : 'transparent', alignItems: 'center' }}
+            onPress={onUnsave}
+            accessibilityRole="button"
+            accessibilityLabel="Remove from saved foods"
+            style={styles.iconAction}
           >
-            <Text style={{ color: viewMode === 'foods' ? c.text : c.textMuted, fontFamily: ty.body.familySemibold }}>Foods</Text>
-          </Pressable>
-          <Pressable
-            onPress={() => setViewMode('recipes')}
-            style={{ flex: 1, paddingVertical: 10, borderBottomWidth: 2, borderBottomColor: viewMode === 'recipes' ? c.primary : 'transparent', alignItems: 'center' }}
-          >
-            <Text style={{ color: viewMode === 'recipes' ? c.text : c.textMuted, fontFamily: ty.body.familySemibold }}>My Recipes</Text>
+            <TabBarIcon name="star" color={c.primary} size={20} />
           </Pressable>
         </View>
-
-        {viewMode === 'foods' ? (
-          <ScrollView
-            style={styles.scrollView}
-            contentContainerStyle={{ paddingHorizontal: s.lg, paddingBottom: 100 }}
-          >
-            {/* Existing Food Results Logic */}
-            {searchQuery.length < 2 ? (
-              <View style={{ alignItems: 'center', paddingTop: s.xxl }}>
-                <View style={{
-                  width: 80, height: 80, borderRadius: 40,
-                  backgroundColor: c.surface2, alignItems: 'center', justifyContent: 'center',
-                  marginBottom: s.md
-                }}>
-                  <TabBarIcon name="search" color={c.textSubtle} size={40} />
-                </View>
-                <Text
-                  style={{
-                    color: c.textMuted,
-                    fontFamily: ty.body.family,
-                    fontSize: ty.sizes.md,
-                    textAlign: 'center',
-                  }}
-                >
-                  Start typing to search {'\n'}175+ foods in database
-                </Text>
-              </View>
-            ) : isLoading ? (
-              <View style={{ alignItems: 'center', paddingTop: s.xxl }}>
-                <ActivityIndicator size="large" color={c.primary} />
-                <Text style={{ color: c.textMuted, marginTop: s.md }}>Searching...</Text>
-              </View>
-            ) : searchResults && searchResults.length > 0 ? (
-              <>
-                <Text
-                  style={{
-                    color: c.textMuted,
-                    fontFamily: ty.body.familySemibold,
-                    fontSize: ty.sizes.sm,
-                    letterSpacing: 1,
-                    marginBottom: s.sm,
-                  }}
-                >
-                  {searchResults.length} RESULTS
-                </Text>
-                {searchResults.map((food) => (
-                  <GlassCard
-                    key={food.id}
-                    intensity="light"
-                    style={{ marginBottom: s.sm, padding: 0 }}
-                  >
-                    <Pressable
-                      style={styles.foodCard}
-                      onPress={() => router.push(`/(tabs)/nutrition/food-detail?id=${food.id}`)}
-                    >
-                      <View style={styles.foodInfo}>
-                        <Text
-                          style={{
-                            color: c.text,
-                            fontFamily: ty.body.familyMedium,
-                            fontSize: ty.sizes.md,
-                          }}
-                        >
-                          {food.name}
-                        </Text>
-                        <Text
-                          style={{
-                            color: c.textMuted,
-                            fontFamily: ty.body.family,
-                            fontSize: ty.sizes.sm,
-                          }}
-                        >
-                          {food.caloriesPer100g} cal / 100g
-                          {food.brand ? ` • ${food.brand}` : ''}
-                        </Text>
-                      </View>
-                      <View style={{
-                        width: 32, height: 32, borderRadius: 16,
-                        backgroundColor: c.surface2, alignItems: 'center', justifyContent: 'center'
-                      }}>
-                        <TabBarIcon name="add" color={c.primary} size={20} />
-                      </View>
-                    </Pressable>
-                  </GlassCard>
-                ))}
-              </>
-            ) : (
-              <View style={{ alignItems: 'center', paddingTop: s.xxl }}>
-                <TabBarIcon name="close-circle" color={c.textSubtle} size={48} />
-                <Text
-                  style={{
-                    color: c.textMuted,
-                    fontFamily: ty.body.familyMedium,
-                    fontSize: ty.sizes.md,
-                    marginTop: s.md,
-                  }}
-                >
-                  {`No foods found for "${searchQuery}"`}
-                </Text>
-              </View>
-            )}
-          </ScrollView>
-        ) : (
-          <RecipeList />
-        )}
       </View>
-    </View>
+    </GlassCard>
+  );
+}
+
+function ExternalFoodRow({
+  food,
+  onOpen,
+}: {
+  food: ExternalFoodSearchResult;
+  onOpen: () => void;
+}) {
+  const { c, s, ty, r } = useTokens();
+  const providerLabel = food.provider === 'usda_fdc' ? 'USDA' : 'OpenFoodFacts';
+
+  return (
+    <GlassCard intensity="light" style={{ marginBottom: s.sm, padding: 0 }}>
+      <View style={[styles.resultCard, { padding: s.md }]}>
+        <Pressable
+          style={styles.resultTextArea}
+          onPress={onOpen}
+        >
+          <Text
+            numberOfLines={2}
+            style={[
+              styles.resultTitle,
+              {
+                color: c.text,
+                fontFamily: ty.body.familyMedium,
+                fontSize: ty.sizes.md,
+              },
+            ]}
+          >
+            {food.name}
+          </Text>
+          <Text
+            numberOfLines={1}
+            style={[
+              styles.resultSubtitle,
+              {
+                color: c.textMuted,
+                fontFamily: ty.body.family,
+                fontSize: ty.sizes.sm,
+              },
+            ]}
+          >
+            {food.caloriesPer100g} cal / 100g
+            {food.brand ? ` • ${food.brand}` : ''}
+          </Text>
+
+          <MacroRow
+            size="sm"
+            emphasis="outlined"
+            items={[
+              { macro: 'protein', value: Math.round(food.proteinPer100g), unit: 'g' },
+              { macro: 'carbs', value: Math.round(food.carbsPer100g), unit: 'g' },
+              { macro: 'fat', value: Math.round(food.fatPer100g), unit: 'g' },
+            ]}
+          />
+        </Pressable>
+
+        <View style={styles.resultFooter}>
+          <View style={styles.resultTags}>
+            <View
+              style={[
+                styles.providerBadge,
+                {
+                  borderRadius: r.pill,
+                  borderColor: `${c.primary}40`,
+                  backgroundColor: `${c.primary}12`,
+                },
+              ]}
+            >
+              <Text
+                style={{
+                  color: c.primary,
+                  fontFamily: ty.body.familySemibold,
+                  fontSize: ty.sizes.xs,
+                }}
+              >
+                {providerLabel}
+              </Text>
+            </View>
+          </View>
+
+          <Pressable
+            onPress={onOpen}
+            accessibilityRole="button"
+            accessibilityLabel={`Preview ${food.name}`}
+            style={[styles.iconAction, { backgroundColor: c.surface2 }]}
+          >
+            <TabBarIcon name="add" color={c.primary} size={18} />
+          </Pressable>
+        </View>
+      </View>
+    </GlassCard>
   );
 }
 
@@ -271,7 +918,6 @@ function RecipeList() {
   const { user } = useAuth();
   const queryClient = useQueryClient();
 
-  // Inline fetch for simplicity (should move to hook)
   const { data: recipes, isLoading } = useQuery({
     queryKey: ['recipes', user?.id],
     queryFn: async () => {
@@ -279,7 +925,7 @@ function RecipeList() {
       if (!user) return [];
       return getUserRecipes(user.id);
     },
-    enabled: !!user
+    enabled: !!user,
   });
 
   const logRecipeMutation = useMutation({
@@ -288,7 +934,7 @@ function RecipeList() {
       mealSlot,
     }: {
       recipe: any;
-      mealSlot: 'breakfast' | 'lunch' | 'dinner' | 'snack';
+      mealSlot: MealSlot;
     }) => {
       const { logRecipeAsMeal } = await import('../../../services/recipeService');
       if (!user) throw new Error('Please sign in again.');
@@ -318,28 +964,45 @@ function RecipeList() {
     <ScrollView contentContainerStyle={{ padding: s.lg, paddingBottom: 100 }}>
       <Pressable
         style={{
-          flexDirection: 'row', alignItems: 'center', justifyContent: 'center',
-          backgroundColor: c.primary, padding: 12, borderRadius: r.md, marginBottom: s.lg
+          flexDirection: 'row',
+          alignItems: 'center',
+          justifyContent: 'center',
+          backgroundColor: c.primary,
+          padding: 12,
+          borderRadius: r.md,
+          marginBottom: s.lg,
         }}
         onPress={() => router.push('/(tabs)/nutrition/recipes/create')}
       >
         <TabBarIcon name="add" color={c.bg} size={20} />
-        <Text style={{ color: c.bg, fontFamily: ty.body.familySemibold, marginLeft: 8 }}>Create New Recipe</Text>
+        <Text style={{ color: c.bg, fontFamily: ty.body.familySemibold, marginLeft: 8 }}>
+          Create New Recipe
+        </Text>
       </Pressable>
 
       <Pressable
         style={{
-          flexDirection: 'row', alignItems: 'center', justifyContent: 'center',
-          borderWidth: 1, borderColor: c.border, padding: 12, borderRadius: r.md, marginBottom: s.lg
+          flexDirection: 'row',
+          alignItems: 'center',
+          justifyContent: 'center',
+          borderWidth: 1,
+          borderColor: c.border,
+          padding: 12,
+          borderRadius: r.md,
+          marginBottom: s.lg,
         }}
         onPress={() => router.push('/(tabs)/nutrition/recipe-import')}
       >
         <TabBarIcon name="link-outline" color={c.text} size={18} />
-        <Text style={{ color: c.text, fontFamily: ty.body.familySemibold, marginLeft: 8 }}>Import URL</Text>
+        <Text style={{ color: c.text, fontFamily: ty.body.familySemibold, marginLeft: 8 }}>
+          Import URL
+        </Text>
       </Pressable>
 
-      {isLoading ? <ActivityIndicator color={c.primary} /> : (
-        recipes?.map(recipe => (
+      {isLoading ? (
+        <ActivityIndicator color={c.primary} />
+      ) : (
+        recipes?.map((recipe) => (
           <GlassCard key={recipe.id} style={{ marginBottom: s.sm }}>
             <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
               <View>
@@ -359,22 +1022,16 @@ function RecipeList() {
                     </Text>
                   </View>
                 </View>
-                <Text style={{ color: c.textMuted, fontSize: 12 }}>{recipe.ingredients?.length || 0} ingredients</Text>
+                <Text style={{ color: c.textMuted, fontSize: 12 }}>
+                  {recipe.ingredients?.length || 0} ingredients
+                </Text>
               </View>
-              <Pressable
-                onPress={() => handleLogRecipe(recipe)}
-                disabled={logRecipeMutation.isPending}
-                style={{ padding: 8, backgroundColor: c.surface2, borderRadius: 16 }}
-              >
-                <TabBarIcon name="add" color={c.primary} size={20} />
+              <Pressable onPress={() => handleLogRecipe(recipe)} disabled={logRecipeMutation.isPending}>
+                <Text style={{ color: c.primary, fontFamily: ty.body.familySemibold }}>Log</Text>
               </Pressable>
             </View>
           </GlassCard>
         ))
-      )}
-
-      {!isLoading && (!recipes || recipes.length === 0) && (
-        <Text style={{ color: c.textMuted, textAlign: 'center' }}>No recipes created yet.</Text>
       )}
     </ScrollView>
   );
@@ -404,20 +1061,12 @@ const styles = StyleSheet.create({
     width: 40,
   },
   searchContainer: {
-    marginBottom: 16,
-  },
-  searchBarCard: {
-    overflow: 'hidden',
-  },
-  searchBarContent: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingHorizontal: 16,
+    marginBottom: 12,
   },
   searchInput: {
     flex: 1,
-    paddingVertical: 14,
-    paddingHorizontal: 10,
+    marginLeft: 12,
+    minHeight: 48,
   },
   quickActions: {
     flexDirection: 'row',
@@ -427,16 +1076,86 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    paddingVertical: 12,
+    paddingVertical: 14,
   },
   scrollView: {
     flex: 1,
   },
-  foodCard: {
+  foodRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  foodOpenArea: {
+    flex: 1,
+  },
+  foodInfo: {
+    flex: 1,
+  },
+  resultCard: {
+    gap: 12,
+  },
+  resultTextArea: {
+    gap: 6,
+  },
+  resultTitle: {
+    lineHeight: 28,
+  },
+  resultSubtitle: {
+    lineHeight: 20,
+  },
+  resultFooter: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    padding: 16,
+    gap: 12,
   },
-  foodInfo: {},
+  resultTags: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    flex: 1,
+  },
+  resultFooterActions: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  rowActions: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  sectionHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+  },
+  providerBadge: {
+    borderWidth: 1,
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+  },
+  savedRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  savedActions: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  iconAction: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  savedLogButton: {
+    minWidth: 58,
+    paddingHorizontal: 14,
+    height: 36,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
 });

@@ -4,6 +4,7 @@ import { MotiView } from 'moti';
 import { useTokens } from '../../lib/theme';
 import { TabBarIcon } from '../../components/navigation/TabBarIcon';
 import { GlassCard } from '../../components/premium/GlassCard';
+import { getMacroTheme } from '../nutrition/macro-theme';
 
 interface ContextStat {
   label: string;
@@ -28,6 +29,7 @@ export function CoachContextCard({
   isOnboarded = true,
 }: CoachContextCardProps) {
   const { c, s, ty, r } = useTokens();
+  const proteinTheme = getMacroTheme(c, 'protein');
 
   const stats: ContextStat[] = [
     { label: 'Calories Left', value: caloriesRemaining, unit: 'kcal' },
@@ -169,36 +171,47 @@ export function CoachContextCard({
             transition={{ type: 'timing' as const, duration: 300, delay: 200 + index * 100 } as any}
             style={styles.statItem}
           >
-            <Text
-              style={{
-                color: c.text,
-                fontFamily: ty.mono.family,
-                fontSize: ty.sizes.xl,
-              }}
-            >
-              {stat.value}
-              {stat.unit && (
-                <Text
-                  style={{
-                    color: c.textMuted,
-                    fontFamily: ty.body.family,
-                    fontSize: ty.sizes.xs,
-                  }}
-                >
-                  {' '}{stat.unit}
-                </Text>
-              )}
-            </Text>
-            <Text
-              style={{
-                color: c.textMuted,
-                fontFamily: ty.body.family,
-                fontSize: ty.sizes.xs,
-                marginTop: 2,
-              }}
-            >
-              {stat.label}
-            </Text>
+            {(() => {
+              const isProtein = stat.label === 'Protein Left';
+              const valueColor = isProtein ? proteinTheme.text : c.text;
+              const unitColor = isProtein ? proteinTheme.text : c.textMuted;
+              const labelColor = isProtein ? proteinTheme.text : c.textMuted;
+
+              return (
+                <>
+                  <Text
+                    style={{
+                      color: valueColor,
+                      fontFamily: ty.mono.family,
+                      fontSize: ty.sizes.xl,
+                    }}
+                  >
+                    {stat.value}
+                    {stat.unit && (
+                      <Text
+                        style={{
+                          color: unitColor,
+                          fontFamily: ty.body.family,
+                          fontSize: ty.sizes.xs,
+                        }}
+                      >
+                        {' '}{stat.unit}
+                      </Text>
+                    )}
+                  </Text>
+                  <Text
+                    style={{
+                      color: labelColor,
+                      fontFamily: ty.body.family,
+                      fontSize: ty.sizes.xs,
+                      marginTop: 2,
+                    }}
+                  >
+                    {stat.label}
+                  </Text>
+                </>
+              );
+            })()}
           </MotiView>
         ))}
       </View>

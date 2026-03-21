@@ -193,25 +193,25 @@ export function NutritionSummaryCard({
           {/* Protein */}
           <View style={styles.macroRow}>
             <View style={styles.macroHeader}>
-              <Text style={[styles.macroLabel, { color: c.textMuted, fontFamily: ty.body.familySemibold, fontSize: 10 }]}>
+              <Text style={[styles.macroLabel, { color: c.macros.protein, fontFamily: ty.body.familySemibold, fontSize: 10 }]}>
                 PRO
               </Text>
-              <Text style={[styles.macroValue, { color: c.text, fontFamily: ty.body.familySemibold, fontSize: 10 }]}>
+              <Text style={[styles.macroValue, { color: c.macros.protein, fontFamily: ty.body.familySemibold, fontSize: 10 }]}>
                 {protein}g
               </Text>
             </View>
             <View style={[styles.macroTrack, { backgroundColor: c.surface2, borderRadius: r.sm }]}>
-              <View style={[styles.macroFill, { width: `${proteinPercent}%`, backgroundColor: c.primary, borderRadius: r.sm }]} />
+              <View style={[styles.macroFill, { width: `${proteinPercent}%`, backgroundColor: c.macros.protein, borderRadius: r.sm }]} />
             </View>
           </View>
 
           {/* Carbs */}
           <View style={styles.macroRow}>
             <View style={styles.macroHeader}>
-              <Text style={[styles.macroLabel, { color: c.textMuted, fontFamily: ty.body.familySemibold, fontSize: 10 }]}>
+              <Text style={[styles.macroLabel, { color: c.macros.carbs, fontFamily: ty.body.familySemibold, fontSize: 10 }]}>
                 CARBS
               </Text>
-              <Text style={[styles.macroValue, { color: c.text, fontFamily: ty.body.familySemibold, fontSize: 10 }]}>
+              <Text style={[styles.macroValue, { color: c.macros.carbs, fontFamily: ty.body.familySemibold, fontSize: 10 }]}>
                 {carbs}g
               </Text>
             </View>
@@ -223,10 +223,10 @@ export function NutritionSummaryCard({
           {/* Fat */}
           <View style={styles.macroRow}>
             <View style={styles.macroHeader}>
-              <Text style={[styles.macroLabel, { color: c.textMuted, fontFamily: ty.body.familySemibold, fontSize: 10 }]}>
+              <Text style={[styles.macroLabel, { color: c.macros.fat, fontFamily: ty.body.familySemibold, fontSize: 10 }]}>
                 FAT
               </Text>
-              <Text style={[styles.macroValue, { color: c.text, fontFamily: ty.body.familySemibold, fontSize: 10 }]}>
+              <Text style={[styles.macroValue, { color: c.macros.fat, fontFamily: ty.body.familySemibold, fontSize: 10 }]}>
                 {fat}g
               </Text>
             </View>

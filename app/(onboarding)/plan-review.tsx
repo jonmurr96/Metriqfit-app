@@ -28,7 +28,7 @@ import {
 import {
   useGenerationHistory,
   useActiveWorkoutPlan,
-  useActiveNutritionPlan,
+  useEditableNutritionPlanContext,
   useNutritionPlanDay,
   useWorkoutSchedule,
 } from '../../hooks/usePlan';
@@ -117,7 +117,10 @@ export default function PlanReviewScreen() {
   const { data: onboardingAnswers } = useOnboardingAnswers();
   const { data: targetData, isLoading: targetsLoading } = useUserTargets();
   const { data: workoutPlan, isLoading: workoutLoading } = useActiveWorkoutPlan();
-  const { data: nutritionPlan, isLoading: nutritionLoading } = useActiveNutritionPlan();
+  const nutritionContextQuery = useEditableNutritionPlanContext();
+  const nutritionPlan = nutritionContextQuery.data?.editablePlan || null;
+  const nutritionPlanSource = nutritionContextQuery.data?.source || 'none';
+  const nutritionLoading = nutritionContextQuery.isLoading;
   const targets = useMemo(
     () => ({
       calories: Number(targetData?.calories || 2000),
@@ -426,7 +429,10 @@ export default function PlanReviewScreen() {
           <PlanSummaryCard
             name={nutritionPlan?.name || 'Generated nutrition plan'}
             description={nutritionPlan?.description}
-            metadata={`${String(answerPayload.meals_per_day || '3').replace('_', ' ')} meals/day`}
+            metadata={[
+              `${String(answerPayload.meals_per_day || '3').replace('_', ' ')} meals/day`,
+              nutritionPlanSource === 'preview' ? 'Preview context' : 'Live context',
+            ].join(' • ')}
           />
           <Pressable
             style={[styles.expandRow, { borderColor: c.border, backgroundColor: c.surface2, borderRadius: r.md }]}

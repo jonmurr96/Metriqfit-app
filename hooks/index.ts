@@ -32,6 +32,12 @@ export {
   useDeleteMealLogItem,
 } from './useNutrition';
 
+export {
+  nutritionDashboardKeys,
+  useNutritionTodaySnapshot,
+  useNutritionToolsSnapshot,
+} from './useNutritionDashboard';
+
 // Workout hooks
 export {
   workoutKeys,
@@ -99,10 +105,15 @@ export {
 export {
   aiCoachKeys,
   useConversationHistory,
+  useParsedConversationHistory,
   useRateLimitStatus,
   useDailyAIUsage,
   useSuggestedPrompts,
   useConsistencyRecommendation,
+  useAICoachDashboard,
+  useAICoachInterventions,
+  useAICoachMemory,
+  useUpdateAICoachMemoryStatus,
   useSendMessage,
   useClearConversation,
   useAIChat,
@@ -113,6 +124,8 @@ export {
   planKeys,
   useActiveWorkoutPlan,
   useActiveNutritionPlan,
+  useLatestNutritionPlanPreview,
+  useEditableNutritionPlanContext,
   useWorkoutPlanHistory,
   useNutritionPlanHistory,
   useWorkoutPlanDay,
@@ -123,6 +136,15 @@ export {
   useNutritionPlanMeal,
   useGenerationHistory,
   useTriggerPlanGeneration,
+  useWorkoutPlanPreview,
+  useWorkoutPlanCoherence,
+  useGenerateNutritionPlanPreview,
+  useGenerateWorkoutPlanPreview,
+  useApplyNutritionPlanPreview,
+  useApplyWorkoutPlanPreview,
+  useDiscardNutritionPlanPreview,
+  useDiscardWorkoutPlanPreview,
+  useRepairWorkoutPlanPreview,
   useMarkDayCompleted,
   useSwapExercise,
   useUpdateExerciseTargets,
@@ -219,6 +241,49 @@ export {
   useRunPrepCheckInAdjustment,
   useRevertPrepAdjustment,
 } from './usePrepCoach';
+
+// Progress photo hooks
+export {
+  progressMetricKeys,
+  useProgressSnapshot,
+  useProgressTrends,
+  useProgressRecordSummary,
+  useHomeSnapshot,
+  useWeeklyActivity,
+  type ProgressRangeOption,
+  type ProgressSnapshot,
+  type ProgressTrendSnapshot,
+  type ProgressRecordSummary,
+  type HomeSnapshot,
+  type DailyActivityStatus,
+} from './useProgressMetrics';
+
+// Progress review hooks
+export {
+  progressReviewKeys,
+  useProgressDailyReview,
+  useProgressWeeklyReview,
+  type ProgressDailyReviewSnapshot,
+  type ProgressWeeklyReviewSnapshot,
+  type ProgressReviewStatus,
+  type ProgressReviewMiss,
+  type ProgressReviewAction,
+} from './useProgressReview';
+
+// Progress body hooks
+export {
+  progressBodyKeys,
+  useProgressBodyTimeline,
+  useProgressPhotoCompare,
+  useLatestBodyCheckInStatus,
+  type ProgressBodyTimelineSnapshot,
+  type ProgressBodyCheckpoint,
+  type ProgressCheckpointStatSummary,
+  type ProgressPhotoCompareSnapshot,
+  type ProgressComparePair,
+  type ProgressBodyStatusSnapshot,
+  type ProgressPhotoAngle,
+} from './useProgressBody';
 
 // Progress photo hooks
 export {

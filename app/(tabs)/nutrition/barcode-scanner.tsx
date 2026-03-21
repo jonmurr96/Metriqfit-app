@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { StyleSheet, View, Text, Pressable, ActivityIndicator, Alert } from 'react-native';
-import { useRouter } from 'expo-router';
+import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { CameraView, useCameraPermissions, BarcodeScanningResult } from 'expo-camera';
 import { useTokens } from '../../../lib/theme';
@@ -13,8 +13,12 @@ export default function BarcodeScannerScreen() {
   const { c, s, ty, r } = useTokens();
   const router = useRouter();
   const insets = useSafeAreaInsets();
+  const params = useLocalSearchParams<{ mealSlot?: string; origin?: string; planMealId?: string }>();
   const { user } = useAuth();
   const barcodeAccess = useFeatureAccess('barcode_scan');
+  const mealSlot = typeof params.mealSlot === 'string' ? params.mealSlot : undefined;
+  const origin = typeof params.origin === 'string' ? params.origin : 'barcode';
+  const planMealId = typeof params.planMealId === 'string' ? params.planMealId : undefined;
 
   const [permission, requestPermission] = useCameraPermissions();
   const [isScanning, setIsScanning] = useState(false);
@@ -49,8 +53,9 @@ export default function BarcodeScannerScreen() {
           pathname: '/(tabs)/nutrition/food-search',
           params: {
             preselectedFoodId: result.matchedFoodItem.id,
-            preselectedFoodName: result.matchedFoodItem.name,
-            source: 'barcode',
+            ...(mealSlot ? { mealSlot } : {}),
+            ...(origin ? { origin } : {}),
+            ...(planMealId ? { planMealId } : {}),
           },
         });
       } else if (result.food) {
@@ -67,6 +72,9 @@ export default function BarcodeScannerScreen() {
                   pathname: '/(tabs)/nutrition/food-search',
                   params: {
                     query: result.food?.name || '',
+                    ...(mealSlot ? { mealSlot } : {}),
+                    ...(origin ? { origin } : {}),
+                    ...(planMealId ? { planMealId } : {}),
                   },
                 });
               },
@@ -83,7 +91,14 @@ export default function BarcodeScannerScreen() {
             {
               text: 'Search',
               onPress: () => {
-                router.push('/(tabs)/nutrition/food-search');
+                router.push({
+                  pathname: '/(tabs)/nutrition/food-search',
+                  params: {
+                    ...(mealSlot ? { mealSlot } : {}),
+                    ...(origin ? { origin } : {}),
+                    ...(planMealId ? { planMealId } : {}),
+                  },
+                });
               },
             },
           ]

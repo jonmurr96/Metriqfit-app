@@ -77,16 +77,15 @@ export default function TabLayout() {
 
   const activeTabSegment = segments[1];
   const activeNestedSegment = segments[2];
-  const isNestedWorkoutRoute =
-    activeTabSegment === 'workout' &&
-    !!activeNestedSegment;
-  const hideQuickAddFab = isNestedWorkoutRoute;
+  const hideBottomTabChrome =
+    (activeTabSegment === 'workout' && !!activeNestedSegment) ||
+    (activeTabSegment === 'nutrition' && !!activeNestedSegment);
 
   useEffect(() => {
-    if (hideQuickAddFab && isQuickAddOpen) {
+    if (hideBottomTabChrome && isQuickAddOpen) {
       setIsQuickAddOpen(false);
     }
-  }, [hideQuickAddFab, isQuickAddOpen]);
+  }, [hideBottomTabChrome, isQuickAddOpen]);
 
   // Show loading while checking onboarding status
   if (isCheckingOnboarding) {
@@ -114,21 +113,24 @@ export default function TabLayout() {
           tabBarInactiveTintColor: c.textSubtle,
           tabBarShowLabel: true,
           tabBarLabelPosition: 'below-icon',
-          tabBarStyle: {
-            backgroundColor: c.surface,
-            borderTopColor: c.border,
-            borderTopWidth: 1,
-            height: tabBarHeight,
-            paddingBottom: insets.bottom + 6,
-            paddingTop: 8,
-            paddingHorizontal: 0,
-            position: 'absolute',
-            bottom: 0,
-            left: 0,
-            right: 0,
-            elevation: 0,
-            display: isNestedWorkoutRoute ? 'none' : 'flex',
-          },
+          tabBarStyle: hideBottomTabChrome
+            ? {
+                display: 'none',
+              }
+            : {
+                backgroundColor: c.surface,
+                borderTopColor: c.border,
+                borderTopWidth: 1,
+                height: tabBarHeight,
+                paddingBottom: insets.bottom + 6,
+                paddingTop: 8,
+                paddingHorizontal: 0,
+                position: 'absolute',
+                bottom: 0,
+                left: 0,
+                right: 0,
+                elevation: 0,
+              },
           tabBarLabelStyle: {
             fontFamily: 'Sora_500Medium',
             fontSize: 10,
@@ -198,7 +200,7 @@ export default function TabLayout() {
         />
       </Tabs>
 
-      {!hideQuickAddFab && (
+      {!hideBottomTabChrome && (
         <View
           style={[
             styles.fabWrapper,

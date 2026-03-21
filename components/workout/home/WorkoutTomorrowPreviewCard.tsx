@@ -8,10 +8,11 @@ import type { WorkoutTomorrowPreviewState } from '../../../lib/workout/dashboard
 
 type Props = {
   state: WorkoutTomorrowPreviewState;
+  contextLabel?: string | null;
   onPress: () => void;
 };
 
-export function WorkoutTomorrowPreviewCard({ state, onPress }: Props) {
+export function WorkoutTomorrowPreviewCard({ state, contextLabel, onPress }: Props) {
   const { c, s, ty, r } = useTokens();
 
   return (
@@ -54,6 +55,17 @@ export function WorkoutTomorrowPreviewCard({ state, onPress }: Props) {
               >
                 TOMORROW
               </Text>
+              {contextLabel ? (
+                <Text
+                  style={{
+                    color: c.primary,
+                    fontFamily: ty.mono.family,
+                    fontSize: ty.sizes.xs,
+                  }}
+                >
+                  {contextLabel}
+                </Text>
+              ) : null}
               <Text
                 style={{
                   color: c.text,

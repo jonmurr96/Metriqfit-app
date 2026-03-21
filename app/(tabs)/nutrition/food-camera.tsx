@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import {
   StyleSheet,
   View,
@@ -9,11 +9,13 @@ import {
   ScrollView,
   Image,
 } from 'react-native';
-import { useRouter } from 'expo-router';
+import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { CameraView, useCameraPermissions, CameraType } from 'expo-camera';
 import { useTokens } from '../../../lib/theme';
 import { TabBarIcon } from '../../../components/navigation/TabBarIcon';
+import { MacroInlineSummary } from '../../../components/nutrition/MacroInlineSummary';
+import { MacroRow } from '../../../components/nutrition/MacroRow';
 import { useAuth } from '../../../lib/auth/AuthProvider';
 import { useFeatureAccess } from '../../../hooks/useSubscription';
 import {
@@ -22,11 +24,13 @@ import {
   FoodPhotoAnalysis,
   PhotoScanUsage,
 } from '../../../services/foodPhotoService';
+import { createUserFood, searchFoods } from '../../../services/nutritionService';
 
 export default function FoodCameraScreen() {
   const { c, s, ty, r } = useTokens();
   const router = useRouter();
   const insets = useSafeAreaInsets();
+  const params = useLocalSearchParams<{ mealSlot?: string; origin?: string; planMealId?: string }>();
   const { user } = useAuth();
   const cameraRef = useRef<CameraView>(null);
   const foodPhotoAccess = useFeatureAccess('food_photo_scan');
@@ -37,15 +41,12 @@ export default function FoodCameraScreen() {
   const [capturedPhoto, setCapturedPhoto] = useState<string | null>(null);
   const [analysis, setAnalysis] = useState<FoodPhotoAnalysis | null>(null);
   const [scanUsage, setScanUsage] = useState<PhotoScanUsage | null>(null);
+  const [selectedFoodIndex, setSelectedFoodIndex] = useState(0);
+  const mealSlot = typeof params.mealSlot === 'string' ? params.mealSlot : undefined;
+  const origin = typeof params.origin === 'string' ? params.origin : 'food_camera';
+  const planMealId = typeof params.planMealId === 'string' ? params.planMealId : undefined;
 
-  // Load scan usage on mount
-  useEffect(() => {
-    if (user) {
-      loadScanUsage();
-    }
-  }, [user]);
-
-  const loadScanUsage = async () => {
+  const loadScanUsage = useCallback(async () => {
     if (!user) return;
     try {
       const usage = await getPhotoScanUsage(user.id);
@@ -53,7 +54,14 @@ export default function FoodCameraScreen() {
     } catch (error) {
       console.error('Failed to load scan usage:', error);
     }
-  };
+  }, [user]);
+
+  // Load scan usage on mount
+  useEffect(() => {
+    if (user) {
+      loadScanUsage();
+    }
+  }, [loadScanUsage, user]);
 
   // Request permission on mount
   useEffect(() => {
@@ -209,24 +217,63 @@ export default function FoodCameraScreen() {
   const handleRetake = () => {
     setCapturedPhoto(null);
     setAnalysis(null);
+    setSelectedFoodIndex(0);
   };
 
-  const handleConfirm = () => {
-    if (!analysis) return;
+  const handleConfirm = async () => {
+    if (!analysis || !user) return;
 
-    // Navigate to food-search or meal entry with AI-suggested foods
-    // For now, we'll navigate to food-search
-    // In the future, we can create a dedicated "review-ai-meal" screen
-    Alert.alert(
-      'AI Analysis Complete',
-      `Found ${analysis.foods.length} food items totaling ~${analysis.totalCalories} calories. This would navigate to meal entry with pre-filled data.`,
-      [{ text: 'OK' }]
-    );
+    const selectedFood = analysis.foods[selectedFoodIndex] || analysis.foods[0];
+    if (!selectedFood) return;
 
-    // Navigate to food search with pre-filled query (or just search screen for now as prompt suggests)
-    // In a full implementation, we would pass the analyzed foods to a bulk-add screen.
-    // For now, we redirect to food-search as a valid "Add to Meal" flow entry point.
-    router.replace('/(tabs)/nutrition/food-search');
+    if (!selectedFood.estimatedGrams || selectedFood.estimatedGrams <= 0) {
+      Alert.alert(
+        'Scan needs review',
+        'We couldn’t create a reusable food from this scan. Search manually instead.',
+      );
+      router.replace({
+        pathname: '/(tabs)/nutrition/food-search',
+        params: {
+          query: selectedFood.name,
+          ...(mealSlot ? { mealSlot } : {}),
+        },
+      });
+      return;
+    }
+
+    try {
+      setIsAnalyzing(true);
+
+      const normalizedSelected = selectedFood.name.trim().toLowerCase();
+      const existingMatches = await searchFoods(selectedFood.name, 10);
+      const exactMatch = existingMatches.find((food) => food.name.trim().toLowerCase() === normalizedSelected);
+
+      const targetFood = exactMatch || await createUserFood(user.id, {
+        name: selectedFood.name,
+        category: 'photo scan',
+        caloriesPer100g: (selectedFood.calories / selectedFood.estimatedGrams) * 100,
+        proteinPer100g: (selectedFood.protein / selectedFood.estimatedGrams) * 100,
+        carbsPer100g: (selectedFood.carbs / selectedFood.estimatedGrams) * 100,
+        fatPer100g: (selectedFood.fat / selectedFood.estimatedGrams) * 100,
+        servingSizeG: selectedFood.estimatedGrams,
+        servingDescription: `${Math.round(selectedFood.estimatedGrams)}g serving`,
+      });
+
+      router.replace({
+        pathname: '/(tabs)/nutrition/food-detail',
+        params: {
+          id: targetFood.id,
+          ...(mealSlot ? { mealSlot } : {}),
+        },
+      });
+    } catch (error: any) {
+      Alert.alert(
+        'Scan needs review',
+        error?.message || 'We couldn’t create a reusable food from this scan. Search manually instead.',
+      );
+    } finally {
+      setIsAnalyzing(false);
+    }
   };
 
   const toggleCameraFacing = () => {
@@ -377,8 +424,9 @@ export default function FoodCameraScreen() {
             </Text>
 
             {analysis.foods.map((food, index) => (
-              <View
+              <Pressable
                 key={index}
+                onPress={() => setSelectedFoodIndex(index)}
                 style={[
                   styles.foodItem,
                   {
@@ -386,6 +434,8 @@ export default function FoodCameraScreen() {
                     borderRadius: r.md,
                     padding: s.md,
                     marginTop: s.sm,
+                    borderWidth: 1.5,
+                    borderColor: selectedFoodIndex === index ? c.primary : 'transparent',
                   },
                 ]}
               >
@@ -402,9 +452,16 @@ export default function FoodCameraScreen() {
                     <Text style={{ color: c.primary, fontFamily: ty.heading.familySemibold, fontSize: ty.sizes.md }}>
                       {food.calories} cal
                     </Text>
-                    <Text style={{ color: c.textMuted, fontFamily: ty.mono.family, fontSize: ty.sizes.xs, marginTop: 2 }}>
-                      P: {food.protein}g | C: {food.carbs}g | F: {food.fat}g
-                    </Text>
+                    <MacroInlineSummary
+                      size="sm"
+                      style={{ marginTop: 2, justifyContent: 'flex-end' }}
+                      textStyle={{ fontFamily: ty.mono.family, fontSize: ty.sizes.xs }}
+                      items={[
+                        { macro: 'protein', value: food.protein, unit: 'g' },
+                        { macro: 'carbs', value: food.carbs, unit: 'g' },
+                        { macro: 'fat', value: food.fat, unit: 'g' },
+                      ]}
+                    />
                   </View>
                 </View>
 
@@ -424,7 +481,7 @@ export default function FoodCameraScreen() {
                     {food.confidence} confidence
                   </Text>
                 </View>
-              </View>
+              </Pressable>
             ))}
 
             {/* Totals */}
@@ -441,16 +498,17 @@ export default function FoodCameraScreen() {
                     calories
                   </Text>
                 </View>
-                <View style={{ alignItems: 'flex-end' }}>
-                  <Text style={{ color: c.text, fontFamily: ty.mono.family, fontSize: ty.sizes.sm }}>
-                    P: {analysis.totalProtein}g
-                  </Text>
-                  <Text style={{ color: c.text, fontFamily: ty.mono.family, fontSize: ty.sizes.sm }}>
-                    C: {analysis.totalCarbs}g
-                  </Text>
-                  <Text style={{ color: c.text, fontFamily: ty.mono.family, fontSize: ty.sizes.sm }}>
-                    F: {analysis.totalFat}g
-                  </Text>
+                <View style={{ alignItems: 'flex-end', flex: 1, marginLeft: s.md }}>
+                  <MacroRow
+                    size="sm"
+                    emphasis="outlined"
+                    style={{ justifyContent: 'flex-end' }}
+                    items={[
+                      { macro: 'protein', value: analysis.totalProtein, unit: 'g' },
+                      { macro: 'carbs', value: analysis.totalCarbs, unit: 'g' },
+                      { macro: 'fat', value: analysis.totalFat, unit: 'g' },
+                    ]}
+                  />
                 </View>
               </View>
             </View>
@@ -491,22 +549,29 @@ export default function FoodCameraScreen() {
               style={[
                 styles.actionButton,
                 {
-                  backgroundColor: c.primary,
+                  backgroundColor: isAnalyzing ? c.textMuted : c.primary,
                   borderRadius: r.md,
                   flex: 1,
                 },
               ]}
-              onPress={handleConfirm}
+              onPress={() => {
+                void handleConfirm();
+              }}
+              disabled={isAnalyzing}
             >
-              <Text
-                style={{
-                  color: c.bg,
-                  fontFamily: ty.body.familySemibold,
-                  fontSize: ty.sizes.md,
-                }}
-              >
-                Add to Meal
-              </Text>
+              {isAnalyzing ? (
+                <ActivityIndicator size="small" color={c.bg} />
+              ) : (
+                <Text
+                  style={{
+                    color: c.bg,
+                    fontFamily: ty.body.familySemibold,
+                    fontSize: ty.sizes.md,
+                  }}
+                >
+                  Continue with Selected
+                </Text>
+              )}
             </Pressable>
           </View>
         </ScrollView>

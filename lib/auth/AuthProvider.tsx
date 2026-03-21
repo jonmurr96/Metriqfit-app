@@ -58,6 +58,18 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
+    if (!isSupabaseConfigured || Platform.OS === 'web') {
+      return;
+    }
+
+    supabase.auth.startAutoRefresh();
+
+    return () => {
+      supabase.auth.stopAutoRefresh();
+    };
+  }, []);
+
+  useEffect(() => {
     // If Supabase is not configured, skip auth initialization
     if (!isSupabaseConfigured) {
       setLoading(false);
@@ -105,9 +117,17 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
     const appStateSubscription = AppState.addEventListener('change', (state) => {
       if (state === 'active') {
+        if (Platform.OS !== 'web') {
+          supabase.auth.startAutoRefresh();
+          supabase.auth.getSession().catch((error) => {
+            console.warn('[Auth] Session refresh check failed:', error);
+          });
+        }
         initializeRevenueCat(user.id).catch((error) => {
           console.warn('[RevenueCat] Foreground entitlement refresh failed:', error);
         });
+      } else if (Platform.OS !== 'web') {
+        supabase.auth.stopAutoRefresh();
       }
     });
 

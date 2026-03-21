@@ -3,8 +3,13 @@ import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useTokens } from '../../../lib/theme';
 import { TabBarIcon } from '../../../components/navigation/TabBarIcon';
-import { useWorkoutPlanDay } from '../../../hooks/usePlan';
+import { ExerciseMediaPreview } from '../../../components/workout/media/ExerciseMediaPreview';
+import { useActiveWorkoutPlan, useWorkoutPlanCoherence, useWorkoutPlanDay, useWorkoutPlanPreview } from '../../../hooks/usePlan';
 import { useStartSession, useTemplateDay } from '../../../hooks/useWorkout';
+import {
+  trackExerciseDetailOpenedFromPreview,
+  trackExerciseMediaPreviewExpanded,
+} from '../../../lib/analytics';
 
 export default function DayPreviewScreen() {
   const { c, s, ty, r } = useTokens();
@@ -17,14 +22,52 @@ export default function DayPreviewScreen() {
 
   const { data: planDay, isLoading: isPlanDayLoading } = useWorkoutPlanDay(dayId as string);
   const { data: templateDay, isLoading: isTemplateDayLoading } = useTemplateDay(params.templateDayId as string);
+  const { data: activePlan } = useActiveWorkoutPlan();
+  const { data: coherenceReport } = useWorkoutPlanCoherence(activePlan?.id, {
+    enabled: !!activePlan?.id,
+  });
+  const { data: repairPreview } = useWorkoutPlanPreview(activePlan?.id, {
+    enabled: !!activePlan?.id,
+  });
 
   const day = planDay || templateDay;
   const isLoading = isPlanDayLoading || isTemplateDayLoading;
+  const requiresRepairPreview = !!planDay
+    && !!activePlan?.id
+    && planDay.plan_id === activePlan.id
+    && !!coherenceReport?.hasHardViolations
+    && !!coherenceReport?.canRepair;
 
   const startSessionMutation = useStartSession();
 
+  const openExerciseDetail = (exerciseId?: string | null) => {
+    if (!exerciseId) {
+      return;
+    }
+
+    trackExerciseMediaPreviewExpanded({
+      source: 'day_preview',
+      exercise_id: exerciseId,
+    });
+    trackExerciseDetailOpenedFromPreview({
+      source: 'day_preview',
+      exercise_id: exerciseId,
+    });
+    router.push({
+      pathname: '/(tabs)/workout/exercise-detail',
+      params: {
+        id: exerciseId,
+        source: 'day_preview_media',
+      },
+    });
+  };
+
   const handleStartWorkout = async () => {
     if (!day) return;
+    if (requiresRepairPreview) {
+      router.push({ pathname: '/(tabs)/workout/regenerate-plan', params: { mode: 'repair' } });
+      return;
+    }
 
     try {
       await startSessionMutation.mutateAsync({
@@ -184,21 +227,45 @@ export default function DayPreviewScreen() {
                 ]}
               >
                 <View style={styles.exerciseHeader}>
-                  <View
-                    style={[
-                      styles.exerciseNumber,
-                      { backgroundColor: c.surface2, borderRadius: r.sm },
-                    ]}
+                  <Pressable
+                    onPress={() => openExerciseDetail(planExercise.exercise?.id)}
+                    style={{ width: 104, marginRight: s.md }}
                   >
-                    <Text style={{ color: c.primary, fontFamily: ty.mono.family, fontSize: ty.sizes.sm }}>
-                      {blockIndex + 1}.{index + 1}
-                    </Text>
-                  </View>
+                    <ExerciseMediaPreview
+                      exerciseId={planExercise.exercise?.id}
+                      videoUrl={planExercise.exercise?.video_url}
+                      gifUrl={planExercise.exercise?.gif_url}
+                      imageUrl={planExercise.exercise?.image_url}
+                      posterUrl={planExercise.exercise?.poster_url}
+                      hasMedia={planExercise.exercise?.has_media}
+                      autoplay
+                      fit="contain"
+                      height={104}
+                      borderRadius={r.md}
+                      analyticsSource="day_preview"
+                      analyticsExerciseId={planExercise.exercise?.id || undefined}
+                    />
+                  </Pressable>
                   <View style={styles.exerciseInfo}>
-                    <Text style={{ color: c.text, fontFamily: ty.body.familyMedium, fontSize: ty.sizes.md }}>
-                      {planExercise.exercise?.name || 'Unknown Exercise'}
+                    <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 4 }}>
+                      <View
+                        style={[
+                          styles.exerciseNumber,
+                          { backgroundColor: c.surface2, borderRadius: r.sm, marginRight: 10 },
+                        ]}
+                      >
+                        <Text style={{ color: c.primary, fontFamily: ty.mono.family, fontSize: ty.sizes.sm }}>
+                          {blockIndex + 1}.{index + 1}
+                        </Text>
+                      </View>
+                      <Text style={{ color: c.text, fontFamily: ty.body.familyMedium, fontSize: ty.sizes.md, flex: 1 }}>
+                        {planExercise.exercise?.name || 'Unknown Exercise'}
+                      </Text>
+                    </View>
+                    <Text style={{ color: c.textMuted, fontFamily: ty.body.family, fontSize: ty.sizes.xs }}>
+                      {planExercise.exercise?.category || 'Movement'} • {planExercise.exercise?.primary_muscle || 'Unknown muscle'}
                     </Text>
-                    <Text style={{ color: c.textMuted, fontFamily: ty.body.family, fontSize: ty.sizes.sm, marginTop: 2 }}>
+                    <Text style={{ color: c.textMuted, fontFamily: ty.body.family, fontSize: ty.sizes.sm, marginTop: 4 }}>
                       {planExercise.sets_target || 3} sets × {planExercise.reps_min}-{planExercise.reps_max} reps
                     </Text>
                     <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 6, marginTop: s.xs }}>
@@ -216,9 +283,16 @@ export default function DayPreviewScreen() {
                           </Text>
                         </View>
                       )}
+                      {!!planExercise.rest_seconds && (
+                        <View style={{ backgroundColor: c.surface2, borderRadius: r.pill, paddingHorizontal: 8, paddingVertical: 2 }}>
+                          <Text style={{ color: c.textMuted, fontFamily: ty.mono.family, fontSize: ty.sizes.xs }}>
+                            Rest {planExercise.rest_seconds}s
+                          </Text>
+                        </View>
+                      )}
                     </View>
                     {(planExercise.user_notes || planExercise.notes) && (
-                      <Text style={{ color: c.textMuted, fontFamily: ty.body.family, fontSize: ty.sizes.xs, marginTop: 4, fontStyle: 'italic' }}>
+                      <Text style={{ color: c.textMuted, fontFamily: ty.body.family, fontSize: ty.sizes.xs, marginTop: 6, fontStyle: 'italic' }}>
                         Note: {planExercise.user_notes || planExercise.notes}
                       </Text>
                     )}
@@ -244,11 +318,28 @@ export default function DayPreviewScreen() {
           },
         ]}
       >
+        {requiresRepairPreview ? (
+          <Text
+            style={{
+              color: c.textMuted,
+              fontFamily: ty.body.family,
+              fontSize: ty.sizes.xs,
+              textAlign: 'center',
+              marginBottom: s.sm,
+            }}
+          >
+            {repairPreview
+              ? 'Review the repair preview to fix this day before starting.'
+              : 'This workout day needs a repair preview before you can start it.'}
+          </Text>
+        ) : null}
         <Pressable
           style={[
             styles.startButton,
             {
-              backgroundColor: 'is_completed' in day && day.is_completed ? c.surface2 : c.primary,
+              backgroundColor: requiresRepairPreview
+                ? c.surface2
+                : ('is_completed' in day && day.is_completed ? c.surface2 : c.primary),
               borderRadius: r.md,
               opacity: startSessionMutation.isPending ? 0.7 : 1,
               cursor: 'pointer',
@@ -262,12 +353,16 @@ export default function DayPreviewScreen() {
           ) : (
             <Text
               style={{
-                color: 'is_completed' in day && day.is_completed ? c.textMuted : c.bg,
+                color: requiresRepairPreview
+                  ? c.text
+                  : ('is_completed' in day && day.is_completed ? c.textMuted : c.bg),
                 fontFamily: ty.heading.familySemibold,
                 fontSize: ty.sizes.lg,
               }}
             >
-              {'is_completed' in day && day.is_completed ? 'Workout Completed' : 'Start Workout'}
+              {requiresRepairPreview
+                ? 'Review Repair Preview'
+                : ('is_completed' in day && day.is_completed ? 'Workout Completed' : 'Start Workout')}
             </Text>
           )}
         </Pressable>

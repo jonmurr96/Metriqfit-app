@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useMemo } from 'react';
 import { View, Text, StyleSheet, ScrollView, TextInput, KeyboardAvoidingView, Platform, Pressable } from 'react-native';
 import { router } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -24,6 +24,7 @@ import {
   PremiumOptionCard,
   PremiumChipSelect,
 } from '../../components/onboarding/premium';
+import { useWorkoutProgramFamilies } from '../../hooks/useWorkoutBuilder';
 
 const { onboarding: o, spacing: s, radius: r } = metriqfitTheme;
 
@@ -75,7 +76,7 @@ const equipmentOptions: { value: EquipmentAccess; label: string; icon: keyof typ
   { value: 'other', label: 'Other', icon: 'ellipsis-horizontal-outline', color: 'teal' },
 ];
 
-const splitFamilyOptions = [
+const splitFamilyFallbackOptions = [
   { value: 'no_preference', label: 'No Preference' },
   { value: 'bro_split_5', label: 'Bro Split (5)' },
   { value: 'arnold_split_6', label: 'Arnold Split (6)' },
@@ -114,8 +115,20 @@ const sessionEmphasisOptions: { value: SessionEmphasis; label: string; descripti
 
 export default function TrainingSetupScreen() {
   const { data, updateData, setCurrentStep } = useOnboarding();
+  const { data: splitFamilies = [] } = useWorkoutProgramFamilies();
   const dayOffResolution = resolvePreferredDaysOff(data.training_days_per_week, data.preferred_days_off);
   const hasDroppedDaysOff = dayOffResolution.droppedDaysOff.length > 0;
+  const splitFamilyOptions = useMemo(() => {
+    const mapped = splitFamilies.map((family) => ({
+      value: family.external_key,
+      label: family.display_name,
+    }));
+
+    return [
+      { value: 'no_preference', label: 'No Preference' },
+      ...(mapped.length > 0 ? mapped : splitFamilyFallbackOptions.slice(1)),
+    ];
+  }, [splitFamilies]);
 
   const isValid =
     data.training_days_per_week &&

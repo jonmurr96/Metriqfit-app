@@ -8,7 +8,7 @@ import {
   isExerciseEquipmentCompatible,
   resolveDayFocusPolicy,
   stableHash,
-} from './programMappingRules';
+} from './programMappingRules.ts';
 
 export type MappingViolationType =
   | 'focus_mismatch'
@@ -101,6 +101,7 @@ export function countViolationTypes(violations: DayAuditExerciseViolation[]): Re
 function scoreReplacementCandidate(input: {
   candidate: ProgramExercise;
   original: ProgramExercise;
+  policy: DayFocusPolicy;
   dayId: string;
   rowId: string;
   dayFocusSeed: string;
@@ -123,6 +124,14 @@ function scoreReplacementCandidate(input: {
   const originalFocus = inferPrimaryExerciseFocus(input.original);
   if (candidateFocus && originalFocus && candidateFocus === originalFocus) {
     score += 6;
+  }
+
+  if (candidateFocus && input.policy.primaryFocusTags.includes(candidateFocus as WorkoutFocusTag)) {
+    score += 14;
+  } else if (candidateFocus && input.policy.supportFocusTags.includes(candidateFocus as WorkoutFocusTag)) {
+    score += 3;
+  } else if (candidateFocus && input.policy.allowedPrimaryFocuses.includes(candidateFocus)) {
+    score -= 4;
   }
 
   const seed = `${input.dayId}::${input.rowId}::${input.dayFocusSeed}::${input.candidate.id}`;
@@ -165,6 +174,7 @@ export function selectDeterministicReplacement(input: {
       score: scoreReplacementCandidate({
         candidate,
         original: input.originalExercise,
+        policy: input.policy,
         dayId: input.dayId,
         rowId: input.rowId,
         dayFocusSeed: focusSeed,

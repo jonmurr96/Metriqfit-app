@@ -1,6 +1,7 @@
 import React, { useMemo } from 'react';
 import { StyleSheet, Text, View } from 'react-native';
 import { useTokens } from '../../../lib/theme';
+import { MacroInlineSummary } from '../../nutrition/MacroInlineSummary';
 import type { NutritionPlanDayDetails } from '../../../services/planService';
 
 interface NutritionMealPreviewProps {
@@ -41,9 +42,15 @@ export function NutritionMealPreview({ dayDetails }: NutritionMealPreviewProps) 
         <Text style={{ color: c.text, fontFamily: ty.body.familySemibold, fontSize: 12 }}>
           Planned today: {Math.round(dayDetails.totals.calories)} kcal
         </Text>
-        <Text style={{ color: c.textMuted, fontFamily: ty.body.family, fontSize: 12 }}>
-          Targets: P {Math.round(dayDetails.targets.protein)}g • C {Math.round(dayDetails.targets.carbs)}g • F {Math.round(dayDetails.targets.fat)}g
-        </Text>
+        <MacroInlineSummary
+          size="sm"
+          style={{ marginTop: 4 }}
+          items={[
+            { macro: 'protein', value: Math.round(dayDetails.targets.protein), unit: 'g' },
+            { macro: 'carbs', value: Math.round(dayDetails.targets.carbs), unit: 'g' },
+            { macro: 'fat', value: Math.round(dayDetails.targets.fat), unit: 'g' },
+          ]}
+        />
       </View>
 
       {meals.map((meal) => {
@@ -64,9 +71,15 @@ export function NutritionMealPreview({ dayDetails }: NutritionMealPreviewProps) 
                 {Math.round(calories)} kcal
               </Text>
             </View>
-            <Text style={{ color: c.textMuted, fontFamily: ty.body.family, fontSize: 12, marginBottom: 6 }}>
-              P {Math.round(protein)}g • C {Math.round(carbs)}g • F {Math.round(fat)}g
-            </Text>
+            <MacroInlineSummary
+              size="sm"
+              style={{ marginBottom: 6 }}
+              items={[
+                { macro: 'protein', value: Math.round(protein), unit: 'g' },
+                { macro: 'carbs', value: Math.round(carbs), unit: 'g' },
+                { macro: 'fat', value: Math.round(fat), unit: 'g' },
+              ]}
+            />
 
             {items.slice(0, 5).map((item, idx) => (
               <Text key={`${item.id || idx}`} style={{ color: c.text, fontFamily: ty.body.family, fontSize: 12, lineHeight: 17 }}>

@@ -4,6 +4,7 @@ import { MotiView } from 'moti';
 
 import { useTokens } from '../../lib/theme';
 import { TabBarIcon } from '../navigation/TabBarIcon';
+import { MacroRow } from './MacroRow';
 
 export interface NextMealWidgetData {
   slotLabel: string;
@@ -75,8 +76,19 @@ export function NextMealWidget({
           </Text>
 
           <Text style={{ color: c.textMuted, marginTop: 4, fontFamily: ty.body.family, fontSize: ty.sizes.xs }}>
-            {Math.round(nextMeal.targetCalories)} kcal • P {Math.round(nextMeal.targetProtein)}g • C {Math.round(nextMeal.targetCarbs)}g • F {Math.round(nextMeal.targetFat)}g
+            {Math.round(nextMeal.targetCalories)} kcal
           </Text>
+
+          <MacroRow
+            style={{ marginTop: 10 }}
+            size="sm"
+            emphasis="outlined"
+            items={[
+              { macro: 'protein', value: Math.round(nextMeal.targetProtein), unit: 'g' },
+              { macro: 'carbs', value: Math.round(nextMeal.targetCarbs), unit: 'g' },
+              { macro: 'fat', value: Math.round(nextMeal.targetFat), unit: 'g' },
+            ]}
+          />
         </>
       )}
 

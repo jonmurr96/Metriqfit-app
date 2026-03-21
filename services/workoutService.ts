@@ -22,6 +22,13 @@ import {
   buildSessionExerciseSnapshots,
 } from '../lib/workout/session-snapshot';
 import type { ProgramExercise } from '../lib/workout/programMappingRules';
+import {
+  normalizeWorkoutDayType,
+  type WorkoutProgramCatalogItem,
+  type WorkoutProgramDayBlueprint,
+  type UserWorkoutPlanProgramMeta,
+  type WeeklyLayoutAssignment,
+} from '../lib/workout/program-catalog';
 const db = supabase as any;
 
 async function insertSessionExercisesWithFallback(
@@ -112,9 +119,18 @@ export interface ExerciseFilters {
   sortAscending?: boolean;
 }
 
+export type { WorkoutProgramCatalogItem, WeeklyLayoutAssignment, UserWorkoutPlanProgramMeta };
+
 // Extended types with joins
-export interface WorkoutTemplateWithDays extends WorkoutTemplate {
+export interface WorkoutTemplateWithDays extends WorkoutProgramCatalogItem {
+  external_id: string | null;
+  split_type: string;
+  is_public: boolean;
+  created_at: string;
+  updated_at: string;
   days: (WorkoutTemplateDay & {
+    day_type: string | null;
+    estimated_duration_min: number | null;
     exercises: {
       id: string;
       exercise_id: string;
@@ -160,6 +176,81 @@ export interface WorkoutNoteItem {
   logDate: string;
   exerciseId?: string;
   exerciseName?: string;
+}
+
+function toBlueprintDay(input: any, sequenceIndex: number, exerciseCount: number): WorkoutProgramDayBlueprint {
+  return {
+    id: input.id,
+    sequenceIndex,
+    dayType: normalizeWorkoutDayType(input.day_type),
+    name: input.name || `Day ${sequenceIndex}`,
+    focus: input.focus || null,
+    estimatedDurationMin: input.estimated_duration_min ?? null,
+    exerciseCount,
+  };
+}
+
+function mapV2CatalogItem(template: any): WorkoutProgramCatalogItem {
+  const blueprint = (template.days || [])
+    .sort((a: any, b: any) => (a.sequence_index || 0) - (b.sequence_index || 0))
+    .map((day: any) =>
+      toBlueprintDay(
+        day,
+        Number(day.sequence_index || 0),
+        Number(day.exercise_count || day.blocks?.reduce((sum: number, block: any) => sum + ((block.exercises || []).length), 0) || 0),
+      ),
+    );
+
+  return {
+    id: template.id,
+    name: template.name,
+    description: template.description || null,
+    difficulty: template.difficulty || null,
+    daysPerWeek: template.days_per_week || 0,
+    durationWeeks: template.duration_weeks || null,
+    familyKey: template.family?.external_key || null,
+    familyDisplayName: template.family?.display_name || null,
+    progressionModel: template.progression_model || null,
+    goalTags: template.goal_tags || [],
+    trainingStyleTags: template.training_style_tags || [],
+    equipmentRequired: template.equipment_required || [],
+    targetAudience: template.target_audience || null,
+    sourceModel: 'v2_template',
+    dayBlueprint: blueprint,
+  };
+}
+
+function mapLegacyCatalogItem(template: any): WorkoutProgramCatalogItem {
+  const blueprint = (template.days || [])
+    .sort((a: any, b: any) => (a.day_number || 0) - (b.day_number || 0))
+    .map((day: any) =>
+      toBlueprintDay(
+        {
+          ...day,
+          day_type: day.is_rest_day ? 'rest' : 'workout',
+        },
+        Number(day.day_number || 0),
+        Number(day.exercise_count || day.exercises?.length || 0),
+      ),
+    );
+
+  return {
+    id: template.id,
+    name: template.name,
+    description: template.description || null,
+    difficulty: template.difficulty || null,
+    daysPerWeek: template.days_per_week || 0,
+    durationWeeks: template.duration_weeks || null,
+    familyKey: template.split_type || null,
+    familyDisplayName: template.split_type ? String(template.split_type).replaceAll('_', ' ') : 'Legacy Program',
+    progressionModel: null,
+    goalTags: template.goal_tags || [],
+    trainingStyleTags: [],
+    equipmentRequired: template.equipment_required || [],
+    targetAudience: template.target_audience || null,
+    sourceModel: 'legacy_template',
+    dayBlueprint: blueprint,
+  };
 }
 
 async function loadMappingExercisePool(): Promise<ProgramExercise[]> {
@@ -339,35 +430,53 @@ function remapV1TemplateDaysAtRuntime(input: {
 /**
  * Get all public workout programs/templates
  */
-export async function getPrograms(): Promise<WorkoutTemplate[]> {
+export async function getPrograms(): Promise<WorkoutProgramCatalogItem[]> {
   const { data: v2Templates, error: v2Error } = await db
     .from('workout_program_templates_v2')
-    .select('*, family:workout_program_families(external_key)')
+    .select(
+      `
+      *,
+      family:workout_program_families(external_key,display_name),
+      days:workout_program_days_v2(
+        id,
+        sequence_index,
+        day_type,
+        name,
+        focus,
+        estimated_duration_min,
+        blocks:workout_program_day_blocks_v2(
+          id,
+          exercises:workout_program_block_exercises_v2(id)
+        )
+      )
+    `,
+    )
     .eq('is_public', true)
     .order('name', { ascending: true });
 
   if (!v2Error && (v2Templates || []).length > 0) {
-    return (v2Templates || []).map((template: any) => ({
-      id: template.id,
-      external_id: template.external_id || `v2_${template.id}`,
-      name: template.name,
-      description: template.description,
-      difficulty: template.difficulty || 'intermediate',
-      duration_weeks: template.duration_weeks || 8,
-      days_per_week: template.days_per_week || 4,
-      goal_tags: template.goal_tags || [],
-      equipment_required: template.equipment_required || [],
-      split_type: template.family?.external_key || 'custom',
-      target_audience: template.target_audience || null,
-      is_public: template.is_public,
-      created_at: template.created_at || new Date().toISOString(),
-      updated_at: template.updated_at || new Date().toISOString(),
-    })) as WorkoutTemplate[];
+    return (v2Templates || []).map(mapV2CatalogItem);
   }
 
-  const { data, error } = await supabase.from('workout_templates').select('*').eq('is_public', true).order('name');
+  const { data, error } = await supabase
+    .from('workout_templates')
+    .select(
+      `
+      *,
+      days:workout_template_days(
+        id,
+        day_number,
+        name,
+        focus,
+        is_rest_day,
+        exercises:workout_template_exercises(id)
+      )
+    `,
+    )
+    .eq('is_public', true)
+    .order('name');
   if (error) throw error;
-  return (data || []) as WorkoutTemplate[];
+  return (data || []).map(mapLegacyCatalogItem);
 }
 
 /**
@@ -379,7 +488,7 @@ export async function getProgramWithDays(programId: string): Promise<WorkoutTemp
     .select(
       `
       *,
-      family:workout_program_families(external_key),
+      family:workout_program_families(external_key,display_name),
       days:workout_program_days_v2(
         *,
         blocks:workout_program_day_blocks_v2(
@@ -413,18 +522,15 @@ export async function getProgramWithDays(programId: string): Promise<WorkoutTemp
       );
     }
 
+    const baseProgram = mapV2CatalogItem({
+      ...v2Program,
+      days: remappedV2.days,
+    });
+
     const mappedProgram: WorkoutTemplateWithDays = {
-      id: v2Program.id,
+      ...baseProgram,
       external_id: v2Program.external_id || `v2_${v2Program.id}`,
-      name: v2Program.name,
-      description: v2Program.description,
-      difficulty: v2Program.difficulty || 'intermediate',
-      duration_weeks: v2Program.duration_weeks || 8,
-      days_per_week: v2Program.days_per_week || 4,
-      goal_tags: v2Program.goal_tags || [],
-      equipment_required: v2Program.equipment_required || [],
       split_type: v2Program.family?.external_key || 'custom',
-      target_audience: v2Program.target_audience || null,
       is_public: v2Program.is_public,
       created_at: v2Program.created_at || new Date().toISOString(),
       updated_at: v2Program.updated_at || new Date().toISOString(),
@@ -460,8 +566,9 @@ export async function getProgramWithDays(programId: string): Promise<WorkoutTemp
             day_number: day.sequence_index,
             name: day.name,
             focus: day.focus,
-            is_rest_day: day.day_type !== 'workout',
+            day_type: day.day_type || 'workout',
             estimated_duration_min: day.estimated_duration_min || null,
+            is_rest_day: day.day_type !== 'workout',
             created_at: day.created_at || new Date().toISOString(),
             exercises: flattened,
           };
@@ -515,13 +622,25 @@ export async function getProgramWithDays(programId: string): Promise<WorkoutTemp
     );
   }
 
+  const baseProgram = mapLegacyCatalogItem({
+    ...data,
+    days: remappedV1.days,
+  });
+
   // Sort days by day_number and exercises by order_index
   const sortedData = {
-    ...data,
+    ...baseProgram,
+    external_id: data.external_id || null,
+    split_type: data.split_type || 'custom',
+    is_public: data.is_public,
+    created_at: data.created_at,
+    updated_at: data.updated_at,
     days: remappedV1.days
       .sort((a: any, b: any) => a.day_number - b.day_number)
       .map((day: any) => ({
         ...day,
+        day_type: day.is_rest_day ? 'rest' : 'workout',
+        estimated_duration_min: day.estimated_duration_min || null,
         exercises: day.exercises.sort((a: any, b: any) => a.order_index - b.order_index),
       })),
   };

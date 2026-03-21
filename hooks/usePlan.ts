@@ -10,6 +10,8 @@ import {
   getActiveWorkoutPlan,
   getActiveNutritionPlan,
   getPlanHistory,
+  getLatestNutritionPlanPreview,
+  getLatestWorkoutPlanPreview,
   getWorkoutPlanDay,
   getTodaysWorkout,
   markDayCompleted,
@@ -34,6 +36,16 @@ import {
   computePlanConsistency,
   getConsistencyHistory,
   getLatestConsistency,
+  generateNutritionPlanPreview,
+  generateWorkoutPlanPreview,
+  applyNutritionPlanPreview,
+  applyWorkoutPlanPreview,
+  discardNutritionPlanPreview,
+  discardWorkoutPlanPreview,
+  getEditableNutritionPlanContext,
+  getWorkoutPlanCoherenceReport,
+  repairNutritionPlanMappings,
+  repairWorkoutPlanCoherencePreview,
   type UserWorkoutPlan,
   type UserWorkoutPlanDay,
   type UserNutritionPlan,
@@ -45,16 +57,29 @@ import {
   type WorkoutScheduleEntry,
   type NutritionPlanDayDetails,
   type NutritionPlanMeal,
+  type NutritionPlanWithDetails,
   type ConsistencyRecord,
+  type NutritionPlanPreviewResult,
+  type NutritionRegenerationRequest,
+  type WorkoutPlanPreview as WorkoutPlanPreviewData,
+  type WorkoutPlanPreviewResult,
+  type WorkoutPlanCoherenceReport,
+  type WorkoutRegenerationRequest,
+  type EditableNutritionPlanContext,
 } from '../services/planService';
+import { nutritionDashboardKeys } from './useNutritionDashboard';
 
 // Query Keys
 export const planKeys = {
   all: ['plans'] as const,
+  mediaVersion: 'media-v2' as const,
   workout: () => [...planKeys.all, 'workout'] as const,
   workoutActive: (userId: string) => [...planKeys.workout(), 'active', userId] as const,
   workoutHistory: (userId: string) => [...planKeys.workout(), 'history', userId] as const,
-  workoutDay: (dayId: string) => [...planKeys.workout(), 'day', dayId] as const,
+  workoutPreview: (userId: string, replacesPlanId?: string | null) =>
+    [...planKeys.workout(), 'preview', userId, replacesPlanId || 'latest'] as const,
+  workoutCoherence: (planId: string) => [...planKeys.workout(), 'coherence', planId] as const,
+  workoutDay: (dayId: string) => [...planKeys.workout(), 'day', dayId, planKeys.mediaVersion] as const,
   todaysWorkout: (userId: string) => [...planKeys.workout(), 'today', userId] as const,
   workoutSchedule: (userId: string, startDate: string, endDate: string) =>
     [...planKeys.workout(), 'schedule', userId, startDate, endDate] as const,
@@ -63,6 +88,9 @@ export const planKeys = {
   nutrition: () => [...planKeys.all, 'nutrition'] as const,
   nutritionActive: (userId: string) => [...planKeys.nutrition(), 'active', userId] as const,
   nutritionHistory: (userId: string) => [...planKeys.nutrition(), 'history', userId] as const,
+  nutritionPreview: (userId: string, replacesPlanId?: string | null) =>
+    [...planKeys.nutrition(), 'preview', userId, replacesPlanId || 'latest'] as const,
+  nutritionEditable: (userId: string) => [...planKeys.nutrition(), 'editable', userId] as const,
   nutritionDay: (userId: string, dayOfWeek: number, planId?: string | null) =>
     [...planKeys.nutrition(), 'day', userId, dayOfWeek, planId || 'active'] as const,
   nutritionMeal: (mealId: string) => [...planKeys.nutrition(), 'meal', mealId] as const,
@@ -99,6 +127,28 @@ export function useActiveNutritionPlan() {
     queryFn: () => getActiveNutritionPlan(user!.id),
     enabled: !!user,
     staleTime: 5 * 60 * 1000,
+  });
+}
+
+export function useLatestNutritionPlanPreview(replacesPlanId?: string | null, options?: { enabled?: boolean }) {
+  const { user } = useAuth();
+
+  return useQuery<NutritionPlanWithDetails | null>({
+    queryKey: planKeys.nutritionPreview(user?.id || '', replacesPlanId),
+    queryFn: () => getLatestNutritionPlanPreview(user!.id, replacesPlanId),
+    enabled: !!user && (options?.enabled ?? true),
+    staleTime: 30 * 1000,
+  });
+}
+
+export function useEditableNutritionPlanContext(options?: { enabled?: boolean }) {
+  const { user } = useAuth();
+
+  return useQuery<EditableNutritionPlanContext>({
+    queryKey: planKeys.nutritionEditable(user?.id || ''),
+    queryFn: () => getEditableNutritionPlanContext(user!.id),
+    enabled: !!user && (options?.enabled ?? true),
+    staleTime: 30 * 1000,
   });
 }
 
@@ -258,10 +308,169 @@ export function useTriggerPlanGeneration() {
         queryClient.invalidateQueries({ queryKey: planKeys.nutritionActive(user!.id) });
         queryClient.invalidateQueries({ queryKey: planKeys.nutritionHistory(user!.id) });
         queryClient.invalidateQueries({ queryKey: planKeys.nutrition() });
+        queryClient.invalidateQueries({ queryKey: nutritionDashboardKeys.all });
       }
 
       queryClient.invalidateQueries({ queryKey: planKeys.generations(user!.id) });
       queryClient.invalidateQueries({ queryKey: planKeys.consistency() });
+    },
+  });
+}
+
+/**
+ * Get the latest workout preview plan replacing the current active plan.
+ */
+export function useWorkoutPlanPreview(replacesPlanId?: string | null, options?: { enabled?: boolean }) {
+  const { user } = useAuth();
+
+  return useQuery({
+    queryKey: planKeys.workoutPreview(user?.id || '', replacesPlanId),
+    queryFn: () => getLatestWorkoutPlanPreview(user!.id, replacesPlanId),
+    enabled: !!user && (options?.enabled ?? true),
+    staleTime: 30 * 1000,
+  });
+}
+
+export function useWorkoutPlanCoherence(planId?: string | null, options?: { enabled?: boolean }) {
+  return useQuery<WorkoutPlanCoherenceReport>({
+    queryKey: planKeys.workoutCoherence(planId || ''),
+    queryFn: () => getWorkoutPlanCoherenceReport(planId!),
+    enabled: !!planId && (options?.enabled ?? true),
+    staleTime: 30 * 1000,
+  });
+}
+
+/**
+ * Generate a preview workout plan from regeneration inputs.
+ */
+export function useGenerateWorkoutPlanPreview() {
+  const { user } = useAuth();
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: async (input: WorkoutRegenerationRequest): Promise<WorkoutPlanPreviewResult> => {
+      if (!user) throw new Error('Authentication required');
+      return generateWorkoutPlanPreview(user.id, input);
+    },
+    onSuccess: (result, variables) => {
+      queryClient.invalidateQueries({ queryKey: planKeys.generations(user!.id) });
+      queryClient.invalidateQueries({ queryKey: planKeys.workoutPreview(user!.id, variables.current_plan_id) });
+      if ('previewPlanId' in result) {
+        queryClient.invalidateQueries({ queryKey: planKeys.workoutHistory(user!.id) });
+      }
+    },
+  });
+}
+
+export function useGenerateNutritionPlanPreview() {
+  const { user } = useAuth();
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: async (input: NutritionRegenerationRequest): Promise<NutritionPlanPreviewResult> => {
+      if (!user) throw new Error('Authentication required');
+      return generateNutritionPlanPreview(user.id, input);
+    },
+    onSuccess: (result, variables) => {
+      queryClient.invalidateQueries({ queryKey: planKeys.generations(user!.id) });
+      queryClient.invalidateQueries({ queryKey: planKeys.nutritionPreview(user!.id, variables.current_plan_id) });
+      queryClient.invalidateQueries({ queryKey: planKeys.nutritionEditable(user!.id) });
+      queryClient.invalidateQueries({ queryKey: nutritionDashboardKeys.all });
+      if ('previewPlanId' in result) {
+        queryClient.invalidateQueries({ queryKey: planKeys.nutritionHistory(user!.id) });
+      }
+    },
+  });
+}
+
+/**
+ * Activate the selected workout preview plan.
+ */
+export function useApplyWorkoutPlanPreview() {
+  const { user } = useAuth();
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: (previewPlanId: string) => applyWorkoutPlanPreview(previewPlanId),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: planKeys.workout() });
+      queryClient.invalidateQueries({ queryKey: planKeys.workoutActive(user!.id) });
+      queryClient.invalidateQueries({ queryKey: planKeys.workoutHistory(user!.id) });
+      queryClient.invalidateQueries({ queryKey: planKeys.workoutPreview(user!.id) });
+      queryClient.invalidateQueries({ queryKey: planKeys.todaysWorkout(user!.id) });
+      queryClient.invalidateQueries({ queryKey: planKeys.workoutTodaySchedule(user!.id) });
+      queryClient.invalidateQueries({ queryKey: planKeys.consistency() });
+      queryClient.invalidateQueries({ queryKey: planKeys.generations(user!.id) });
+    },
+  });
+}
+
+export function useApplyNutritionPlanPreview() {
+  const { user } = useAuth();
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: (previewPlanId: string) => applyNutritionPlanPreview(previewPlanId),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: planKeys.nutrition() });
+      queryClient.invalidateQueries({ queryKey: planKeys.nutritionActive(user!.id) });
+      queryClient.invalidateQueries({ queryKey: planKeys.nutritionHistory(user!.id) });
+      queryClient.invalidateQueries({ queryKey: planKeys.nutritionPreview(user!.id) });
+      queryClient.invalidateQueries({ queryKey: planKeys.nutritionEditable(user!.id) });
+      queryClient.invalidateQueries({ queryKey: nutritionDashboardKeys.all });
+      queryClient.invalidateQueries({ queryKey: planKeys.generations(user!.id) });
+      queryClient.invalidateQueries({ queryKey: planKeys.consistency() });
+    },
+  });
+}
+
+/**
+ * Discard the latest workout preview plan.
+ */
+export function useDiscardWorkoutPlanPreview() {
+  const { user } = useAuth();
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: (previewPlanId: string) => discardWorkoutPlanPreview(previewPlanId),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: planKeys.generations(user!.id) });
+      queryClient.invalidateQueries({ queryKey: planKeys.workoutPreview(user!.id) });
+      queryClient.invalidateQueries({ queryKey: planKeys.workoutHistory(user!.id) });
+    },
+  });
+}
+
+export function useDiscardNutritionPlanPreview() {
+  const { user } = useAuth();
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: (previewPlanId: string) => discardNutritionPlanPreview(previewPlanId),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: planKeys.generations(user!.id) });
+      queryClient.invalidateQueries({ queryKey: planKeys.nutritionPreview(user!.id) });
+      queryClient.invalidateQueries({ queryKey: planKeys.nutritionEditable(user!.id) });
+      queryClient.invalidateQueries({ queryKey: planKeys.nutritionHistory(user!.id) });
+      queryClient.invalidateQueries({ queryKey: nutritionDashboardKeys.all });
+    },
+  });
+}
+
+export function useRepairWorkoutPlanPreview() {
+  const { user } = useAuth();
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: async (planId: string): Promise<WorkoutPlanPreviewResult> => {
+      if (!user) throw new Error('Authentication required');
+      return repairWorkoutPlanCoherencePreview(planId);
+    },
+    onSuccess: (_, planId) => {
+      queryClient.invalidateQueries({ queryKey: planKeys.workoutCoherence(planId) });
+      queryClient.invalidateQueries({ queryKey: planKeys.workoutPreview(user!.id, planId) });
+      queryClient.invalidateQueries({ queryKey: planKeys.workoutHistory(user!.id) });
+      queryClient.invalidateQueries({ queryKey: planKeys.generations(user!.id) });
     },
   });
 }
@@ -395,6 +604,23 @@ export function useApplyMealPlanChange() {
     onSuccess: (data) => {
       queryClient.invalidateQueries({ queryKey: planKeys.nutrition() });
       queryClient.invalidateQueries({ queryKey: planKeys.nutritionDay(user!.id, data.dayOfWeek) });
+      queryClient.invalidateQueries({ queryKey: planKeys.nutritionEditable(user!.id) });
+      queryClient.invalidateQueries({ queryKey: nutritionDashboardKeys.all });
+      queryClient.invalidateQueries({ queryKey: planKeys.consistency() });
+    },
+  });
+}
+
+export function useRepairNutritionPlanMappings() {
+  const { user } = useAuth();
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: ({ planId }: { planId: string }) => repairNutritionPlanMappings(planId),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: planKeys.nutrition() });
+      queryClient.invalidateQueries({ queryKey: planKeys.nutritionEditable(user!.id) });
+      queryClient.invalidateQueries({ queryKey: nutritionDashboardKeys.all });
       queryClient.invalidateQueries({ queryKey: planKeys.consistency() });
     },
   });
@@ -412,6 +638,8 @@ export function useApplyMealPlanBatchChange() {
     onSuccess: (data) => {
       queryClient.invalidateQueries({ queryKey: planKeys.nutrition() });
       queryClient.invalidateQueries({ queryKey: planKeys.nutritionDay(user!.id, data.dayOfWeek, data.planId) });
+      queryClient.invalidateQueries({ queryKey: planKeys.nutritionEditable(user!.id) });
+      queryClient.invalidateQueries({ queryKey: nutritionDashboardKeys.all });
       queryClient.invalidateQueries({ queryKey: planKeys.consistency() });
     },
   });
@@ -429,6 +657,8 @@ export function useAddNutritionPlanMeal() {
       addNutritionPlanMeal(user!.id, dayOfWeek, mealSlot),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: planKeys.nutrition() });
+      queryClient.invalidateQueries({ queryKey: planKeys.nutritionEditable(user!.id) });
+      queryClient.invalidateQueries({ queryKey: nutritionDashboardKeys.all });
     },
   });
 }
@@ -437,12 +667,15 @@ export function useAddNutritionPlanMeal() {
  * Remove a meal slot from a nutrition day.
  */
 export function useRemoveNutritionPlanMeal() {
+  const { user } = useAuth();
   const queryClient = useQueryClient();
 
   return useMutation({
     mutationFn: ({ planMealId }: { planMealId: string }) => removeNutritionPlanMeal(planMealId),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: planKeys.nutrition() });
+      queryClient.invalidateQueries({ queryKey: planKeys.nutritionEditable(user!.id) });
+      queryClient.invalidateQueries({ queryKey: nutritionDashboardKeys.all });
     },
   });
 }
@@ -451,6 +684,7 @@ export function useRemoveNutritionPlanMeal() {
  * Move meal slot order within a day.
  */
 export function useMoveNutritionPlanMeal() {
+  const { user } = useAuth();
   const queryClient = useQueryClient();
 
   return useMutation({
@@ -458,6 +692,8 @@ export function useMoveNutritionPlanMeal() {
       moveNutritionPlanMeal(planMealId, direction),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: planKeys.nutrition() });
+      queryClient.invalidateQueries({ queryKey: planKeys.nutritionEditable(user!.id) });
+      queryClient.invalidateQueries({ queryKey: nutritionDashboardKeys.all });
     },
   });
 }
@@ -474,6 +710,8 @@ export function useCopyNutritionDayMeals() {
       copyNutritionDayMeals(user!.id, sourceDayOfWeek, targetDaysOfWeek),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: planKeys.nutrition() });
+      queryClient.invalidateQueries({ queryKey: planKeys.nutritionEditable(user!.id) });
+      queryClient.invalidateQueries({ queryKey: nutritionDashboardKeys.all });
     },
   });
 }
@@ -562,6 +800,7 @@ export function useReactivatePlan() {
         queryClient.invalidateQueries({ queryKey: planKeys.workout() });
       } else {
         queryClient.invalidateQueries({ queryKey: planKeys.nutrition() });
+        queryClient.invalidateQueries({ queryKey: nutritionDashboardKeys.all });
       }
     },
   });
@@ -611,4 +850,7 @@ export type {
   NutritionPlanMeal,
   WorkoutScheduleEntry,
   ConsistencyRecord,
+  WorkoutPlanPreviewData,
+  WorkoutPlanPreviewResult,
+  WorkoutRegenerationRequest,
 };

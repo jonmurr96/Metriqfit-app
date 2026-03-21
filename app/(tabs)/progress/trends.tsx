@@ -1,183 +1,200 @@
-import React from 'react';
-import { StyleSheet, View, Text, Pressable, ScrollView } from 'react-native';
-import { useRouter } from 'expo-router';
-import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { MotiView } from 'moti';
+import React, { useEffect, useMemo, useState } from 'react';
+import { ActivityIndicator, ScrollView, StyleSheet, Text, View } from 'react-native';
+
+import {
+  ProgressSectionShell,
+  ProgressRangeSelector,
+  RecordSummaryStrip,
+  WeeklyTrendChart,
+} from '../../../components/progress';
+import { GlassCard } from '../../../components/premium/GlassCard';
+import {
+  trackProgressCardRendered,
+  trackProgressTrendsRangeChanged,
+  trackProgressViewed,
+} from '../../../lib/analytics';
 import { useTokens } from '../../../lib/theme';
-import { TabBarIcon } from '../../../components/navigation/TabBarIcon';
-import { WeeklyTrendChart } from '../../../components/progress/WeeklyTrendChart';
-import { useNutritionStats } from '../../../hooks/useNutrition';
-import { useUserDashboard } from '../../../hooks/useUser';
-import { useWorkoutHistory, useWorkoutStats } from '../../../hooks/useWorkout';
-import { trackProgressCardRendered, trackProgressViewed } from '../../../lib/analytics';
+import { useProgressTrends } from '../../../hooks/useProgressMetrics';
+import type { ProgressRangeOption } from '../../../services/progressMetricsService';
+
+const RANGE_OPTIONS: ProgressRangeOption[] = ['7D', '14D', '1M', '3M', '6M', '12M'];
+
+function formatDirection(value: number | null) {
+  if (value == null) return 'No change';
+  if (Math.abs(value) < 0.1) return 'Flat';
+  return `${value > 0 ? '+' : ''}${value}%`;
+}
 
 export default function TrendsScreen() {
-  const { c, s, ty, r } = useTokens();
-  const router = useRouter();
-  const insets = useSafeAreaInsets();
+  const { c, s, ty } = useTokens();
+  const [range, setRange] = useState<ProgressRangeOption>('1M');
 
-  // Fetch real data
-  const { data: nutritionStats } = useNutritionStats(7);
-  const { calorieTarget } = useUserDashboard();
-  const { data: workoutHistory } = useWorkoutHistory(60);
-  const startDate = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString();
-  const endDate = new Date().toISOString();
-  const { data: workoutStats } = useWorkoutStats(startDate, endDate);
+  const { data: snapshot, isLoading } = useProgressTrends(range);
 
-  React.useEffect(() => {
-    trackProgressViewed({ source: 'progress_trends' });
-    trackProgressCardRendered({ card_id: 'trends_calorie' });
-    trackProgressCardRendered({ card_id: 'trends_volume' });
-  }, []);
+  useEffect(() => {
+    trackProgressViewed({ source: 'progress_trends', range });
+  }, [range]);
 
-  // Transform data for charts
-  const today = new Date();
-  const last7Days = Array.from({ length: 7 }, (_, i) => {
-    const d = new Date(today);
-    d.setDate(d.getDate() - (6 - i));
-    return d.toISOString().split('T')[0];
-  });
-
-  const calendarDays = ['S', 'M', 'T', 'W', 'T', 'F', 'S'];
-
-  // Nutrition Data
-  const calorieData = last7Days.map(date => {
-    const dayDate = new Date(date);
-    const dayLabel = calendarDays[dayDate.getDay()];
-    const value = nutritionStats?.[date]?.calories || 0;
-    const isToday = date === today.toISOString().split('T')[0];
-    const target = calorieTarget || 2000;
-
-    return {
-      day: dayLabel,
-      value,
-      isOverTarget: value > target,
-      isToday
-    };
-  });
-
-  const workoutVolumeData = last7Days.map((date) => {
-    const dayDate = new Date(date);
-    const dayLabel = calendarDays[dayDate.getDay()];
-    const sessionsForDay = (workoutHistory || []).filter((session: any) => {
-      if (!session?.started_at) return false;
-      return session.started_at.split('T')[0] === date;
+  useEffect(() => {
+    if (!snapshot) return;
+    ['training_trends', 'adherence_trends', 'body_trends'].forEach((cardId) => {
+      trackProgressCardRendered({ card_id: cardId, range });
     });
-    const value = sessionsForDay.reduce((total: number, session: any) => {
-      const volume = (session.exercises || []).reduce((sessionVolume: number, ex: any) => {
-        const exVolume = (ex.sets || []).reduce((setVolume: number, set: any) => {
-          if (set?.is_warmup) return setVolume;
-          const reps = Number(set?.reps || 0);
-          const weight = Number(set?.weight_lb || 0);
-          return setVolume + (reps * weight);
-        }, 0);
-        return sessionVolume + exVolume;
-      }, 0);
-      return total + volume;
-    }, 0);
+  }, [range, snapshot]);
 
-    return {
-      day: dayLabel,
-      value: Math.round(value),
-      isToday: date === today.toISOString().split('T')[0],
-      isOverTarget: false,
-    };
-  });
+  const handleRangeChange = (next: ProgressRangeOption) => {
+    setRange(next);
+    trackProgressTrendsRangeChanged({ range: next });
+  };
 
-  const workoutVolumeChange = (() => {
-    const values = workoutVolumeData.map((d) => d.value).filter((v) => v > 0);
-    if (values.length < 2) return 0;
-    const first = values[0];
-    const last = values[values.length - 1];
-    if (first === 0) return 0;
-    return Math.round(((last - first) / first) * 100);
-  })();
+  const prEventItems = useMemo(() => (
+    (snapshot?.prEvents || []).map((event) => ({
+      id: event.id,
+      label: event.exercise,
+      value: `${event.estimated1Rm} lb`,
+      meta: new Date(event.date).toLocaleDateString('en-US', { month: 'short', day: 'numeric' }),
+    }))
+  ), [snapshot?.prEvents]);
+
+  if (isLoading && !snapshot) {
+    return (
+      <View style={[styles.loadingContainer, { backgroundColor: c.bg }]}>
+        <ActivityIndicator size="large" color={c.primary} />
+      </View>
+    );
+  }
 
   return (
-    <View style={[styles.container, { backgroundColor: c.bg, paddingTop: insets.top }]}>
-      {/* Header */}
-      <View style={[styles.header, { paddingHorizontal: s.lg }]}>
-        <Pressable
-          onPress={() => router.back()}
-          style={[styles.backButton, { backgroundColor: c.surface }]}
-          accessibilityLabel="Go back"
-          accessibilityRole="button"
-        >
-          <TabBarIcon name="chevron-back" color={c.text} size={24} />
-        </Pressable>
-        <Text
-          style={[
-            styles.title,
-            {
-              color: c.text,
-              fontFamily: ty.heading.familySemibold,
-              fontSize: ty.sizes.xl,
-            },
-          ]}
-        >
-          Trends
-        </Text>
-        <View style={styles.placeholder} />
-      </View>
+    <ProgressSectionShell
+      title="Trends"
+      primarySection="performance"
+      secondarySection="performance"
+      secondaryItem="trends"
+    >
+      <ScrollView
+        contentContainerStyle={{ paddingHorizontal: s.lg, paddingBottom: 80 }}
+        showsVerticalScrollIndicator={false}
+      >
+        <ProgressRangeSelector
+          options={RANGE_OPTIONS}
+          selected={range}
+          onChange={handleRangeChange}
+        />
 
-      {/* Content */}
-      <ScrollView contentContainerStyle={[styles.content, { padding: s.lg }]}>
+        {snapshot ? (
+          <>
+            <View style={{ marginTop: s.xl }}>
+              <Text style={[styles.sectionTitle, { color: c.text, fontFamily: ty.heading.familySemibold }]}>
+                Training Trends
+              </Text>
+              <View style={{ marginTop: s.md }}>
+                <WeeklyTrendChart
+                  title="Workout Volume"
+                  data={snapshot.volumeSeries}
+                  targetValue={Math.max(1, Math.round(snapshot.volumeSeries.reduce((sum, point) => sum + point.value, 0) / Math.max(1, snapshot.volumeSeries.length)))}
+                  changePercent={Math.abs(snapshot.trainingSummary.volumeChangePercent || 0)}
+                  changeDirection={(snapshot.trainingSummary.volumeChangePercent || 0) >= 0 ? 'up' : 'down'}
+                  emptyBehavior="min-bar"
+                />
+              </View>
+              <GlassCard style={{ padding: 16, marginTop: s.md }}>
+                <Text style={{ color: c.text, fontFamily: ty.body.familySemibold, fontSize: ty.sizes.sm }}>
+                  Sessions
+                </Text>
+                <Text style={{ color: c.textMuted, fontFamily: ty.body.family, fontSize: ty.sizes.sm, marginTop: s.xs }}>
+                  {snapshot.trainingSummary.sessionsThisRange} sessions in {range} · {snapshot.trainingSummary.sessionsPerWeek.toFixed(1)} per week · Avg {snapshot.trainingSummary.avgDurationMinutes} min
+                </Text>
+              </GlassCard>
+              <View style={{ marginTop: s.md }}>
+                <RecordSummaryStrip title="Recent PR Events" items={prEventItems} />
+              </View>
+            </View>
 
-        {/* Calorie Trend */}
-        <MotiView
-          from={{ opacity: 0, translateY: 20 }}
-          animate={{ opacity: 1, translateY: 0 }}
-          transition={{ type: 'timing', duration: 500 }}
-          style={{ marginBottom: s.xl }}
-        >
-          <WeeklyTrendChart
-            title="Daily Calories"
-            data={calorieData}
-            targetValue={calorieTarget || 2000}
-            changePercent={(() => {
-              // Calculate real change: compare recent 3 days avg to prior 4 days avg
-              const values = calorieData.map(d => d.value).filter(v => v > 0);
-              if (values.length < 2) return 0;
-              const mid = Math.floor(values.length / 2);
-              const recent = values.slice(mid);
-              const prior = values.slice(0, mid);
-              const recentAvg = recent.reduce((a, b) => a + b, 0) / recent.length;
-              const priorAvg = prior.reduce((a, b) => a + b, 0) / prior.length;
-              if (priorAvg === 0) return 0;
-              return Math.round(((recentAvg - priorAvg) / priorAvg) * 100);
-            })()}
-            changeDirection={(() => {
-              const values = calorieData.map(d => d.value).filter(v => v > 0);
-              if (values.length < 2) return 'up' as const;
-              return values[values.length - 1] >= values[0] ? 'up' as const : 'down' as const;
-            })()}
-          />
-        </MotiView>
+            <View style={{ marginTop: s.xl }}>
+              <Text style={[styles.sectionTitle, { color: c.text, fontFamily: ty.heading.familySemibold }]}>
+                Adherence Trends
+              </Text>
+              <View style={{ marginTop: s.md }}>
+                <WeeklyTrendChart
+                  title="Consistency"
+                  data={snapshot.consistencySeries}
+                  targetValue={80}
+                  changePercent={Math.round(Math.abs(snapshot.adherenceSummary.consistencyAverage - 80))}
+                  changeDirection={snapshot.adherenceSummary.consistencyAverage >= 80 ? 'up' : 'down'}
+                  emptyBehavior="zero"
+                />
+              </View>
+              <View style={{ marginTop: s.md }}>
+                <WeeklyTrendChart
+                  title="Calories"
+                  data={snapshot.calorieSeries}
+                  targetValue={snapshot.adherenceSummary.calorieTarget}
+                  changePercent={Math.round(Math.abs(snapshot.adherenceSummary.nutritionHitRate - 100))}
+                  changeDirection={snapshot.adherenceSummary.nutritionHitRate >= 70 ? 'up' : 'down'}
+                  emptyBehavior="zero"
+                />
+              </View>
+              <GlassCard style={{ padding: 16, marginTop: s.md }}>
+                <Text style={{ color: c.textMuted, fontFamily: ty.body.family, fontSize: ty.sizes.sm, textAlign: 'center' }}>
+                  Nutrition hit rate {snapshot.adherenceSummary.nutritionHitRate}% · Consistency average {snapshot.adherenceSummary.consistencyAverage}%
+                </Text>
+              </GlassCard>
+            </View>
 
-        <MotiView
-          from={{ opacity: 0, translateY: 20 }}
-          animate={{ opacity: 1, translateY: 0 }}
-          transition={{ type: 'timing', duration: 500, delay: 120 }}
-          style={{ marginBottom: s.lg }}
-        >
-          <WeeklyTrendChart
-            title="Workout Volume (lb)"
-            data={workoutVolumeData}
-            targetValue={Math.max(1, Math.round((workoutStats?.totalVolumeLb || 0) / 7))}
-            changePercent={Math.abs(workoutVolumeChange)}
-            changeDirection={workoutVolumeChange >= 0 ? 'up' : 'down'}
-            emptyBehavior="min-bar"
-          />
-        </MotiView>
+            <View style={{ marginTop: s.xl }}>
+              <Text style={[styles.sectionTitle, { color: c.text, fontFamily: ty.heading.familySemibold }]}>
+                Body Trends
+              </Text>
+              <View style={{ marginTop: s.md }}>
+                <WeeklyTrendChart
+                  title="Body Weight"
+                  data={snapshot.weightSeries}
+                  targetValue={Math.max(1, Math.round(snapshot.weightSeries.reduce((sum, point) => sum + point.value, 0) / Math.max(1, snapshot.weightSeries.length)))}
+                  changePercent={Math.abs(snapshot.bodySummary.weightChangePercent)}
+                  changeDirection={snapshot.bodySummary.weightChangePercent >= 0 ? 'up' : 'down'}
+                  emptyBehavior="zero"
+                />
+              </View>
+              <GlassCard style={{ padding: 16, marginTop: s.md }}>
+                <Text style={{ color: c.text, fontFamily: ty.body.familySemibold, fontSize: ty.sizes.sm }}>
+                  Body summary
+                </Text>
+                <Text style={{ color: c.textMuted, fontFamily: ty.body.family, fontSize: ty.sizes.sm, marginTop: s.xs }}>
+                  Weight {snapshot.bodySummary.weightDeltaKg > 0 ? '+' : ''}{snapshot.bodySummary.weightDeltaKg} kg · Body-fat {snapshot.bodySummary.bodyFatChange == null ? 'not enough data' : formatDirection(snapshot.bodySummary.bodyFatChange)}
+                </Text>
+                <Text style={{ color: c.textMuted, fontFamily: ty.body.family, fontSize: ty.sizes.sm, marginTop: s.xs }}>
+                  Waist {snapshot.bodySummary.circumferenceDelta.waistCm == null ? '—' : `${snapshot.bodySummary.circumferenceDelta.waistCm > 0 ? '+' : ''}${snapshot.bodySummary.circumferenceDelta.waistCm} cm`} · Hips {snapshot.bodySummary.circumferenceDelta.hipsCm == null ? '—' : `${snapshot.bodySummary.circumferenceDelta.hipsCm > 0 ? '+' : ''}${snapshot.bodySummary.circumferenceDelta.hipsCm} cm`}
+                </Text>
+              </GlassCard>
+            </View>
 
-        <View style={[styles.infoCard, { backgroundColor: c.surface2, borderRadius: r.md, padding: s.md }]}>
-          <Text style={{ color: c.textMuted, fontFamily: ty.body.family, textAlign: 'center' }}>
-            Sessions: {workoutStats?.totalSessions || 0} · Avg duration: {workoutStats?.avgDurationMinutes || 0} min · PR pace: {workoutStats?.sessionsPerWeek || 0}/week
-          </Text>
-        </View>
-
+            <View style={{ marginTop: s.xl }}>
+              <Text style={[styles.sectionTitle, { color: c.text, fontFamily: ty.heading.familySemibold }]}>
+                Freshness & confidence
+              </Text>
+              <GlassCard style={{ padding: 16, marginTop: s.md }}>
+                {snapshot.qualityFlags.map((flag) => (
+                  <View key={flag.key} style={[styles.qualityRow, { borderBottomColor: c.border }]}>
+                    <Text style={{ color: c.text, fontFamily: ty.body.familySemibold, fontSize: ty.sizes.sm }}>
+                      {flag.key.replace('_', ' ')}
+                    </Text>
+                    <Text
+                      style={{
+                        color: flag.status === 'good' ? c.success : flag.status === 'warn' ? c.warning : c.danger,
+                        fontFamily: ty.body.familySemibold,
+                        fontSize: ty.sizes.xs,
+                      }}
+                    >
+                      {flag.status.toUpperCase()}
+                    </Text>
+                  </View>
+                ))}
+              </GlassCard>
+            </View>
+          </>
+        ) : null}
       </ScrollView>
-    </View>
+    </ProgressSectionShell>
   );
 }
 
@@ -185,29 +202,20 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
   },
-  header: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    paddingVertical: 16,
-  },
-  backButton: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
+  loadingContainer: {
+    flex: 1,
     alignItems: 'center',
     justifyContent: 'center',
   },
-  title: {
+  sectionTitle: {
+    fontSize: 18,
     letterSpacing: -0.3,
   },
-  placeholder: {
-    width: 40,
-  },
-  content: {
-    paddingBottom: 40,
-  },
-  infoCard: {
-    marginTop: 8
+  qualityRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingVertical: 10,
+    borderBottomWidth: StyleSheet.hairlineWidth,
   },
 });
