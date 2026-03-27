@@ -1,77 +1,70 @@
 import { useCallback, useEffect, useMemo } from 'react';
-import { Alert, ScrollView, StyleSheet, Text, View } from 'react-native';
-import { useRouter } from 'expo-router';
+import { Alert, AppState, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { useFocusEffect, useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { MotiView } from 'moti';
+import { useQueryClient } from '@tanstack/react-query';
 
 import { useTokens } from '../../../lib/theme';
+import { useAuth } from '../../../lib/auth/AuthProvider';
 import { PremiumBackground } from '../../../components/premium/PremiumBackground';
 import { GlassCard } from '../../../components/premium/GlassCard';
 import { WorkoutWeekStrip } from '../../../components/workout/home/WorkoutWeekStrip';
 import { WorkoutQuickAccessRow } from '../../../components/workout/home/WorkoutQuickAccessRow';
 import { WorkoutToolsGrid } from '../../../components/workout/home/WorkoutToolsGrid';
-import { WorkoutPrimaryHeroCard } from '../../../components/workout/home/WorkoutPrimaryHeroCard';
-import { WorkoutTomorrowPreviewCard } from '../../../components/workout/home/WorkoutTomorrowPreviewCard';
-import { WorkoutCoachQueueCard } from '../../../components/workout/home/WorkoutCoachQueueCard';
-import { WorkoutMomentumCard } from '../../../components/workout/home/WorkoutMomentumCard';
+import { WorkoutPrimaryActionCard } from '../../../components/workout/home/WorkoutPrimaryActionCard';
+import { WorkoutUtilityTile } from '../../../components/workout/home/WorkoutUtilityTile';
 import { useWorkoutDashboard } from '../../../hooks/useWorkoutDashboard';
-import {
-  useApplyWorkoutAdaptationRecommendation,
-  useSetWorkoutAdaptationRecommendationStatus,
-} from '../../../hooks/useWorkoutAdaptation';
-import { useMarkDayCompleted } from '../../../hooks/usePlan';
-import { useFinishSession } from '../../../hooks/useWorkout';
+import { planKeys, useMarkDayCompleted } from '../../../hooks/usePlan';
+import { useFinishSession, workoutKeys } from '../../../hooks/useWorkout';
 import type { WorkoutActionKey } from '../../../lib/workout/dashboard-state';
+import { getActiveSession } from '../../../services/workoutService';
 import {
   trackWorkoutHomeHeroRendered,
   trackWorkoutHomeHeroTapped,
+  trackWorkoutHomeQuickAccessTapped,
   trackWorkoutHomeResumeTapped,
   trackWorkoutHomeToolTapped,
   trackWorkoutHomeViewed,
-  trackWorkoutRecommendationAccepted,
-  trackWorkoutRecommendationRejected,
   trackWorkoutRecommendationRendered,
-  trackWorkoutRecommendationReviewTapped,
-  trackWorkoutSecondaryUtilityTapped,
-  trackWorkoutTomorrowPreviewTapped,
-} from '../../../lib/analytics';
-
-function humanizeProgramMeta(value?: string | null) {
-  if (!value) {
-    return null;
-  }
-
-  return value.replaceAll('_', ' ').replace(/\b\w/g, (match) => match.toUpperCase());
-}
-
-type RoutePath =
-  | '/(tabs)/workout/active-session'
-  | '/(tabs)/workout/adaptation'
-  | '/(tabs)/workout/day-preview'
-  | '/(tabs)/workout/my-plan'
-  | '/(tabs)/workout/program-browser'
-  | '/(tabs)/workout/summary'
-  | '/(tabs)/workout/tools'
-  | '/(tabs)/workout/workout-history'
-  | '/(tabs)/workout/workout-notes';
+} from '../../../lib/analytics/analyticsService';
 
 export default function WorkoutHomeScreen() {
   const { c, s, ty, r, animation } = useTokens();
   const router = useRouter();
   const insets = useSafeAreaInsets();
+  const queryClient = useQueryClient();
+  const { user } = useAuth();
   const dashboard = useWorkoutDashboard();
-  const applyRecommendation = useApplyWorkoutAdaptationRecommendation();
-  const rejectRecommendation = useSetWorkoutAdaptationRecommendationStatus();
   const finishSession = useFinishSession();
   const markDayCompleted = useMarkDayCompleted();
   const activeSessionId = dashboard.raw.activeSession?.id;
   const activeSessionPlanDayId = dashboard.raw.activeSession?.plan_day_id;
 
-  const isBusy =
-    applyRecommendation.isPending
-    || rejectRecommendation.isPending
-    || finishSession.isPending
-    || markDayCompleted.isPending;
+  const isBusy = finishSession.isPending || markDayCompleted.isPending;
+
+  const refreshWorkoutHomeState = useCallback(() => {
+    queryClient.invalidateQueries({ queryKey: workoutKeys.activeSession() });
+    queryClient.invalidateQueries({ queryKey: planKeys.workout() });
+  }, [queryClient]);
+
+  useFocusEffect(
+    useCallback(() => {
+      refreshWorkoutHomeState();
+    }, [refreshWorkoutHomeState]),
+  );
+
+  useEffect(() => {
+    const subscription = AppState.addEventListener('change', (nextState) => {
+      if (nextState === 'active') {
+        refreshWorkoutHomeState();
+      }
+    });
+
+    return () => {
+      subscription.remove();
+    };
+  }, [refreshWorkoutHomeState]);
 
   useEffect(() => {
     trackWorkoutHomeViewed({
@@ -142,11 +135,42 @@ export default function WorkoutHomeScreen() {
     router,
   ]);
 
+  const handleResumeSession = useCallback(async () => {
+    trackWorkoutHomeResumeTapped({ mode: dashboard.state.hero.mode });
+
+    if (!user?.id) {
+      router.push('/(tabs)/workout/my-plan');
+      return;
+    }
+
+    const latestActiveSession = await queryClient.fetchQuery({
+      queryKey: workoutKeys.activeSession(),
+      queryFn: () => getActiveSession(user.id),
+    });
+
+    if (latestActiveSession?.id && (latestActiveSession.exercises?.length || 0) > 0) {
+      router.push('/(tabs)/workout/active-session');
+      return;
+    }
+
+    await queryClient.invalidateQueries({ queryKey: workoutKeys.all });
+    Alert.alert(
+      'Session unavailable',
+      'That unfinished session expired when the day rolled over. Open your plan to start the correct workout for today.',
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Open Plan',
+          onPress: () => router.push('/(tabs)/workout/my-plan'),
+        },
+      ],
+    );
+  }, [dashboard.state.hero.mode, queryClient, router, user?.id]);
+
   const runAction = useCallback((action: WorkoutActionKey) => {
     switch (action) {
       case 'resume_session':
-        trackWorkoutHomeResumeTapped({ mode: dashboard.state.hero.mode });
-        router.push('/(tabs)/workout/active-session');
+        void handleResumeSession();
         return;
       case 'finish_session':
         handleFinishSession();
@@ -179,20 +203,6 @@ export default function WorkoutHomeScreen() {
         trackWorkoutHomeHeroTapped({ action, mode: dashboard.state.hero.mode });
         router.push('/(tabs)/workout/my-plan');
         return;
-      case 'open_tomorrow':
-        trackWorkoutTomorrowPreviewTapped({
-          action,
-          session_type: dashboard.raw.tomorrowEntry?.session_type || 'none',
-        });
-        if (dashboard.raw.tomorrowEntry?.session_type === 'workout' && dashboard.raw.tomorrowEntry.plan_day_id) {
-          router.push({
-            pathname: '/(tabs)/workout/day-preview',
-            params: { dayId: dashboard.raw.tomorrowEntry.plan_day_id },
-          });
-          return;
-        }
-        router.push('/(tabs)/workout/my-plan');
-        return;
       case 'browse_programs':
       case 'open_programs':
         trackWorkoutHomeHeroTapped({ action, mode: dashboard.state.hero.mode });
@@ -203,80 +213,68 @@ export default function WorkoutHomeScreen() {
         router.push('/(tabs)/workout/my-plan');
         return;
       case 'open_adaptation':
-        trackWorkoutRecommendationReviewTapped({ source: 'coach_queue' });
         router.push('/(tabs)/workout/adaptation');
         return;
       case 'open_history':
-        trackWorkoutSecondaryUtilityTapped({ action });
         router.push('/(tabs)/workout/workout-history');
         return;
       case 'open_tools':
-        trackWorkoutSecondaryUtilityTapped({ action });
         router.push('/(tabs)/workout/tools');
         return;
       case 'open_notes':
         trackWorkoutHomeHeroTapped({ action, mode: dashboard.state.hero.mode });
         router.push('/(tabs)/workout/workout-notes');
         return;
+      case 'open_exercise_library':
+        router.push('/(tabs)/workout/exercise-library');
+        return;
+      case 'open_program_builder':
+        router.push('/(tabs)/workout/program-builder');
+        return;
+      case 'import_plan':
+        router.push('/(tabs)/workout/import-plan');
+        return;
+      case 'open_one_rep_max':
+        router.push('/(tabs)/workout/calculators/one-rep-max');
+        return;
+      case 'open_plate_calculator':
+        router.push('/(tabs)/workout/calculators/plate-calculator');
+        return;
       default:
         return;
     }
   }, [
     dashboard.raw.todayEntry,
-    dashboard.raw.tomorrowEntry,
     dashboard.state.hero.completedSessionId,
     dashboard.state.hero.mode,
+    handleResumeSession,
     handleFinishSession,
     router,
   ]);
 
-  const utilityItems = useMemo(
-    () => [
-      { label: 'Plan', icon: 'calendar', action: 'open_plan' as const, active: dashboard.state.utilityEmphasis === 'plan' },
-      { label: 'History', icon: 'stats-chart', action: 'open_history' as const, active: dashboard.state.utilityEmphasis === 'history' },
-      { label: 'Programs', icon: 'barbell', action: 'open_programs' as const, active: dashboard.state.utilityEmphasis === 'programs' },
-      { label: 'Tools', icon: 'construct', action: 'open_tools' as const, active: dashboard.state.utilityEmphasis === 'tools' },
-    ].map((item) => ({
-      label: item.label,
-      icon: item.icon,
-      active: item.active,
-      onPress: () => runAction(item.action),
-    })),
-    [dashboard.state.utilityEmphasis, runAction],
-  );
-
-  const toolItems = useMemo(
-    () => [
-      { label: '1RM Calculator', icon: 'calculator', route: '/(tabs)/workout/calculators/one-rep-max' },
-      { label: 'Plate Calculator', icon: 'albums', route: '/(tabs)/workout/calculators/plate-calculator' },
-      { label: 'Program Builder', icon: 'build', route: '/(tabs)/workout/program-builder' },
-      { label: 'Import Plan', icon: 'cloud-upload', route: '/(tabs)/workout/import-plan' },
-      { label: 'Adaptive Coach', icon: 'sparkles', route: '/(tabs)/workout/adaptation' },
-      { label: 'Workout Notes', icon: 'document-text', route: '/(tabs)/workout/workout-notes' },
-    ].map((item) => ({
+  const quickActions = useMemo(
+    () => dashboard.state.compact.quickActions.map((item) => ({
       label: item.label,
       icon: item.icon,
       onPress: () => {
-        trackWorkoutHomeToolTapped({ action: item.label });
-        router.push(item.route as RoutePath);
+        trackWorkoutHomeQuickAccessTapped({ slot: 'quick_action', label: item.label });
+        runAction(item.action);
       },
     })),
-    [router],
+    [dashboard.state.compact.quickActions, runAction],
   );
 
-  const programContextLabel = useMemo(() => {
-    const meta = dashboard.raw.activePlan?.programMeta;
-    if (!meta) {
-      return null;
-    }
-
-    const parts = [
-      humanizeProgramMeta(meta.programFamilyKey),
-      humanizeProgramMeta(meta.progressionModel),
-    ].filter(Boolean);
-
-    return parts.length > 0 ? parts.join(' • ') : null;
-  }, [dashboard.raw.activePlan?.programMeta]);
+  const resourceItems = useMemo(
+    () => dashboard.state.compact.resources.map((item) => ({
+      label: item.label,
+      icon: item.icon,
+      onPress: () => {
+        trackWorkoutHomeToolTapped({ slot: 'resource', action: item.label });
+        runAction(item.action);
+      },
+    })),
+    [dashboard.state.compact.resources, runAction],
+  );
 
   const isInitialLoading =
     dashboard.isLoading
@@ -284,24 +282,6 @@ export default function WorkoutHomeScreen() {
     && !dashboard.raw.activeSession
     && !dashboard.raw.todayEntry
     && dashboard.raw.history.length === 0;
-
-  const handleRecommendationAccept = async (recommendationId: string) => {
-    try {
-      await applyRecommendation.mutateAsync({ recommendationId });
-      trackWorkoutRecommendationAccepted({ recommendation_id: recommendationId });
-    } catch (error: any) {
-      Alert.alert('Unable to apply recommendation', error?.message || 'Try again.');
-    }
-  };
-
-  const handleRecommendationReject = async (recommendationId: string) => {
-    try {
-      await rejectRecommendation.mutateAsync({ recommendationId, status: 'rejected' });
-      trackWorkoutRecommendationRejected({ recommendation_id: recommendationId });
-    } catch (error: any) {
-      Alert.alert('Unable to keep current plan', error?.message || 'Try again.');
-    }
-  };
 
   return (
     <PremiumBackground variant="default">
@@ -419,42 +399,34 @@ export default function WorkoutHomeScreen() {
             </GlassCard>
           ) : (
             <>
-              <WorkoutPrimaryHeroCard
-                state={dashboard.state.hero}
-                contextLabel={programContextLabel}
-                onPrimaryPress={() => runAction(dashboard.state.hero.primaryAction)}
-                onSecondaryPress={
-                  dashboard.state.hero.secondaryAction
-                    ? () => runAction(dashboard.state.hero.secondaryAction as WorkoutActionKey)
-                    : undefined
-                }
-                disabled={dashboard.isRefreshing || isBusy}
-              />
-
-              {dashboard.raw.activePlan ? (
-                <WorkoutTomorrowPreviewCard
-                  state={dashboard.state.tomorrow}
-                  contextLabel={programContextLabel}
-                  onPress={() => runAction(dashboard.state.tomorrow.action)}
+              <View style={{ gap: s.sm }}>
+                <Text
+                  style={{
+                    color: c.textMuted,
+                    fontFamily: ty.body.familySemibold,
+                    fontSize: ty.sizes.sm,
+                    letterSpacing: 1.2,
+                  }}
+                >
+                  TODAY'S WORKOUT
+                </Text>
+                <WorkoutPrimaryActionCard
+                  state={dashboard.state.compact.primaryCard}
+                  onPress={() => runAction(dashboard.state.compact.primaryCard.action)}
+                  disabled={dashboard.isRefreshing || isBusy}
                 />
-              ) : null}
+              </View>
 
-              <WorkoutCoachQueueCard
-                state={dashboard.state.coachQueue}
-                onPrimaryPress={
-                  dashboard.state.coachQueue.primaryAction
-                    ? () => runAction(dashboard.state.coachQueue.primaryAction as WorkoutActionKey)
-                    : undefined
-                }
-                onReviewAllPress={
-                  dashboard.state.coachQueue.reviewAllAction
-                    ? () => runAction(dashboard.state.coachQueue.reviewAllAction as WorkoutActionKey)
-                    : undefined
-                }
-                onAcceptRecommendation={handleRecommendationAccept}
-                onRejectRecommendation={handleRecommendationReject}
-                disabled={dashboard.isRefreshing || isBusy}
-              />
+              <View style={{ flexDirection: 'row', gap: s.sm }}>
+                <WorkoutUtilityTile
+                  state={dashboard.state.compact.coachInsightTile}
+                  onPress={() => runAction(dashboard.state.compact.coachInsightTile.action)}
+                />
+                <WorkoutUtilityTile
+                  state={dashboard.state.compact.myPlanTile}
+                  onPress={() => runAction(dashboard.state.compact.myPlanTile.action)}
+                />
+              </View>
 
               <View style={{ gap: s.sm }}>
                 <Text
@@ -467,12 +439,10 @@ export default function WorkoutHomeScreen() {
                 >
                   DO NOW
                 </Text>
-                <WorkoutQuickAccessRow items={utilityItems} delayBase={160} size={64} />
+                <WorkoutQuickAccessRow items={quickActions} delayBase={160} size={56} />
               </View>
 
-              <WorkoutMomentumCard state={dashboard.state.momentum} />
-
-              <WorkoutToolsGrid items={toolItems} title="MORE TOOLS" />
+              <WorkoutToolsGrid items={resourceItems} title="RESOURCES" />
             </>
           )}
         </View>

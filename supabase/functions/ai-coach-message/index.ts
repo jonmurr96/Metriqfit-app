@@ -80,6 +80,8 @@ interface GroundingData {
     first_name?: string;
     unit_system: "imperial" | "metric";
   } | null;
+  subscriptionTier: "free" | "premium" | "elite";
+  isPremium: boolean;
   isElite: boolean;
   prepCoach: {
     enabled: boolean;
@@ -153,7 +155,8 @@ const corsHeaders = {
 };
 
 const RATE_LIMITS = {
-  free: 10,
+  free: 5,
+  premium: 25,
   elite: 999999,
 };
 
@@ -907,7 +910,7 @@ async function fetchGroundingData(
       .limit(1),
     supabase
       .from("subscriptions")
-      .select("status, entitlement")
+      .select("plan_type, status, expires_at, trial_ends_at")
       .eq("user_id", userId)
       .in("status", ["active", "trial", "grace_period"])
       .order("updated_at", { ascending: false })
@@ -977,6 +980,20 @@ async function fetchGroundingData(
     onboardingAnswers.prep_phase ||
     null
   ) as GroundingData["prepCoach"]["phase"];
+  const subscription = subscriptionResult.data;
+  const hasActiveWindow = !!subscription && (
+    subscription.plan_type === "elite_lifetime"
+    || !subscription.expires_at
+    || Date.parse(subscription.expires_at) > Date.now()
+    || (subscription.trial_ends_at ? Date.parse(subscription.trial_ends_at) > Date.now() : false)
+  );
+  const subscriptionTier: GroundingData["subscriptionTier"] = !subscription || !hasActiveWindow
+    ? "free"
+    : subscription.plan_type.startsWith("premium")
+      ? "premium"
+      : subscription.plan_type === "free"
+        ? "free"
+        : "elite";
 
   return {
     targets: targetsResult.data || null,
@@ -993,7 +1010,9 @@ async function fetchGroundingData(
           unit_system: (profileResult.data.unit_system || "imperial") as "imperial" | "metric",
         }
       : null,
-    isElite: subscriptionResult.data?.entitlement === "elite",
+    subscriptionTier,
+    isPremium: subscriptionTier === "premium" || subscriptionTier === "elite",
+    isElite: subscriptionTier === "elite",
     prepCoach: {
       enabled: prepEnabled,
       discipline: prepDiscipline,
@@ -1035,9 +1054,9 @@ async function getRecentMessages(
 async function checkAndUpdateRateLimit(
   supabase: ReturnType<typeof createClient>,
   userId: string,
-  isElite: boolean,
+  subscriptionTier: "free" | "premium" | "elite",
 ) {
-  const limit = isElite ? RATE_LIMITS.elite : RATE_LIMITS.free;
+  const limit = RATE_LIMITS[subscriptionTier];
   const today = new Date().toISOString().split("T")[0];
 
   const { data: usage } = await supabase
@@ -2061,13 +2080,13 @@ serve(async (req) => {
     const intent = classifyIntent(message);
     const thread = await getOrCreateThread(supabase, userId, body.thread_id, message);
 
-    const rateLimit = await checkAndUpdateRateLimit(supabase, userId, grounding.isElite);
+    const rateLimit = await checkAndUpdateRateLimit(supabase, userId, grounding.subscriptionTier);
     if (!rateLimit.allowed) {
       return jsonResponse({
         error: "Rate limit exceeded",
         rate_limit: {
           used: rateLimit.used,
-          limit: grounding.isElite ? -1 : rateLimit.limit,
+          limit: grounding.subscriptionTier === "elite" ? -1 : rateLimit.limit,
           resets_at: new Date(new Date().setUTCHours(24, 0, 0, 0)).toISOString(),
         },
       }, 429);
@@ -2378,7 +2397,7 @@ serve(async (req) => {
       approval_required: false,
       rate_limit: {
         used: rateLimit.used,
-        limit: grounding.isElite ? -1 : rateLimit.limit,
+        limit: grounding.subscriptionTier === "elite" ? -1 : rateLimit.limit,
       },
     });
   } catch (error) {

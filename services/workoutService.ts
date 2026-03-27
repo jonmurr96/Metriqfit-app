@@ -29,6 +29,11 @@ import {
   type UserWorkoutPlanProgramMeta,
   type WeeklyLayoutAssignment,
 } from '../lib/workout/program-catalog';
+import {
+  getSessionStartLocalDateKey,
+  isWorkoutSessionExpiredForLocalDay,
+} from '../lib/workout/session-lifecycle';
+import { awardXP, updateStreak } from './gamificationService';
 const db = supabase as any;
 
 async function insertSessionExercisesWithFallback(
@@ -176,6 +181,70 @@ export interface WorkoutNoteItem {
   logDate: string;
   exerciseId?: string;
   exerciseName?: string;
+}
+
+async function expireAbandonedSessionAtDayBoundary(
+  session: Pick<WorkoutSession, 'id' | 'plan_day_id' | 'started_at'>,
+): Promise<void> {
+  const scheduledDate = getSessionStartLocalDateKey(session.started_at);
+
+  const { data: sessionExerciseRows, error: sessionExerciseError } = await supabase
+    .from('session_exercises')
+    .select('id')
+    .eq('session_id', session.id);
+
+  if (sessionExerciseError) {
+    throw sessionExerciseError;
+  }
+
+  const sessionExerciseIds = (sessionExerciseRows || []).map((row) => row.id);
+
+  if (sessionExerciseIds.length > 0) {
+    const { error: deleteSetsError } = await supabase
+      .from('workout_sets')
+      .delete()
+      .in('session_exercise_id', sessionExerciseIds);
+
+    if (deleteSetsError) {
+      throw deleteSetsError;
+    }
+  }
+
+  const { error: deleteExercisesError } = await supabase
+    .from('session_exercises')
+    .delete()
+    .eq('session_id', session.id);
+
+  if (deleteExercisesError) {
+    throw deleteExercisesError;
+  }
+
+  const { error: deleteSessionError } = await supabase
+    .from('workout_sessions')
+    .delete()
+    .eq('id', session.id);
+
+  if (deleteSessionError) {
+    throw deleteSessionError;
+  }
+
+  if (session.plan_day_id && scheduledDate) {
+    const { error: scheduleUpdateError } = await db
+      .from('user_workout_plan_schedule')
+      .update({
+        status: 'missed',
+        completed_session_id: null,
+      })
+      .eq('plan_day_id', session.plan_day_id)
+      .eq('scheduled_date', scheduledDate)
+      .eq('session_type', 'workout')
+      .neq('status', 'completed')
+      .neq('status', 'rescheduled');
+
+    if (scheduleUpdateError) {
+      throw scheduleUpdateError;
+    }
+  }
 }
 
 function toBlueprintDay(input: any, sequenceIndex: number, exerciseCount: number): WorkoutProgramDayBlueprint {
@@ -865,6 +934,8 @@ export async function startSession(
   templateDayId?: string,
   name?: string
 ): Promise<WorkoutSessionWithDetails> {
+  await getActiveSessionInternal(userId, true);
+
   // Auto-generate name if not provided
   const sessionName = name || `Workout ${new Date().toLocaleDateString()}`;
 
@@ -909,61 +980,72 @@ export async function startSession(
  * Get active workout session (if any)
  */
 async function getActiveSessionInternal(userId: string, allowRepair: boolean): Promise<WorkoutSessionWithDetails | null> {
-  const { data, error } = await supabase
-    .from('workout_sessions')
-    .select(
-      `
-      *,
-      exercises:session_exercises(
+  let expiredSessionsCleaned = 0;
+
+  while (expiredSessionsCleaned < 10) {
+    const { data, error } = await supabase
+      .from('workout_sessions')
+      .select(
+        `
         *,
-        exercise:exercises(*),
-        sets:workout_sets(*)
+        exercises:session_exercises(
+          *,
+          exercise:exercises(*),
+          sets:workout_sets(*)
+        )
+      `
       )
-    `
-    )
-    .eq('user_id', userId)
-    .is('finished_at', null)
-    .order('started_at', { ascending: false })
-    .limit(1)
-    .maybeSingle();
+      .eq('user_id', userId)
+      .is('finished_at', null)
+      .order('started_at', { ascending: false })
+      .limit(1)
+      .maybeSingle();
 
-  if (error) throw error;
+    if (error) throw error;
 
-  if (!data) return null;
+    if (!data) return null;
 
-  if (allowRepair && (data.exercises || []).length === 0 && (data.plan_day_id || data.template_day_id)) {
-    try {
-      const snapshotRows = await loadSessionExerciseSnapshotRows({
-        sessionId: data.id,
-        planDayId: data.plan_day_id,
-        templateDayId: data.template_day_id,
-      });
-
-      if (snapshotRows.length > 0) {
-        await insertSessionExercisesWithFallback(snapshotRows);
-
-        const repairedSession = await getActiveSessionInternal(userId, false);
-        if (repairedSession) {
-          return repairedSession;
-        }
-      }
-    } catch (repairError) {
-      console.warn('Failed to repair empty active session', repairError);
+    if (isWorkoutSessionExpiredForLocalDay(data.started_at)) {
+      await expireAbandonedSessionAtDayBoundary(data as WorkoutSession);
+      expiredSessionsCleaned += 1;
+      continue;
     }
+
+    if (allowRepair && (data.exercises || []).length === 0 && (data.plan_day_id || data.template_day_id)) {
+      try {
+        const snapshotRows = await loadSessionExerciseSnapshotRows({
+          sessionId: data.id,
+          planDayId: data.plan_day_id,
+          templateDayId: data.template_day_id,
+        });
+
+        if (snapshotRows.length > 0) {
+          await insertSessionExercisesWithFallback(snapshotRows);
+
+          const repairedSession = await getActiveSessionInternal(userId, false);
+          if (repairedSession) {
+            return repairedSession;
+          }
+        }
+      } catch (repairError) {
+        console.warn('Failed to repair empty active session', repairError);
+      }
+    }
+
+    const sortedData = {
+      ...data,
+      exercises: data.exercises
+        .sort((a: any, b: any) => a.order_index - b.order_index)
+        .map((ex: any) => ({
+          ...ex,
+          sets: ex.sets.sort((a: any, b: any) => a.set_number - b.set_number),
+        })),
+    };
+
+    return sortedData as WorkoutSessionWithDetails;
   }
 
-  // Sort exercises by order_index and sets by set_number
-  const sortedData = {
-    ...data,
-    exercises: data.exercises
-      .sort((a: any, b: any) => a.order_index - b.order_index)
-      .map((ex: any) => ({
-        ...ex,
-        sets: ex.sets.sort((a: any, b: any) => a.set_number - b.set_number),
-      })),
-  };
-
-  return sortedData as WorkoutSessionWithDetails;
+  return null;
 }
 
 export async function getActiveSession(userId: string): Promise<WorkoutSessionWithDetails | null> {
@@ -1127,12 +1209,17 @@ export async function finishSession(sessionId: string, notes?: string): Promise<
   // Get session start time
   const { data: session, error: fetchError } = await supabase
     .from('workout_sessions')
-    .select('started_at')
+    .select('id, user_id, plan_day_id, started_at, finished_at')
     .eq('id', sessionId)
     .single();
 
   if (fetchError) throw fetchError;
   if (!session) throw new Error('Session not found');
+
+  if (!session.finished_at && isWorkoutSessionExpiredForLocalDay(session.started_at)) {
+    await expireAbandonedSessionAtDayBoundary(session as WorkoutSession);
+    throw new Error('This workout expired when the day rolled over and can no longer be finished.');
+  }
 
   const now = new Date();
   const startedAt = new Date(session.started_at);
@@ -1151,6 +1238,28 @@ export async function finishSession(sessionId: string, notes?: string): Promise<
 
   if (error) throw error;
   if (!data) throw new Error('Failed to finish session');
+
+  // Award XP and update streaks (non-blocking, fail gracefully)
+  try {
+    const userId = session.user_id;
+    const activityDate = new Date().toISOString().split('T')[0];
+
+    // Award XP for workout completion
+    await awardXP(userId, 'workout_completed', {
+      sessionId,
+      duration: durationSeconds,
+    });
+
+    // Update workout streak
+    await updateStreak(userId, 'workout', activityDate);
+
+    // Update fitness master streak
+    await updateStreak(userId, 'fitness', activityDate);
+  } catch (gamificationError) {
+    // Log error but don't fail the workout
+    console.error('[WorkoutService] Gamification error:', gamificationError);
+  }
+
   return data;
 }
 

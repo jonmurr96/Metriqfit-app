@@ -33,8 +33,8 @@ export async function scanBarcode(
   userId: string
 ): Promise<BarcodeScanResult> {
   const entitlement = await checkEntitlementStatus(userId);
-  if (!entitlement.isElite) {
-    throw new Error('ELITE_REQUIRED');
+  if (!entitlement.isPremium) {
+    throw new Error('PREMIUM_REQUIRED');
   }
 
   // First, try to lookup the barcode using the Edge Function

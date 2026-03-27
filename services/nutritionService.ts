@@ -3,6 +3,8 @@ import Constants from 'expo-constants';
 import { supabase } from '../lib/supabase';
 import type { Database } from '../lib/supabase/types';
 import { getNutritionPlanMeal, repairNutritionPlanMappings } from './planService';
+import { toLocalDateKey } from '../lib/home/dashboard-state';
+import { awardXP, updateStreak } from './gamificationService';
 
 // Database row types
 type FoodItemRow = Database['public']['Tables']['food_items']['Row'];
@@ -28,6 +30,23 @@ export interface FoodItem {
   imageUrl: string | null;
   isVerified: boolean;
 }
+
+/**
+ * Returns a broad UTC range that encompasses the given local date string (YYYY-MM-DD)
+ * across any timezone. Used for initial Supabase filtering before precise client-side date matching.
+ */
+const getWideUtcRangeForLocalDate = (dateStr: string) => {
+  const date = new Date(dateStr);
+  const start = new Date(date);
+  start.setUTCDate(start.getUTCDate() - 1);
+  const end = new Date(date);
+  end.setUTCDate(end.getUTCDate() + 1);
+  
+  return {
+    startUtc: `${start.toISOString().split('T')[0]}T00:00:00Z`,
+    endUtc: `${end.toISOString().split('T')[0]}T23:59:59Z`,
+  };
+};
 
 export interface ExternalFoodSearchResult {
   provider: 'usda_fdc' | 'openfoodfacts';
@@ -679,8 +698,14 @@ function getLogDateInfo(date?: Date | string) {
   const loggedAt = resolved.toISOString();
   return {
     loggedAt,
-    loggedDate: loggedAt.split('T')[0],
+    loggedDate: toLocalDateKey(resolved),
   };
+}
+
+function parseLocalDateInput(date: string | Date) {
+  if (date instanceof Date) return new Date(date);
+  if (/^\d{4}-\d{2}-\d{2}$/.test(date)) return new Date(`${date}T12:00:00`);
+  return new Date(date);
 }
 
 async function getOrCreateMealLog(
@@ -755,6 +780,49 @@ async function insertMealLogItems(
   return data;
 }
 
+async function getMealLogCountForLocalDate(
+  userId: string,
+  date?: Date | string,
+): Promise<number> {
+  const { loggedDate } = getLogDateInfo(date);
+  const { startUtc, endUtc } = getWideUtcRangeForLocalDate(loggedDate);
+
+  const { data: mealLogs, error } = await supabase
+    .from('meal_logs')
+    .select('id, logged_at')
+    .eq('user_id', userId)
+    .gte('logged_at', startUtc)
+    .lte('logged_at', endUtc);
+
+  if (error) {
+    console.error('Error loading meal logs for streak check:', error);
+    throw new Error('Failed to load meal logs');
+  }
+
+  return (
+    mealLogs?.filter((mealLog) => toLocalDateKey(new Date(mealLog.logged_at)) === loggedDate)
+      .length || 0
+  );
+}
+
+async function applyMealLogGamification(
+  userId: string,
+  mealSlot: MealSlot,
+  grams: number,
+  date?: Date | string,
+) {
+  const { loggedDate } = getLogDateInfo(date);
+
+  await awardXP(userId, 'meal_logged', { mealSlot, grams });
+
+  const dailyMealCount = await getMealLogCountForLocalDate(userId, date);
+
+  if (dailyMealCount >= 3) {
+    await updateStreak(userId, 'nutrition', loggedDate);
+    await updateStreak(userId, 'fitness', loggedDate);
+  }
+}
+
 /**
  * Log a food item to a meal
  * Creates meal_log if needed, then inserts meal_log_item
@@ -786,6 +854,14 @@ export async function logFood(
       fat: macros.fat,
     },
   ]);
+
+  // Award XP and update streaks (non-blocking, fail gracefully)
+  try {
+    await applyMealLogGamification(userId, mealSlot, grams, date);
+  } catch (gamificationError) {
+    // Log error but don't fail the meal logging
+    console.error('[NutritionService] Gamification error:', gamificationError);
+  }
 
   return {
     id: mealLogItem.id,
@@ -876,6 +952,22 @@ export async function logPlannedMeal(
 
   await insertMealLogItems(mealLog.id, mealItems);
 
+  try {
+    const totalLoggedGrams = mealItems.reduce(
+      (total, item) => total + Number(item.grams || 0),
+      0,
+    );
+
+    await applyMealLogGamification(
+      userId,
+      plannedMeal.meal_slot,
+      totalLoggedGrams,
+      input.date,
+    );
+  } catch (gamificationError) {
+    console.error('[NutritionService] Gamification error:', gamificationError);
+  }
+
   return {
     mealLogId: mealLog.id,
     mealSlot: plannedMeal.meal_slot,
@@ -896,25 +988,43 @@ export async function getDailyNutritionTotal(
   userId: string,
   date: Date
 ): Promise<MacroBreakdown> {
-  const startOfDay = new Date(date);
-  startOfDay.setHours(0, 0, 0, 0);
-  const endOfDay = new Date(date);
-  endOfDay.setHours(23, 59, 59, 999);
+  // Convert date to YYYY-MM-DD format to avoid timezone issues
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, '0');
+  const day = String(date.getDate()).padStart(2, '0');
+  const dateStr = `${year}-${month}-${day}`;
 
-  // Query all meal logs for the day
-  const { data: mealLogs, error: mealLogsError } = await supabase
+  const { startUtc, endUtc } = getWideUtcRangeForLocalDate(dateStr);
+  
+  // Query all meal logs for the day using date string instead of ISO timestamps
+  const { data: allMealLogs, error: mealLogsError } = await supabase
     .from('meal_logs')
-    .select('id')
+    .select('id, logged_at')
     .eq('user_id', userId)
-    .gte('logged_at', startOfDay.toISOString())
-    .lte('logged_at', endOfDay.toISOString());
+    .gte('logged_at', startUtc)
+    .lte('logged_at', endUtc);
 
   if (mealLogsError) {
     console.error('Error fetching meal logs:', mealLogsError);
     return { calories: 0, protein: 0, carbs: 0, fat: 0, fiber: 0 };
   }
 
-  if (!mealLogs || mealLogs.length === 0) {
+  if (!allMealLogs || allMealLogs.length === 0) {
+    return { calories: 0, protein: 0, carbs: 0, fat: 0, fiber: 0 };
+  }
+
+  // Client-side filter to ensure we only get logs from the specified date
+  // This handles timezone edge cases where DB timestamps might be in different timezone
+  const mealLogs = allMealLogs.filter(log => {
+    const logDate = new Date(log.logged_at);
+    return (
+      logDate.getFullYear() === date.getFullYear() &&
+      logDate.getMonth() === date.getMonth() &&
+      logDate.getDate() === date.getDate()
+    );
+  });
+
+  if (mealLogs.length === 0) {
     return { calories: 0, protein: 0, carbs: 0, fat: 0, fiber: 0 };
   }
 
@@ -956,13 +1066,16 @@ export async function getDailyNutritionTotal(
  * Get all meals for a given day with their food items
  */
 export async function getMealsForDay(userId: string, date: Date): Promise<MealLog[]> {
-  const startOfDay = new Date(date);
-  startOfDay.setHours(0, 0, 0, 0);
-  const endOfDay = new Date(date);
-  endOfDay.setHours(23, 59, 59, 999);
+  // Convert date to YYYY-MM-DD format to avoid timezone issues
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, '0');
+  const day = String(date.getDate()).padStart(2, '0');
+  const dateStr = `${year}-${month}-${day}`;
 
-  // Query meal logs with their items and food details
-  const { data: mealLogs, error } = await supabase
+  const { startUtc, endUtc } = getWideUtcRangeForLocalDate(dateStr);
+
+  // Query meal logs with their items and food details using date string
+  const { data: allMealLogs, error } = await supabase
     .from('meal_logs')
     .select(`
       *,
@@ -972,14 +1085,24 @@ export async function getMealsForDay(userId: string, date: Date): Promise<MealLo
       )
     `)
     .eq('user_id', userId)
-    .gte('logged_at', startOfDay.toISOString())
-    .lte('logged_at', endOfDay.toISOString())
+    .gte('logged_at', startUtc)
+    .lte('logged_at', endUtc)
     .order('logged_at', { ascending: true });
 
   if (error) {
     console.error('Error fetching meals for day:', error);
     return [];
   }
+
+  // Client-side filter to ensure we only get logs from the specified date
+  const mealLogs = (allMealLogs || []).filter(log => {
+    const logDate = new Date(log.logged_at);
+    return (
+      logDate.getFullYear() === date.getFullYear() &&
+      logDate.getMonth() === date.getMonth() &&
+      logDate.getDate() === date.getDate()
+    );
+  });
 
   return mealLogs.map(mapMealLogRecord);
 }
@@ -1027,9 +1150,19 @@ export async function getDailyTotals(
   userId: string,
   date: string
 ): Promise<DailyNutritionTotals> {
-  // Use local midnight (T00:00:00) instead of bare date string which creates UTC midnight
-  const dateObj = new Date(`${date}T00:00:00`);
-  return getDailyNutritionTotal(userId, dateObj);
+  const dateObj = parseLocalDateInput(date);
+
+  if (__DEV__) {
+    console.log('[getDailyTotals] Input date:', date, '| Parsed:', dateObj.toISOString());
+  }
+
+  const result = await getDailyNutritionTotal(userId, dateObj);
+
+  if (__DEV__) {
+    console.log('[getDailyTotals] Result:', result);
+  }
+
+  return result;
 }
 
 /**
@@ -1038,9 +1171,19 @@ export async function getDailyTotals(
  * @param date - Date string in YYYY-MM-DD format
  */
 export async function getDailyMeals(userId: string, date: string): Promise<MealLog[]> {
-  // Use local midnight (T00:00:00) instead of bare date string which creates UTC midnight
-  const dateObj = new Date(`${date}T00:00:00`);
-  return getMealsForDay(userId, dateObj);
+  const dateObj = parseLocalDateInput(date);
+
+  if (__DEV__) {
+    console.log('[getDailyMeals] Input date:', date, '| Parsed:', dateObj.toISOString());
+  }
+
+  const result = await getMealsForDay(userId, dateObj);
+
+  if (__DEV__) {
+    console.log('[getDailyMeals] Found', result.length, 'meals');
+  }
+
+  return result;
 }
 
 export async function getMealLogById(mealLogId: string): Promise<MealLog | null> {
@@ -1107,7 +1250,8 @@ export async function getNutritionStats(
   // For now, let's just return the days we have data for, UI can fill gaps.
 
   mealLogs?.forEach((log: any) => {
-    const date = log.logged_at.split('T')[0];
+    // Precise local date key to avoid timezone drift in stats grouping
+    const date = toLocalDateKey(new Date(log.logged_at));
 
     if (!stats[date]) {
       stats[date] = { calories: 0, protein: 0, carbs: 0, fat: 0, fiber: 0 };
@@ -1128,8 +1272,8 @@ export async function getNutritionStats(
  * Copy all meals from one day to another
  */
 export async function copyDayMeals(userId: string, fromDate: string, toDate: string): Promise<void> {
-  const from = new Date(fromDate);
-  const to = new Date(toDate);
+  const from = parseLocalDateInput(fromDate);
+  const to = parseLocalDateInput(toDate);
 
   // 1. Get original meals
   const originalMeals = await getMealsForDay(userId, from);

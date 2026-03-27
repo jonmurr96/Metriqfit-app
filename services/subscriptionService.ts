@@ -1,6 +1,6 @@
 /**
  * Subscription Service
- * Handles RevenueCat integration for Elite tier subscriptions.
+ * Handles RevenueCat integration for Free / Premium / Elite subscriptions.
  *
  * Modes:
  * - Mock test mode (default): writes subscriptions directly, no billing charge.
@@ -17,73 +17,101 @@ import {
   purchaseRevenueCatPackage,
   restoreRevenueCatPurchases,
 } from './revenuecatClient';
+import {
+  DEFAULT_TRIAL_CONFIG,
+  SUBSCRIPTION_PACKAGES,
+  getFeatureLimit as getTierFeatureLimit,
+  getPlanLabel,
+  getPlanTypeFromPackageId,
+  getRequiredTierForFeature,
+  getSubscriptionTier,
+  getTierLabel,
+  getTrialConfigForPlan,
+  getUpgradeTierForFeature,
+  hasFeatureAccess,
+  inferPlanTypeFromProductId,
+  type FeatureGateKey,
+  type LimitedFeatureKey,
+  type SubscriptionPlanType,
+  type SubscriptionStatus,
+  type SubscriptionTier,
+} from '../lib/subscription/plans';
 
 // Types
 export interface Subscription {
   id: string;
   user_id: string;
   revenuecat_customer_id: string | null;
-  plan_type: 'free' | 'elite_monthly' | 'elite_annual' | 'elite_lifetime';
-  status: 'active' | 'expired' | 'cancelled' | 'trial' | 'grace_period';
+  plan_type: SubscriptionPlanType;
+  status: SubscriptionStatus;
   started_at: string | null;
   expires_at: string | null;
   trial_ends_at: string | null;
+  legacy_plan_type?: SubscriptionPlanType | null;
+  grandfathered_into_tier?: Exclude<SubscriptionTier, 'free'> | null;
+  grandfathered_until?: string | null;
   created_at: string;
   updated_at: string;
 }
 
 export interface SubscriptionPackage {
-  id: string;
+  id: SubscriptionPlanType;
   identifier: string;
   product_id: string;
   price: number;
   price_string: string;
-  period: 'monthly' | 'annual' | 'lifetime';
+  period: 'weekly' | 'monthly' | 'annual' | 'lifetime';
   trial_days: number | null;
+  tier: SubscriptionTier;
+  tagline?: string;
+  badge?: string;
 }
 
 export interface EntitlementStatus {
+  tier: SubscriptionTier;
+  planType: SubscriptionPlanType;
+  planLabel: string;
+  isPremium: boolean;
   isElite: boolean;
   expiresAt?: string;
   isTrialing: boolean;
   trialEndsAt?: string;
+  trialConfig: {
+    has_trial: boolean;
+    trial_days: number;
+    trial_available_on_monthly: boolean;
+    trial_available_on_annual: boolean;
+  };
+  grandfatheredIntoTier?: Exclude<SubscriptionTier, 'free'> | null;
+  grandfatheredUntil?: string;
 }
 
 export interface BillingIntegrationStatus {
-  mode: 'test_mock' | 'revenuecat_sandbox' | 'revenuecat_unavailable' | 'disabled';
+  mode:
+    | 'test_mock'
+    | 'revenuecat_native'
+    | 'revenuecat_sandbox'
+    | 'revenuecat_test_store'
+    | 'revenuecat_unavailable'
+    | 'disabled';
   canPurchase: boolean;
   reason: string;
+  isReleaseSafe: boolean;
+  blockingReason?: string;
 }
 
-const FALLBACK_PACKAGES: SubscriptionPackage[] = [
-  {
-    id: 'elite_monthly',
-    identifier: '$rc_monthly',
-    product_id: 'com.metriqfit.elite.monthly',
-    price: 9.99,
-    price_string: '$9.99/month',
-    period: 'monthly',
-    trial_days: 7,
-  },
-  {
-    id: 'elite_annual',
-    identifier: '$rc_annual',
-    product_id: 'com.metriqfit.elite.annual',
-    price: 79.99,
-    price_string: '$79.99/year',
-    period: 'annual',
-    trial_days: 7,
-  },
-  {
-    id: 'elite_lifetime',
-    identifier: '$rc_lifetime',
-    product_id: 'com.metriqfit.elite.lifetime',
-    price: 199.99,
-    price_string: '$199.99 one-time',
-    period: 'lifetime',
-    trial_days: null,
-  },
-];
+const FALLBACK_PACKAGES: SubscriptionPackage[] = SUBSCRIPTION_PACKAGES.map((pkg) => ({
+  id: pkg.id,
+  identifier: pkg.identifier,
+  product_id: pkg.productId,
+  price: pkg.price,
+  price_string: pkg.priceString,
+  period: pkg.period,
+  trial_days: pkg.trialDays,
+  tier: pkg.tier,
+  tagline: pkg.tagline,
+  badge: pkg.badge,
+}));
 
 function parseBooleanEnv(value: string | undefined, defaultValue: boolean): boolean {
   if (!value) return defaultValue;
@@ -91,14 +119,46 @@ function parseBooleanEnv(value: string | undefined, defaultValue: boolean): bool
 }
 
 function isBillingTestModeEnabled(): boolean {
-  return parseBooleanEnv(process.env.EXPO_PUBLIC_BILLING_TEST_MODE, true);
+  return parseBooleanEnv(process.env.EXPO_PUBLIC_BILLING_TEST_MODE, false);
 }
 
 function isRevenueCatSandboxEnabled(): boolean {
   return parseBooleanEnv(process.env.EXPO_PUBLIC_REVENUECAT_SANDBOX_ENABLED, false);
 }
 
+function isRevenueCatNativePluginEnabled(): boolean {
+  return parseBooleanEnv(process.env.EXPO_PUBLIC_REVENUECAT_NATIVE_PLUGIN_ENABLED, false);
+}
+
+function getRevenueCatTestStoreKey(): string | null {
+  return process.env.EXPO_PUBLIC_REVENUECAT_TEST_STORE_KEY || null;
+}
+
+function isRevenueCatTestStoreEnabled(): boolean {
+  return Boolean(getRevenueCatTestStoreKey());
+}
+
+export function getRevenueCatEntitlementIdentifier(): string {
+  return process.env.EXPO_PUBLIC_REVENUECAT_REQUIRED_ENTITLEMENT_ID || 'Metriqffit Pro';
+}
+
+function getAppEnv(): 'local' | 'staging' | 'prod' {
+  const raw = String(process.env.EXPO_PUBLIC_APP_ENV || 'local').toLowerCase();
+  if (raw === 'prod') return 'prod';
+  if (raw === 'staging') return 'staging';
+  return 'local';
+}
+
+function isProductionBillingEnvironment(): boolean {
+  return getAppEnv() === 'prod';
+}
+
 function getRevenueCatApiKeyForPlatform(): string | null {
+  if (!isProductionBillingEnvironment()) {
+    const testStoreKey = getRevenueCatTestStoreKey();
+    if (testStoreKey) return testStoreKey;
+  }
+
   if (Platform.OS === 'ios') {
     return process.env.EXPO_PUBLIC_REVENUECAT_IOS_KEY || null;
   }
@@ -108,23 +168,92 @@ function getRevenueCatApiKeyForPlatform(): string | null {
   return null;
 }
 
-function getPlanTypeFromPackageId(packageId: string): Subscription['plan_type'] {
-  if (packageId === 'elite_monthly') return 'elite_monthly';
-  if (packageId === 'elite_lifetime') return 'elite_lifetime';
-  return 'elite_annual';
+function buildFreeEntitlementStatus(): EntitlementStatus {
+  return {
+    tier: 'free',
+    planType: 'free',
+    planLabel: 'Free',
+    isPremium: false,
+    isElite: false,
+    isTrialing: false,
+    trialConfig: DEFAULT_TRIAL_CONFIG.free,
+  };
 }
 
-function inferPlanTypeFromProductId(productId: string | undefined | null): Subscription['plan_type'] {
-  const normalized = String(productId || '').toLowerCase();
-  if (normalized.includes('lifetime') || normalized.includes('life')) return 'elite_lifetime';
-  if (normalized.includes('annual') || normalized.includes('year')) return 'elite_annual';
-  if (normalized.includes('month')) return 'elite_monthly';
-  return 'elite_monthly';
+function resolveGrandfatheredTier(
+  subscription: Subscription,
+  now: Date,
+): Exclude<SubscriptionTier, 'free'> | null {
+  if (!subscription.grandfathered_into_tier) return null;
+  if (!subscription.grandfathered_until) return subscription.grandfathered_into_tier;
+
+  const grandfatheredUntil = new Date(subscription.grandfathered_until);
+  if (!Number.isFinite(grandfatheredUntil.getTime())) return null;
+  return grandfatheredUntil > now ? subscription.grandfathered_into_tier : null;
+}
+
+function isPaidSubscriptionActive(subscription: Subscription, now: Date, isTrialing: boolean): boolean {
+  const planTier = getSubscriptionTier(subscription.plan_type);
+  const expiresAt = subscription.expires_at ? new Date(subscription.expires_at) : null;
+
+  return Boolean(
+    planTier !== 'free' &&
+    (subscription.status === 'active'
+      || subscription.status === 'grace_period'
+      || isTrialing
+      || subscription.plan_type === 'elite_lifetime'
+      || (expiresAt && expiresAt > now)),
+  );
+}
+
+function buildEntitlementFromSubscription(subscription: Subscription | null): EntitlementStatus {
+  if (!subscription) return buildFreeEntitlementStatus();
+
+  const now = new Date();
+  const trialEndsAt = subscription.trial_ends_at ? new Date(subscription.trial_ends_at) : null;
+  const isTrialing = Boolean(
+    subscription.status === 'trial' && trialEndsAt && trialEndsAt > now,
+  );
+  const isPaidActive = isPaidSubscriptionActive(subscription, now, isTrialing);
+
+  if (!isPaidActive) {
+    return {
+      ...buildFreeEntitlementStatus(),
+      grandfatheredIntoTier: subscription.grandfathered_into_tier ?? undefined,
+      grandfatheredUntil: subscription.grandfathered_until ?? undefined,
+    };
+  }
+
+  const planTier = getSubscriptionTier(subscription.plan_type);
+  const grandfatheredTier = resolveGrandfatheredTier(subscription, now);
+  const effectiveTier = grandfatheredTier ?? planTier;
+  const effectivePlanLabel = grandfatheredTier && grandfatheredTier !== planTier
+    ? `${getTierLabel(grandfatheredTier)} (Grandfathered)`
+    : getPlanLabel(subscription.plan_type);
+
+  return {
+    tier: effectiveTier,
+    planType: subscription.plan_type,
+    planLabel: effectivePlanLabel,
+    isPremium: effectiveTier === 'premium' || effectiveTier === 'elite',
+    isElite: effectiveTier === 'elite',
+    expiresAt: subscription.expires_at ?? undefined,
+    isTrialing,
+    trialEndsAt: subscription.trial_ends_at ?? undefined,
+    trialConfig: getTrialConfigForPlan(subscription.plan_type),
+    grandfatheredIntoTier: subscription.grandfathered_into_tier ?? undefined,
+    grandfatheredUntil: subscription.grandfathered_until ?? undefined,
+  };
+}
+
+async function getEntitlementStatusFromDatabase(userId: string): Promise<EntitlementStatus> {
+  const subscription = await getSubscription(userId);
+  return buildEntitlementFromSubscription(subscription);
 }
 
 async function upsertSubscriptionRow(userId: string, payload: {
-  planType: Subscription['plan_type'];
-  status: Subscription['status'];
+  planType: SubscriptionPlanType;
+  status: SubscriptionStatus;
   expiresAt?: string | null;
   trialEndsAt?: string | null;
   productId?: string | null;
@@ -150,6 +279,20 @@ function resolveRevenueCatStatus(): BillingIntegrationStatus {
       mode: 'revenuecat_unavailable',
       canPurchase: false,
       reason: 'RevenueCat sandbox mode requires an iOS or Android dev build. Web uses test/mock mode.',
+      isReleaseSafe: false,
+      blockingReason: isProductionBillingEnvironment()
+        ? 'Production billing cannot run on web.'
+        : undefined,
+    };
+  }
+
+  if (!isRevenueCatNativePluginEnabled()) {
+    return {
+      mode: 'disabled',
+      canPurchase: false,
+      reason: 'RevenueCat native plugin is disabled for this build.',
+      isReleaseSafe: false,
+      blockingReason: 'Enable EXPO_PUBLIC_REVENUECAT_NATIVE_PLUGIN_ENABLED for native billing.',
     };
   }
 
@@ -158,6 +301,18 @@ function resolveRevenueCatStatus(): BillingIntegrationStatus {
       mode: 'revenuecat_unavailable',
       canPurchase: false,
       reason: 'RevenueCat SDK is not available in this build.',
+      isReleaseSafe: false,
+      blockingReason: 'RevenueCat SDK is unavailable in this native build.',
+    };
+  }
+
+  if (isProductionBillingEnvironment() && isRevenueCatTestStoreEnabled()) {
+    return {
+      mode: 'revenuecat_unavailable',
+      canPurchase: false,
+      reason: 'RevenueCat Test Store keys are only valid for local or staging builds.',
+      isReleaseSafe: false,
+      blockingReason: 'Use platform-specific iOS and Android RevenueCat public SDK keys in production.',
     };
   }
 
@@ -166,34 +321,39 @@ function resolveRevenueCatStatus(): BillingIntegrationStatus {
     return {
       mode: 'revenuecat_unavailable',
       canPurchase: false,
-      reason: `Missing RevenueCat API key for ${Platform.OS}. Set EXPO_PUBLIC_REVENUECAT_${Platform.OS === 'ios' ? 'IOS' : 'ANDROID'}_KEY.`,
+      reason: isProductionBillingEnvironment()
+        ? `Missing RevenueCat API key for ${Platform.OS}. Set EXPO_PUBLIC_REVENUECAT_${Platform.OS === 'ios' ? 'IOS' : 'ANDROID'}_KEY.`
+        : 'Missing RevenueCat Test Store or platform API key for this native build.',
+      isReleaseSafe: false,
+      blockingReason: `Missing RevenueCat API key for ${Platform.OS}.`,
     };
   }
 
   return {
-    mode: 'revenuecat_sandbox',
+    mode: isRevenueCatTestStoreEnabled()
+      ? 'revenuecat_test_store'
+      : isRevenueCatSandboxEnabled()
+        ? 'revenuecat_sandbox'
+        : 'revenuecat_native',
     canPurchase: true,
-    reason: 'RevenueCat sandbox mode enabled. Purchases use App Store / Play sandbox.',
+    reason: isRevenueCatTestStoreEnabled()
+      ? 'RevenueCat Test Store mode enabled. Purchases use RevenueCat test products in this dev build.'
+      : isRevenueCatSandboxEnabled()
+        ? 'RevenueCat sandbox mode enabled. Purchases use App Store / Play sandbox.'
+        : 'RevenueCat native billing is enabled for this build.',
+    isReleaseSafe: true,
   };
 }
 
-function convertSnapshotToEntitlement(snapshot: {
-  isElite: boolean;
-  isTrialing: boolean;
-  expiresAt?: string;
-  trialEndsAt?: string;
-}): EntitlementStatus {
-  return {
-    isElite: snapshot.isElite,
-    isTrialing: snapshot.isTrialing,
-    expiresAt: snapshot.expiresAt,
-    trialEndsAt: snapshot.trialEndsAt,
-  };
+function shouldUseRevenueCatNative(): boolean {
+  if (isBillingTestModeEnabled()) return false;
+  return isProductionBillingEnvironment() || isRevenueCatSandboxEnabled() || isRevenueCatTestStoreEnabled();
 }
 
 async function syncRevenueCatSnapshotToDatabase(
   userId: string,
   snapshot: {
+    tier: SubscriptionTier;
     isElite: boolean;
     isTrialing: boolean;
     expiresAt?: string;
@@ -202,7 +362,7 @@ async function syncRevenueCatSnapshotToDatabase(
     customerId?: string;
   },
 ): Promise<void> {
-  if (!snapshot.isElite) {
+  if (snapshot.tier === 'free') {
     await upsertSubscriptionRow(userId, {
       planType: 'free',
       status: 'active',
@@ -215,7 +375,11 @@ async function syncRevenueCatSnapshotToDatabase(
   }
 
   await upsertSubscriptionRow(userId, {
-    planType: inferPlanTypeFromProductId(snapshot.activeProductId),
+    planType: snapshot.activeProductId
+      ? inferPlanTypeFromProductId(snapshot.activeProductId)
+      : snapshot.tier === 'premium'
+        ? 'premium_monthly'
+        : 'elite_monthly',
     status: snapshot.isTrialing ? 'trial' : 'active',
     expiresAt: snapshot.expiresAt || null,
     trialEndsAt: snapshot.trialEndsAt || null,
@@ -231,7 +395,7 @@ async function syncRevenueCatSnapshotToDatabase(
 export async function syncSubscriptionFromRevenueCat(
   userId: string,
 ): Promise<EntitlementStatus | null> {
-  const useRevenueCat = !isBillingTestModeEnabled() && isRevenueCatSandboxEnabled();
+  const useRevenueCat = shouldUseRevenueCatNative();
   if (!useRevenueCat) return null;
 
   const status = resolveRevenueCatStatus();
@@ -248,29 +412,46 @@ export async function syncSubscriptionFromRevenueCat(
   const snapshot = await getRevenueCatEntitlementSnapshot();
   await syncRevenueCatSnapshotToDatabase(userId, snapshot);
 
-  return convertSnapshotToEntitlement(snapshot);
+  return getEntitlementStatusFromDatabase(userId);
 }
 
 /**
  * Surface billing mode + readiness for UI.
  */
 export function getBillingIntegrationStatus(): BillingIntegrationStatus {
+  if (isProductionBillingEnvironment() && isBillingTestModeEnabled()) {
+    return {
+      mode: 'test_mock',
+      canPurchase: false,
+      reason: 'Mock billing is enabled, which is blocked for production builds.',
+      isReleaseSafe: false,
+      blockingReason: 'Disable EXPO_PUBLIC_BILLING_TEST_MODE before App Store release.',
+    };
+  }
+
   if (isBillingTestModeEnabled()) {
     return {
       mode: 'test_mock',
       canPurchase: true,
       reason: 'Test billing mode is enabled. Elite selection writes subscription state without charging.',
+      isReleaseSafe: !isProductionBillingEnvironment(),
     };
   }
 
-  if (isRevenueCatSandboxEnabled()) {
+  if (shouldUseRevenueCatNative()) {
     return resolveRevenueCatStatus();
   }
 
   return {
     mode: 'disabled',
     canPurchase: false,
-    reason: 'Billing is disabled in this build. Enable EXPO_PUBLIC_BILLING_TEST_MODE or EXPO_PUBLIC_REVENUECAT_SANDBOX_ENABLED.',
+    reason: isProductionBillingEnvironment()
+      ? 'Billing is not configured for production. Enable native RevenueCat with platform keys.'
+      : 'Billing is disabled in this build. Enable EXPO_PUBLIC_BILLING_TEST_MODE, EXPO_PUBLIC_REVENUECAT_TEST_STORE_KEY, or RevenueCat sandbox/native billing.',
+    isReleaseSafe: !isProductionBillingEnvironment(),
+    blockingReason: isProductionBillingEnvironment()
+      ? 'Production billing requires RevenueCat native plugin plus platform API keys.'
+      : undefined,
   };
 }
 
@@ -280,12 +461,13 @@ export function getBillingIntegrationStatus(): BillingIntegrationStatus {
  */
 export async function initializeRevenueCat(userId: string): Promise<void> {
   if (!userId) return;
-  if (isBillingTestModeEnabled()) return;
-  if (!isRevenueCatSandboxEnabled()) return;
+  if (!shouldUseRevenueCatNative()) return;
 
   const status = resolveRevenueCatStatus();
   if (!status.canPurchase) {
-    console.warn('[RevenueCat] Initialization skipped:', status.reason);
+    if (isProductionBillingEnvironment()) {
+      console.warn('[RevenueCat] Initialization skipped:', status.reason);
+    }
     return;
   }
 
@@ -321,10 +503,10 @@ export async function getSubscription(userId: string): Promise<Subscription | nu
 }
 
 /**
- * Check if user has Elite entitlement.
+ * Check current subscription entitlement state.
  */
 export async function checkEntitlementStatus(userId: string): Promise<EntitlementStatus> {
-  const useRevenueCat = !isBillingTestModeEnabled() && isRevenueCatSandboxEnabled();
+  const useRevenueCat = shouldUseRevenueCatNative();
 
   if (useRevenueCat) {
     try {
@@ -335,37 +517,7 @@ export async function checkEntitlementStatus(userId: string): Promise<Entitlemen
     }
   }
 
-  const subscription = await getSubscription(userId);
-
-  if (!subscription) {
-    return {
-      isElite: false,
-      isTrialing: false,
-    };
-  }
-
-  const now = new Date();
-  const expiresAt = subscription.expires_at ? new Date(subscription.expires_at) : null;
-  const trialEndsAt = subscription.trial_ends_at ? new Date(subscription.trial_ends_at) : null;
-
-  const isTrialing = Boolean(
-    subscription.status === 'trial' && trialEndsAt && trialEndsAt > now,
-  );
-
-  const isElite = Boolean(
-    subscription.plan_type !== 'free' &&
-    (subscription.status === 'active'
-      || isTrialing
-      || subscription.plan_type === 'elite_lifetime'
-      || (expiresAt && expiresAt > now)),
-  );
-
-  return {
-    isElite,
-    expiresAt: subscription.expires_at ?? undefined,
-    isTrialing,
-    trialEndsAt: subscription.trial_ends_at ?? undefined,
-  };
+  return getEntitlementStatusFromDatabase(userId);
 }
 
 /**
@@ -373,7 +525,7 @@ export async function checkEntitlementStatus(userId: string): Promise<Entitlemen
  * Uses RevenueCat offerings in sandbox mode when available, otherwise falls back.
  */
 export async function getAvailablePackages(userId?: string): Promise<SubscriptionPackage[]> {
-  const useRevenueCat = !isBillingTestModeEnabled() && isRevenueCatSandboxEnabled();
+  const useRevenueCat = shouldUseRevenueCatNative();
 
   if (useRevenueCat) {
     const status = resolveRevenueCatStatus();
@@ -399,6 +551,9 @@ export async function getAvailablePackages(userId?: string): Promise<Subscriptio
             price_string: pkg.price_string,
             period: pkg.period,
             trial_days: pkg.trial_days,
+            tier: pkg.tier,
+            tagline: pkg.tagline,
+            badge: pkg.badge,
           }));
         }
       } catch (error) {
@@ -420,7 +575,11 @@ async function purchaseMockPackage(
   }
 
   let expiresAt: string | undefined;
-  if (pkg.period === 'monthly') {
+  if (pkg.period === 'weekly') {
+    const date = new Date();
+    date.setDate(date.getDate() + 7);
+    expiresAt = date.toISOString();
+  } else if (pkg.period === 'monthly') {
     const date = new Date();
     date.setMonth(date.getMonth() + 1);
     expiresAt = date.toISOString();
@@ -447,10 +606,10 @@ async function purchaseMockPackage(
     });
 
     const entitlement = await checkEntitlementStatus(userId);
-    if (!entitlement.isElite) {
+    if (entitlement.planType !== getPlanTypeFromPackageId(pkg.id) && entitlement.tier !== pkg.tier) {
       return {
         success: false,
-        error: 'Subscription write completed, but elite entitlement could not be confirmed.',
+        error: 'Subscription write completed, but entitlement could not be confirmed.',
       };
     }
 
@@ -480,7 +639,11 @@ export async function purchasePackage(
     return purchaseMockPackage(userId, packageId);
   }
 
-  if (billingStatus.mode !== 'revenuecat_sandbox') {
+  if (
+    billingStatus.mode !== 'revenuecat_sandbox'
+    && billingStatus.mode !== 'revenuecat_native'
+    && billingStatus.mode !== 'revenuecat_test_store'
+  ) {
     return { success: false, error: billingStatus.reason };
   }
 
@@ -515,10 +678,10 @@ export async function purchasePackage(
     }
 
     const snapshot = purchaseResult.snapshot;
-    if (!snapshot?.isElite) {
+    if (!snapshot || snapshot.tier === 'free') {
       return {
         success: false,
-        error: 'Purchase completed, but elite entitlement was not granted.',
+        error: 'Purchase completed, but paid entitlement was not granted.',
       };
     }
 
@@ -565,7 +728,7 @@ export async function ensureFreeSubscription(userId: string): Promise<void> {
  * Restore purchases (for when user reinstalls or logs in on new device)
  */
 export async function restorePurchases(userId: string): Promise<EntitlementStatus> {
-  const useRevenueCat = !isBillingTestModeEnabled() && isRevenueCatSandboxEnabled();
+  const useRevenueCat = shouldUseRevenueCatNative();
 
   if (useRevenueCat) {
     const status = resolveRevenueCatStatus();
@@ -591,7 +754,7 @@ export async function restorePurchases(userId: string): Promise<EntitlementStatu
     const snapshot = restored.snapshot;
     await syncRevenueCatSnapshotToDatabase(userId, snapshot);
 
-    return convertSnapshotToEntitlement(snapshot);
+    return getEntitlementStatusFromDatabase(userId);
   }
 
   return checkEntitlementStatus(userId);
@@ -608,42 +771,30 @@ export function getManageSubscriptionUrl(): string {
 }
 
 /**
- * Check if a feature requires Elite
+ * Resolve the minimum tier needed for a feature.
  */
-export function isEliteFeature(
-  feature:
-    | 'food_photo_scan'
-    | 'barcode_scan'
-    | 'unlimited_ai'
-    | 'advanced_analytics'
-    | 'recipe_url_import'
-    | 'menu_scan'
-    | 'grocery_pantry_builder',
-): boolean {
-  const eliteFeatures = [
-    'food_photo_scan',
-    'barcode_scan',
-    'unlimited_ai',
-    'advanced_analytics',
-    'recipe_url_import',
-    'menu_scan',
-    'grocery_pantry_builder',
-  ];
-  return eliteFeatures.includes(feature);
+export function getFeatureRequiredTier(feature: FeatureGateKey): SubscriptionTier {
+  return getRequiredTierForFeature(feature);
+}
+
+export function getFeatureUpgradeTier(feature: FeatureGateKey): Exclude<SubscriptionTier, 'free'> {
+  return getUpgradeTierForFeature(feature);
+}
+
+export function isEliteFeature(feature: FeatureGateKey): boolean {
+  return getRequiredTierForFeature(feature) === 'elite';
+}
+
+export function canAccessFeature(feature: FeatureGateKey, tier: SubscriptionTier): boolean {
+  return hasFeatureAccess(tier, feature);
 }
 
 /**
  * Get feature limit based on subscription tier
  */
 export function getFeatureLimit(
-  feature: 'ai_messages' | 'plan_regenerations' | 'food_scans',
-  isElite: boolean,
+  feature: LimitedFeatureKey,
+  tier: SubscriptionTier,
 ): number {
-  const limits = {
-    ai_messages: { free: 5, elite: Infinity },
-    plan_regenerations: { free: 1, elite: 3 },
-    food_scans: { free: 3, elite: Infinity },
-  };
-
-  return isElite ? limits[feature].elite : limits[feature].free;
+  return getTierFeatureLimit(feature, tier);
 }

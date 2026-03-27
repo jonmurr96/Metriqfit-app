@@ -12,6 +12,7 @@ import { MotiView } from 'moti';
 
 import { TabBarIcon } from '../../../components/navigation/TabBarIcon';
 import { GlassCard } from '../../../components/premium/GlassCard';
+import { SubscriptionFeatureGate } from '../../../components/premium/SubscriptionFeatureGate';
 import {
   GoalForecastCard,
   MacroConsistencyCard,
@@ -24,12 +25,14 @@ import {
   WeeklyTrendChart,
 } from '../../../components/progress';
 import {
+  trackEvent,
   trackProgressCardRendered,
   trackProgressCtaTapped,
   trackProgressDashboardCardTapped,
   trackProgressDashboardRangeChanged,
   trackProgressViewed,
 } from '../../../lib/analytics';
+import { useFeatureAccess } from '../../../hooks/useSubscription';
 import { useTokens } from '../../../lib/theme';
 import {
   useProgressRecordSummary,
@@ -75,6 +78,7 @@ export default function ProgressHomeScreen() {
   const { data: weeklyActivity } = useWeeklyActivity();
   const { data: profile } = useProfile();
   const { data: onboardingAnswers } = useOnboardingAnswers();
+  const analyticsAccess = useFeatureAccess('advanced_analytics');
 
   useEffect(() => {
     if (!trackedView.current) {
@@ -90,6 +94,16 @@ export default function ProgressHomeScreen() {
       renderedRef.current[cardId] = true;
     });
   }, [range, snapshot]);
+
+  useEffect(() => {
+    if (!analyticsAccess.isLoading && !analyticsAccess.hasAccess) {
+      trackEvent('feature_gate_viewed', {
+        feature: 'advanced_analytics',
+        source: 'progress_dashboard',
+        required_tier: analyticsAccess.upgradeTier,
+      });
+    }
+  }, [analyticsAccess.hasAccess, analyticsAccess.isLoading, analyticsAccess.upgradeTier]);
 
   const isImperial = profile?.unit_system !== 'metric';
   const weightUnit = isImperial ? 'lb' : 'kg';
@@ -207,11 +221,29 @@ export default function ProgressHomeScreen() {
     { id: 'review', label: 'Weekly Review', icon: 'calendar-outline' as const, route: '/(tabs)/progress/weekly-review' },
   ];
 
-  if ((snapshotLoading || trendLoading || recordLoading) && !snapshot && !trendSnapshot) {
+  if ((snapshotLoading || trendLoading || recordLoading || analyticsAccess.isLoading) && !snapshot && !trendSnapshot) {
     return (
       <View style={[styles.loadingContainer, { backgroundColor: c.bg }]}>
         <ActivityIndicator size="large" color={c.primary} />
       </View>
+    );
+  }
+
+  if (!analyticsAccess.hasAccess) {
+    return (
+      <ProgressSectionShell
+        title="Progress"
+        primarySection="overview"
+        showBackButton={false}
+      >
+        <View style={{ paddingHorizontal: s.lg, paddingTop: s.lg }}>
+          <SubscriptionFeatureGate
+            requiredTier={analyticsAccess.upgradeTier}
+            title="Advanced progress analytics are on Premium"
+            subtitle="Unlock deeper trend tracking, PR highlights, forecast views, and structured review surfaces with Premium."
+          />
+        </View>
+      </ProgressSectionShell>
     );
   }
 

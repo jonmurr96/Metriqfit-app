@@ -20,6 +20,8 @@ if (!hasValidConfig) {
     'Please set EXPO_PUBLIC_SUPABASE_URL and EXPO_PUBLIC_SUPABASE_ANON_KEY in your .env file.\n' +
     'Authentication and data features will not work until configured.\n'
   );
+} else {
+  console.log('✅ SUPABASE CONFIGURED WITH URL:', supabaseUrl);
 }
 
 // Create Supabase client (use placeholders if not configured)

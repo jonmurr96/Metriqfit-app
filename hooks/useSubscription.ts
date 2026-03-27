@@ -1,6 +1,6 @@
 /**
  * React Query hooks for Subscription Service
- * Handles Elite subscription status and purchases
+ * Handles Free / Premium / Elite subscription status and purchases.
  */
 
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
@@ -10,12 +10,21 @@ import {
   checkEntitlementStatus,
   getAvailablePackages,
   getBillingIntegrationStatus,
+  getRevenueCatEntitlementIdentifier,
   purchasePackage,
   restorePurchases,
-  isEliteFeature,
+  syncSubscriptionFromRevenueCat,
+  canAccessFeature,
+  getFeatureRequiredTier,
+  getFeatureUpgradeTier,
   getFeatureLimit,
   type BillingIntegrationStatus,
 } from '../services/subscriptionService';
+import {
+  presentHostedPaywallIfNeeded,
+  presentRevenueCatCustomerCenter,
+} from '../services/revenuecatUiService';
+import type { FeatureGateKey } from '../lib/subscription/plans';
 
 // Query Keys
 export const subscriptionKeys = {
@@ -40,7 +49,7 @@ export function useSubscription() {
 }
 
 /**
- * Check Elite entitlement status
+ * Check entitlement status
  */
 export function useEntitlementStatus() {
   const { user } = useAuth();
@@ -109,28 +118,55 @@ export function useRestorePurchases() {
   });
 }
 
+export function useHostedPaywall() {
+  const { user } = useAuth();
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: async () => presentHostedPaywallIfNeeded(getRevenueCatEntitlementIdentifier()),
+    onSuccess: async (outcome) => {
+      if (!user?.id) return;
+
+      if (outcome.success) {
+        await syncSubscriptionFromRevenueCat(user.id).catch((error) => {
+          console.warn('[RevenueCat] Post-paywall sync failed:', error);
+        });
+      }
+
+      await queryClient.invalidateQueries({
+        queryKey: subscriptionKeys.all,
+      });
+    },
+  });
+}
+
+export function useCustomerCenter() {
+  return useMutation({
+    mutationFn: () => presentRevenueCatCustomerCenter(),
+  });
+}
+
 /**
  * Hook for checking if user can access a feature
  */
 export function useFeatureAccess(
-  feature:
-    | 'food_photo_scan'
-    | 'barcode_scan'
-    | 'unlimited_ai'
-    | 'advanced_analytics'
-    | 'recipe_url_import'
-    | 'menu_scan'
-    | 'grocery_pantry_builder',
+  feature: FeatureGateKey,
 ) {
   const { data: entitlement, isLoading } = useEntitlementStatus();
 
-  const requiresElite = isEliteFeature(feature);
-  const hasAccess = !requiresElite || entitlement?.isElite || false;
+  const tier = entitlement?.tier || 'free';
+  const requiredTier = getFeatureRequiredTier(feature);
+  const upgradeTier = getFeatureUpgradeTier(feature);
+  const hasAccess = canAccessFeature(feature, tier);
 
   return {
     hasAccess,
-    requiresElite,
+    requiredTier,
+    upgradeTier,
+    requiresElite: requiredTier === 'elite',
+    isPremium: entitlement?.isPremium || false,
     isElite: entitlement?.isElite || false,
+    tier,
     isLoading,
   };
 }
@@ -141,13 +177,15 @@ export function useFeatureAccess(
 export function useFeatureLimit(feature: 'ai_messages' | 'plan_regenerations' | 'food_scans') {
   const { data: entitlement, isLoading } = useEntitlementStatus();
 
-  const isElite = entitlement?.isElite || false;
-  const limit = getFeatureLimit(feature, isElite);
+  const tier = entitlement?.tier || 'free';
+  const limit = getFeatureLimit(feature, tier);
 
   return {
     limit,
     isUnlimited: limit === Infinity,
-    isElite,
+    tier,
+    isPremium: entitlement?.isPremium || false,
+    isElite: entitlement?.isElite || false,
     isLoading,
   };
 }
@@ -175,10 +213,17 @@ export function useSubscriptionUI() {
     isRestoring: restoreMutation.isPending,
 
     // Computed
+    tier: entitlementQuery.data?.tier || 'free',
+    planType: entitlementQuery.data?.planType || 'free',
+    planLabel: entitlementQuery.data?.planLabel || 'Free',
+    isPremium: entitlementQuery.data?.isPremium || false,
     isElite: entitlementQuery.data?.isElite || false,
     isTrialing: entitlementQuery.data?.isTrialing || false,
     trialEndsAt: entitlementQuery.data?.trialEndsAt,
     expiresAt: entitlementQuery.data?.expiresAt,
+    trialConfig: entitlementQuery.data?.trialConfig,
+    grandfatheredIntoTier: entitlementQuery.data?.grandfatheredIntoTier,
+    grandfatheredUntil: entitlementQuery.data?.grandfatheredUntil,
 
     // Actions
     purchase: purchaseMutation.mutate,
@@ -196,14 +241,17 @@ export function useSubscriptionUI() {
 export function usePaywall() {
   const entitlementQuery = useEntitlementStatus();
   const packagesQuery = useAvailablePackages();
+  const packages = packagesQuery.data || [];
 
   return {
-    shouldShowPaywall: !entitlementQuery.isLoading && !(entitlementQuery.data?.isElite ?? false),
+    shouldShowPaywall: !entitlementQuery.isLoading && (entitlementQuery.data?.tier ?? 'free') === 'free',
     isLoading: entitlementQuery.isLoading,
-    packages: packagesQuery.data || [],
-    monthlyPackage: packagesQuery.data?.find((p) => p.period === 'monthly'),
-    annualPackage: packagesQuery.data?.find((p) => p.period === 'annual'),
-    lifetimePackage: packagesQuery.data?.find((p) => p.period === 'lifetime'),
+    packages,
+    freeTier: entitlementQuery.data?.tier === 'free',
+    premiumMonthlyPackage: packages.find((p) => p.id === 'premium_monthly'),
+    premiumAnnualPackage: packages.find((p) => p.id === 'premium_annual'),
+    eliteMonthlyPackage: packages.find((p) => p.id === 'elite_monthly'),
+    eliteAnnualPackage: packages.find((p) => p.id === 'elite_annual'),
   };
 }
 

@@ -13,7 +13,12 @@ export type WorkoutActionKey =
   | 'open_programs'
   | 'accept_recommendation'
   | 'reject_recommendation'
-  | 'open_notes';
+  | 'open_notes'
+  | 'open_exercise_library'
+  | 'open_program_builder'
+  | 'import_plan'
+  | 'open_one_rep_max'
+  | 'open_plate_calculator';
 
 type WorkoutSessionType = 'workout' | 'rest' | 'active_recovery' | 'conditioning';
 type WorkoutScheduleStatus = 'planned' | 'completed' | 'missed' | 'rescheduled' | 'skipped';
@@ -116,17 +121,57 @@ export interface WorkoutMomentumState {
   }[];
 }
 
+export interface WorkoutDashboardPrimaryCardState {
+  title: string;
+  subtitle: string;
+  meta: string;
+  actionLabel: string;
+  action: WorkoutActionKey;
+  actionIcon: string;
+  tone: 'primary' | 'success' | 'accent';
+}
+
+export interface WorkoutDashboardUtilityTileState {
+  title: string;
+  subtitle: string;
+  icon: string;
+  action: WorkoutActionKey;
+  badgeLabel?: string;
+}
+
+export interface WorkoutDashboardQuickActionState {
+  label: string;
+  icon: string;
+  action: WorkoutActionKey;
+}
+
+export interface WorkoutDashboardResourceState {
+  label: string;
+  icon: string;
+  action: WorkoutActionKey;
+}
+
+export interface WorkoutDashboardCompactLayoutState {
+  primaryCard: WorkoutDashboardPrimaryCardState;
+  coachInsightTile: WorkoutDashboardUtilityTileState;
+  myPlanTile: WorkoutDashboardUtilityTileState;
+  quickActions: WorkoutDashboardQuickActionState[];
+  resources: WorkoutDashboardResourceState[];
+}
+
 export interface WorkoutDashboardState {
   hero: WorkoutDashboardPrimaryHeroState;
   tomorrow: WorkoutTomorrowPreviewState;
   coachQueue: WorkoutCoachQueueState;
   momentum: WorkoutMomentumState;
   utilityEmphasis: 'plan' | 'history' | 'programs' | 'tools';
+  compact: WorkoutDashboardCompactLayoutState;
 }
 
 interface BuildWorkoutDashboardStateInput {
   now: Date;
   hasActivePlan: boolean;
+  activePlanLabel?: string | null;
   activeSession: WorkoutDashboardActiveSession | null;
   todayEntry: WorkoutDashboardScheduleEntry | null;
   tomorrowEntry: WorkoutDashboardScheduleEntry | null;
@@ -234,6 +279,145 @@ function buildTomorrowState(entry: WorkoutDashboardScheduleEntry | null): Workou
 
 function getRecentPrCount(history: WorkoutDashboardHistoryItem[]) {
   return history.slice(0, 5).reduce((sum, item) => sum + item.prCount, 0);
+}
+
+function buildCompactPrimaryCard(
+  hero: WorkoutDashboardPrimaryHeroState,
+  todayEntry: WorkoutDashboardScheduleEntry | null,
+): WorkoutDashboardPrimaryCardState {
+  switch (hero.mode) {
+    case 'active_session':
+      return {
+        title: hero.title,
+        subtitle: hero.progress.currentExerciseName
+          ? `Up next: ${hero.progress.currentExerciseName}`
+          : 'Pick the session back up where you left it.',
+        meta: `${hero.progress.completedExercises}/${Math.max(1, hero.progress.totalExercises)} exercises logged`,
+        actionLabel: hero.primaryLabel,
+        action: hero.primaryAction,
+        actionIcon: 'play',
+        tone: hero.tone,
+      };
+    case 'stale_session':
+      return {
+        title: hero.primaryAction === 'finish_session' ? 'Close older session' : 'Resume workout',
+        subtitle: hero.primaryAction === 'finish_session'
+          ? 'All work is logged. Finish it before starting fresh.'
+          : 'Older session still needs to be closed cleanly.',
+        meta: `${hero.progress.completedExercises}/${Math.max(1, hero.progress.totalExercises)} exercises logged`,
+        actionLabel: hero.primaryLabel,
+        action: hero.primaryAction,
+        actionIcon: hero.primaryAction === 'finish_session' ? 'checkmark' : 'play',
+        tone: hero.tone,
+      };
+    case 'today_workout':
+      return {
+        title: hero.title,
+        subtitle: todayEntry?.focus || 'Today is set. Start before the day gets noisy.',
+        meta: todayEntry?.planDayName || hero.metrics[0]?.value || 'Scheduled session',
+        actionLabel: hero.primaryLabel,
+        action: hero.primaryAction,
+        actionIcon: 'play',
+        tone: hero.tone,
+      };
+    case 'completed_today':
+      return {
+        title: 'Workout Complete',
+        subtitle: 'Today is closed. Review the session and protect recovery.',
+        meta: hero.metrics[0]?.value || 'Session complete',
+        actionLabel: hero.primaryLabel,
+        action: hero.primaryAction,
+        actionIcon: 'checkmark',
+        tone: hero.tone,
+      };
+    case 'missed_session':
+      return {
+        title: 'Missed session',
+        subtitle: 'Reset the week on purpose instead of letting it drift.',
+        meta: hero.metrics[0]?.value || 'Today slipped',
+        actionLabel: 'Open Plan',
+        action: 'open_plan',
+        actionIcon: 'refresh',
+        tone: hero.tone,
+      };
+    case 'recovery':
+      return {
+        title: hero.title,
+        subtitle: hero.subtitle,
+        meta: hero.metrics[0]?.value || 'Recovery focus',
+        actionLabel: hero.primaryLabel,
+        action: hero.primaryAction,
+        actionIcon: todayEntry?.sessionType === 'conditioning' ? 'pulse-outline' : 'leaf-outline',
+        tone: hero.tone,
+      };
+    case 'no_plan':
+    default:
+      return {
+        title: 'No Plan Active',
+        subtitle: 'Choose a program and give the week structure.',
+        meta: 'Browse programs or generate a fresh plan',
+        actionLabel: 'Open Plan',
+        action: 'open_plan',
+        actionIcon: 'calendar',
+        tone: 'primary',
+      };
+  }
+}
+
+function buildCompactCoachInsight(
+  coachQueue: WorkoutCoachQueueState,
+  hero: WorkoutDashboardPrimaryHeroState,
+): WorkoutDashboardUtilityTileState {
+  if (coachQueue.mode === 'recommendations' && coachQueue.items.length > 0) {
+    return {
+      title: 'Coach Insight',
+      subtitle: coachQueue.items[0].title,
+      icon: 'sparkles-outline',
+      action: 'open_adaptation',
+      badgeLabel: `${coachQueue.items.length}`,
+    };
+  }
+
+  return {
+    title: 'Coach Insight',
+    subtitle:
+      hero.mode === 'today_workout'
+        ? 'Today’s session is still the highest-leverage move.'
+        : hero.mode === 'completed_today'
+          ? 'Recovery quality is what keeps tomorrow sharp.'
+          : hero.mode === 'recovery'
+            ? 'Use today to make tomorrow easier to execute.'
+            : hero.mode === 'no_plan'
+              ? 'Build the week before chasing intensity.'
+              : hero.primaryAction === 'finish_session'
+                ? 'Close the session cleanly and reset the board.'
+                : 'Finish what is already in motion before browsing.',
+    icon: 'sparkles-outline',
+    action: 'open_adaptation',
+  };
+}
+
+function buildCompactPlanTile(input: BuildWorkoutDashboardStateInput): WorkoutDashboardUtilityTileState {
+  const nextLabel = input.tomorrowEntry?.planDayName
+    || (input.tomorrowEntry?.sessionType === 'conditioning'
+      ? 'Conditioning'
+      : input.tomorrowEntry?.sessionType === 'active_recovery'
+        ? 'Active recovery'
+        : input.tomorrowEntry?.sessionType === 'rest'
+          ? 'Recovery day'
+          : null);
+
+  return {
+    title: 'My Plan',
+    subtitle:
+      input.activePlanLabel
+        ? nextLabel
+          ? `${input.activePlanLabel} • Next: ${nextLabel}`
+          : input.activePlanLabel
+        : nextLabel || (input.hasActivePlan ? 'View weekly layout and upcoming sessions.' : 'Choose a program and build the week.'),
+    icon: 'calendar-outline',
+    action: 'open_plan',
+  };
 }
 
 export function buildWorkoutDashboardState(input: BuildWorkoutDashboardStateInput): WorkoutDashboardState {
@@ -569,12 +753,33 @@ export function buildWorkoutDashboardState(input: BuildWorkoutDashboardStateInpu
           ? 'plan'
           : 'tools';
 
+  const compact: WorkoutDashboardCompactLayoutState = {
+    primaryCard: buildCompactPrimaryCard(hero, input.todayEntry),
+    coachInsightTile: buildCompactCoachInsight(coachQueue, hero),
+    myPlanTile: buildCompactPlanTile(input),
+    quickActions: [
+      { label: 'Notes', icon: 'document-text', action: 'open_notes' },
+      { label: 'Exercise Library', icon: 'bar-chart', action: 'open_exercise_library' },
+      { label: 'Programs', icon: 'barbell', action: 'open_programs' },
+      { label: 'Tools', icon: 'construct', action: 'open_tools' },
+    ],
+    resources: [
+      { label: '1RM Calculator', icon: 'calculator', action: 'open_one_rep_max' },
+      { label: 'Plate Calculator', icon: 'albums', action: 'open_plate_calculator' },
+      { label: 'Program Builder', icon: 'build', action: 'open_program_builder' },
+      { label: 'Import Plan', icon: 'cloud-upload', action: 'import_plan' },
+      { label: 'Adaptive Coach', icon: 'sparkles', action: 'open_adaptation' },
+      { label: 'Workout Notes', icon: 'document-text', action: 'open_notes' },
+    ],
+  };
+
   return {
     hero,
     tomorrow,
     coachQueue,
     momentum,
     utilityEmphasis,
+    compact,
   };
 }
 

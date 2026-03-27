@@ -6,9 +6,14 @@ import {
 } from './planService';
 import { getGroceryLists } from './groceryService';
 import { getPantryItems } from './pantryService';
-import { checkEntitlementStatus, isEliteFeature } from './subscriptionService';
+import {
+  canAccessFeature,
+  checkEntitlementStatus,
+  getFeatureRequiredTier,
+} from './subscriptionService';
+import type { FeatureGateKey, SubscriptionTier } from '../lib/subscription/plans';
 
-export type NutritionToolAccessState = 'available' | 'elite_required';
+export type NutritionToolAccessState = 'available' | 'premium_required' | 'elite_required';
 
 export interface NutritionToolCard {
   id: 'camera' | 'barcode' | 'menu' | 'recipe-import' | 'pantry' | 'grocery';
@@ -21,7 +26,9 @@ export interface NutritionToolCard {
 }
 
 export interface NutritionToolsSnapshot {
+  tier: SubscriptionTier;
   isElite: boolean;
+  isPremium: boolean;
   scanQuotaLabel: string | null;
   latestGroceryListTitle: string | null;
   pantryLowStockCount: number;
@@ -37,6 +44,11 @@ function withPreviewMeta(base: string, editableContext: EditableNutritionPlanCon
   return base;
 }
 
+function getAccessState(feature: FeatureGateKey, tier: SubscriptionTier): NutritionToolAccessState {
+  if (canAccessFeature(feature, tier)) return 'available';
+  return getFeatureRequiredTier(feature) === 'premium' ? 'premium_required' : 'elite_required';
+}
+
 export async function getNutritionToolsSnapshot(userId: string): Promise<NutritionToolsSnapshot> {
   const [entitlement, photoUsage, aiUsage, groceryLists, pantryItems, editableContext] = await Promise.all([
     checkEntitlementStatus(userId),
@@ -47,13 +59,15 @@ export async function getNutritionToolsSnapshot(userId: string): Promise<Nutriti
     getEditableNutritionPlanContext(userId),
   ]);
 
-  const isElite = !!entitlement.isElite;
+  const tier = entitlement.tier;
+  const isElite = entitlement.isElite;
+  const isPremium = entitlement.isPremium;
   const lowStockCount = pantryItems.filter((item) => Number(item.reorder_threshold || 0) > 0
     && Number(item.quantity_value || 0) <= Number(item.reorder_threshold || 0)).length;
   const latestList = groceryLists[0] || null;
   const previewPending = editableContext.source === 'preview';
   const photoQuota = photoUsage
-    ? photoUsage.isElite
+    ? photoUsage.isUnlimited
       ? 'Unlimited scans'
       : `${photoUsage.remainingScans} of ${photoUsage.scansLimit} photo scans left today`
     : null;
@@ -65,7 +79,9 @@ export async function getNutritionToolsSnapshot(userId: string): Promise<Nutriti
       : null;
 
   return {
+    tier,
     isElite,
+    isPremium,
     scanQuotaLabel: photoQuota,
     latestGroceryListTitle: latestList?.title || null,
     pantryLowStockCount: lowStockCount,
@@ -78,7 +94,7 @@ export async function getNutritionToolsSnapshot(userId: string): Promise<Nutriti
         subtitle: 'Estimate macros from a meal photo and log faster.',
         icon: 'camera-outline',
         route: '/(tabs)/nutrition/food-camera',
-        accessState: isEliteFeature('food_photo_scan') && !isElite ? 'elite_required' : 'available',
+        accessState: getAccessState('food_photo_scan', tier),
         meta: photoQuota,
       },
       {
@@ -87,8 +103,8 @@ export async function getNutritionToolsSnapshot(userId: string): Promise<Nutriti
         subtitle: 'Jump straight to packaged foods without typing.',
         icon: 'barcode-outline',
         route: '/(tabs)/nutrition/barcode-scanner',
-        accessState: isEliteFeature('barcode_scan') && !isElite ? 'elite_required' : 'available',
-        meta: !isElite ? 'Elite logging shortcut' : 'Ready to scan',
+        accessState: getAccessState('barcode_scan', tier),
+        meta: !isPremium ? 'Premium and Elite only' : 'Ready to scan',
       },
       {
         id: 'menu',
@@ -96,7 +112,7 @@ export async function getNutritionToolsSnapshot(userId: string): Promise<Nutriti
         subtitle: 'Rank menu options and apply the best pick to a meal slot.',
         icon: 'restaurant-outline',
         route: '/(tabs)/nutrition/menu-scan',
-        accessState: isEliteFeature('menu_scan') && !isElite ? 'elite_required' : 'available',
+        accessState: getAccessState('menu_scan', tier),
         meta: withPreviewMeta(menuUsageMeta || 'Apply to your next planned meal', editableContext),
       },
       {
@@ -105,8 +121,8 @@ export async function getNutritionToolsSnapshot(userId: string): Promise<Nutriti
         subtitle: 'Turn recipe links into editable meals for logging.',
         icon: 'link-outline',
         route: '/(tabs)/nutrition/recipe-import',
-        accessState: isEliteFeature('recipe_url_import') && !isElite ? 'elite_required' : 'available',
-        meta: !isElite ? 'Elite recipe parsing' : 'Saves into your recipe flow',
+        accessState: getAccessState('recipe_url_import', tier),
+        meta: !isElite ? 'Elite-only import flow' : 'Saves into your recipe flow',
       },
       {
         id: 'pantry',
@@ -114,7 +130,7 @@ export async function getNutritionToolsSnapshot(userId: string): Promise<Nutriti
         subtitle: 'Track what is on hand before you build or swap meals.',
         icon: 'archive-outline',
         route: '/(tabs)/nutrition/pantry',
-        accessState: isEliteFeature('grocery_pantry_builder') && !isElite ? 'elite_required' : 'available',
+        accessState: getAccessState('pantry', tier),
         meta: lowStockCount > 0 ? `${lowStockCount} low-stock items` : `${pantryItems.length} active items`,
       },
       {
@@ -123,7 +139,7 @@ export async function getNutritionToolsSnapshot(userId: string): Promise<Nutriti
         subtitle: 'Generate meals and a grocery list around constraints.',
         icon: 'basket-outline',
         route: '/(tabs)/nutrition/grocery-planner',
-        accessState: isEliteFeature('grocery_pantry_builder') && !isElite ? 'elite_required' : 'available',
+        accessState: getAccessState('grocery_planner', tier),
         meta: withPreviewMeta(latestList?.title || 'No active grocery list yet', editableContext),
       },
     ],

@@ -5,7 +5,13 @@ import type { MealsPerDay, Weekday } from '../lib/onboarding';
 const db = supabase as any;
 
 export type ReviewSection = 'macros' | 'daily_targets' | 'workout_plan' | 'nutrition_plan';
-export type PricingTier = 'free' | 'elite_monthly' | 'elite_annual' | 'elite_lifetime';
+export type PricingTier =
+  | 'free'
+  | 'premium_monthly'
+  | 'premium_annual'
+  | 'elite_monthly'
+  | 'elite_annual'
+  | 'elite_lifetime';
 
 export interface OnboardingReviewState {
   id: string;

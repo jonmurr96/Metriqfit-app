@@ -68,6 +68,7 @@ import {
   type EditableNutritionPlanContext,
 } from '../services/planService';
 import { nutritionDashboardKeys } from './useNutritionDashboard';
+import { progressMetricKeys } from './useProgressMetrics';
 
 // Query Keys
 export const planKeys = {
@@ -302,6 +303,7 @@ export function useTriggerPlanGeneration() {
         queryClient.invalidateQueries({ queryKey: planKeys.todaysWorkout(user!.id) });
         queryClient.invalidateQueries({ queryKey: planKeys.workoutTodaySchedule(user!.id) });
         queryClient.invalidateQueries({ queryKey: planKeys.workout() });
+        queryClient.invalidateQueries({ queryKey: progressMetricKeys.home(user!.id) });
       }
 
       if (planType === 'nutrition' || planType === 'both') {

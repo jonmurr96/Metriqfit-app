@@ -818,6 +818,9 @@ export interface Database {
           unit_system: 'imperial' | 'metric'
           avatar_url: string | null
           meal_times: Json | null
+          notification_preferences: Json | null
+          display_preferences: Json | null
+          push_token: string | null
           created_at: string
           updated_at: string
         }
@@ -833,6 +836,9 @@ export interface Database {
           unit_system?: 'imperial' | 'metric'
           avatar_url?: string | null
           meal_times?: Json | null
+          notification_preferences?: Json | null
+          display_preferences?: Json | null
+          push_token?: string | null
           created_at?: string
           updated_at?: string
         }
@@ -848,6 +854,9 @@ export interface Database {
           unit_system?: 'imperial' | 'metric'
           avatar_url?: string | null
           meal_times?: Json | null
+          notification_preferences?: Json | null
+          display_preferences?: Json | null
+          push_token?: string | null
           created_at?: string
           updated_at?: string
         }
@@ -1540,7 +1549,7 @@ export interface Database {
           id: string
           user_id: string
           revenuecat_customer_id: string | null
-          plan_type: 'free' | 'elite_monthly' | 'elite_annual' | 'elite_lifetime'
+          plan_type: 'free' | 'premium_monthly' | 'premium_annual' | 'elite_monthly' | 'elite_annual' | 'elite_lifetime'
           status: 'active' | 'expired' | 'cancelled' | 'trial' | 'grace_period'
           started_at: string | null
           expires_at: string | null
@@ -1550,6 +1559,9 @@ export interface Database {
           platform: 'ios' | 'android' | 'web' | 'stripe' | null
           original_purchase_date: string | null
           product_id: string | null
+          legacy_plan_type: 'free' | 'premium_monthly' | 'premium_annual' | 'elite_monthly' | 'elite_annual' | 'elite_lifetime' | null
+          grandfathered_into_tier: 'premium' | 'elite' | null
+          grandfathered_until: string | null
           created_at: string
           updated_at: string
         }
@@ -1557,7 +1569,7 @@ export interface Database {
           id?: string
           user_id: string
           revenuecat_customer_id?: string | null
-          plan_type?: 'free' | 'elite_monthly' | 'elite_annual' | 'elite_lifetime'
+          plan_type?: 'free' | 'premium_monthly' | 'premium_annual' | 'elite_monthly' | 'elite_annual' | 'elite_lifetime'
           status?: 'active' | 'expired' | 'cancelled' | 'trial' | 'grace_period'
           started_at?: string | null
           expires_at?: string | null
@@ -1567,6 +1579,9 @@ export interface Database {
           platform?: 'ios' | 'android' | 'web' | 'stripe' | null
           original_purchase_date?: string | null
           product_id?: string | null
+          legacy_plan_type?: 'free' | 'premium_monthly' | 'premium_annual' | 'elite_monthly' | 'elite_annual' | 'elite_lifetime' | null
+          grandfathered_into_tier?: 'premium' | 'elite' | null
+          grandfathered_until?: string | null
           created_at?: string
           updated_at?: string
         }
@@ -1574,7 +1589,7 @@ export interface Database {
           id?: string
           user_id?: string
           revenuecat_customer_id?: string | null
-          plan_type?: 'free' | 'elite_monthly' | 'elite_annual' | 'elite_lifetime'
+          plan_type?: 'free' | 'premium_monthly' | 'premium_annual' | 'elite_monthly' | 'elite_annual' | 'elite_lifetime'
           status?: 'active' | 'expired' | 'cancelled' | 'trial' | 'grace_period'
           started_at?: string | null
           expires_at?: string | null
@@ -1584,6 +1599,9 @@ export interface Database {
           platform?: 'ios' | 'android' | 'web' | 'stripe' | null
           original_purchase_date?: string | null
           product_id?: string | null
+          legacy_plan_type?: 'free' | 'premium_monthly' | 'premium_annual' | 'elite_monthly' | 'elite_annual' | 'elite_lifetime' | null
+          grandfathered_into_tier?: 'premium' | 'elite' | null
+          grandfathered_until?: string | null
           created_at?: string
           updated_at?: string
         }

@@ -2,12 +2,15 @@ import React from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 import type { AICoachConversationSummary } from '../../services/aiCoachService';
 import { useTokens } from '../../lib/theme';
+import { SubscriptionFeatureGate } from '../premium/SubscriptionFeatureGate';
 import { CoachSheet } from './CoachSheet';
 
 interface CoachHistorySheetProps {
   visible: boolean;
   items: AICoachConversationSummary[];
   activeConversationId?: string | null;
+  locked?: boolean;
+  upgradeTier?: 'premium' | 'elite';
   onClose: () => void;
   onSelect: (item: AICoachConversationSummary) => void;
   onClearHistory?: () => void;
@@ -24,6 +27,8 @@ export function CoachHistorySheet({
   visible,
   items,
   activeConversationId,
+  locked = false,
+  upgradeTier = 'premium',
   onClose,
   onSelect,
   onClearHistory,
@@ -64,85 +69,94 @@ export function CoachHistorySheet({
         </Pressable>
       ) : null}
     >
-      <View style={{ gap: s.sm }}>
-        {items.length ? items.map((item) => {
-          const isActive = item.id === activeConversationId;
-          return (
-            <Pressable
-              key={item.id}
-              accessibilityRole="button"
-              accessibilityLabel={item.title}
-              onPress={() => onSelect(item)}
-              style={({ pressed }) => [
-                styles.card,
-                {
-                  borderRadius: r.lg,
-                  borderWidth: 1,
-                  borderColor: isActive ? `${c.primary}42` : c.border,
-                  backgroundColor: pressed || isActive ? c.surface2 : c.surface,
-                  padding: s.md,
-                },
-              ]}
-            >
-              <View style={styles.cardHeader}>
+      {locked ? (
+        <SubscriptionFeatureGate
+          requiredTier={upgradeTier}
+          title="Conversation history is a Premium feature"
+          subtitle="Free keeps the coach focused on today. Upgrade to reopen prior conversations, revisit past guidance, and keep a longer coaching trail."
+          ctaLabel={`Unlock with ${upgradeTier === 'elite' ? 'Elite' : 'Premium'}`}
+        />
+      ) : (
+        <View style={{ gap: s.sm }}>
+          {items.length ? items.map((item) => {
+            const isActive = item.id === activeConversationId;
+            return (
+              <Pressable
+                key={item.id}
+                accessibilityRole="button"
+                accessibilityLabel={item.title}
+                onPress={() => onSelect(item)}
+                style={({ pressed }) => [
+                  styles.card,
+                  {
+                    borderRadius: r.lg,
+                    borderWidth: 1,
+                    borderColor: isActive ? `${c.primary}42` : c.border,
+                    backgroundColor: pressed || isActive ? c.surface2 : c.surface,
+                    padding: s.md,
+                  },
+                ]}
+              >
+                <View style={styles.cardHeader}>
+                  <Text
+                    style={{
+                      color: c.text,
+                      fontFamily: ty.body.familySemibold,
+                      fontSize: ty.sizes.sm,
+                      flex: 1,
+                    }}
+                  >
+                    {item.title}
+                  </Text>
+                  <Text
+                    style={{
+                      color: c.textSubtle,
+                      fontFamily: ty.body.family,
+                      fontSize: ty.sizes.xs,
+                    }}
+                  >
+                    {timestampLabel(item.updatedAt)}
+                  </Text>
+                </View>
+
                 <Text
+                  numberOfLines={2}
                   style={{
-                    color: c.text,
-                    fontFamily: ty.body.familySemibold,
-                    fontSize: ty.sizes.sm,
-                    flex: 1,
-                  }}
-                >
-                  {item.title}
-                </Text>
-                <Text
-                  style={{
-                    color: c.textSubtle,
+                    color: c.textMuted,
                     fontFamily: ty.body.family,
-                    fontSize: ty.sizes.xs,
+                    fontSize: ty.sizes.sm,
+                    lineHeight: 19,
+                    marginTop: s.xs,
                   }}
                 >
-                  {timestampLabel(item.updatedAt)}
+                  {item.lastMessagePreview}
                 </Text>
-              </View>
 
-              <Text
-                numberOfLines={2}
-                style={{
-                  color: c.textMuted,
-                  fontFamily: ty.body.family,
-                  fontSize: ty.sizes.sm,
-                  lineHeight: 19,
-                  marginTop: s.xs,
-                }}
-              >
-                {item.lastMessagePreview}
-              </Text>
-
-              <Text
-                style={{
-                  color: isActive ? c.primary : c.textSubtle,
-                  fontFamily: ty.body.familySemibold,
-                  fontSize: ty.sizes.xs,
-                  marginTop: s.sm,
-                }}
-              >
-                {item.messageCount} messages
-              </Text>
-            </Pressable>
-          );
-        }) : (
-          <Text
-            style={{
-              color: c.textMuted,
-              fontFamily: ty.body.family,
-              fontSize: ty.sizes.sm,
-            }}
-          >
-            No saved conversations yet.
-          </Text>
-        )}
-      </View>
+                <Text
+                  style={{
+                    color: isActive ? c.primary : c.textSubtle,
+                    fontFamily: ty.body.familySemibold,
+                    fontSize: ty.sizes.xs,
+                    marginTop: s.sm,
+                  }}
+                >
+                  {item.messageCount} messages
+                </Text>
+              </Pressable>
+            );
+          }) : (
+            <Text
+              style={{
+                color: c.textMuted,
+                fontFamily: ty.body.family,
+                fontSize: ty.sizes.sm,
+              }}
+            >
+              No saved conversations yet.
+            </Text>
+          )}
+        </View>
+      )}
     </CoachSheet>
   );
 }

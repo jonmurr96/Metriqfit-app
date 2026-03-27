@@ -1,11 +1,11 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { StyleSheet, View, Text, ScrollView, Pressable } from 'react-native';
+import { Alert, StyleSheet, View, Text, ScrollView, Pressable } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useFocusEffect, useRouter } from 'expo-router';
 import { MotiView } from 'moti';
-import { useTokens } from '../../../lib/theme';
 import { useAuth } from '../../../lib/auth';
+import { useTokens } from '../../../lib/theme';
 import { MacroDashboard } from '../../../components/dashboard/MacroDashboard';
 import { TabBarIcon } from '../../../components/navigation/TabBarIcon';
 import { GlassCard } from '../../../components/premium/GlassCard';
@@ -14,23 +14,29 @@ import { NextWorkoutCard } from '../../../components/workout/NextWorkoutCard';
 import { RestDayCard } from '../../../components/workout/RestDayCard';
 import { WorkoutWeekStrip } from '../../../components/workout/home/WorkoutWeekStrip';
 import { HomeMealPreviewCard } from '../../../components/home/HomeMealPreviewCard';
-import { HomeFocusStrip } from '../../../components/home/HomeFocusStrip';
+
 import { HomeCoachPulseCard } from '../../../components/home/HomeCoachPulseCard';
-import { HomeWeeklyMomentumCard } from '../../../components/home/HomeWeeklyMomentumCard';
 import { HomeTomorrowPreviewCard } from '../../../components/home/HomeTomorrowPreviewCard';
 import { HomeHabitDock } from '../../../components/home/HomeHabitDock';
-import { useNutritionPlanDay, useTodayWorkoutScheduleEntry, useTodaysWorkout, useWorkoutSchedule } from '../../../hooks/usePlan';
+import { StreakCounter } from '../../../components/gamification/StreakCounter';
+import { LevelProgressCard } from '../../../components/gamification/LevelProgressCard';
+import { useActiveWorkoutPlan, useNutritionPlanDay, useTodayWorkoutScheduleEntry, useTodaysWorkout, useWorkoutSchedule } from '../../../hooks/usePlan';
 import { useOnboardingAnswers, useStreak, useProfile } from '../../../hooks/useUser';
-import { useDailyMeals, useDailyTotals } from '../../../hooks/useNutrition';
+import { useDailyMeals, useDailyTotals, useLogPlannedMeal } from '../../../hooks/useNutrition';
 import { useDailyWaterSummary, useQuickAddWater } from '../../../hooks/useWater';
 import { usePrepCoachState } from '../../../hooks/usePrepCoach';
 import { useFormattedMealTimes } from '../../../hooks/useMealTimes';
-import { useHomeSnapshot, useWeeklyActivity } from '../../../hooks/useProgressMetrics';
+import { useHomeSnapshot } from '../../../hooks/useProgressMetrics';
 import { trackHomeCardRendered, trackHomeCtaTapped, trackHomeViewed } from '../../../lib/analytics';
 import { buildHomeDashboardState, toLocalDateKey, type HomeActionKey } from '../../../lib/home/dashboard-state';
+import {
+  buildWorkoutCalendarDayState,
+  buildWorkoutCalendarFallbackContext,
+} from '../../../lib/workout/calendar-status';
 
-const ALIGNMENT_BANNER_STORAGE_KEY = 'home_alignment_banner_v1';
-const ALIGNMENT_BANNER_RECENT_DAYS = 21;
+import { buildHomeMealPreviewItems } from '../../../lib/nutrition/home-meal-preview';
+import { normalizeMealSlot } from '../../../lib/nutrition/meal-slots';
+
 const SLOT_LABEL_MAP: Record<string, string> = {
   breakfast: 'Breakfast',
   lunch: 'Lunch',
@@ -38,6 +44,15 @@ const SLOT_LABEL_MAP: Record<string, string> = {
   snack: 'Snack',
 };
 const SLOT_ORDER = ['breakfast', 'lunch', 'dinner', 'snack'] as const;
+
+function startOfWeek(date: Date) {
+  const next = new Date(date);
+  const day = next.getDay();
+  const diff = day === 0 ? -6 : 1 - day;
+  next.setDate(next.getDate() + diff);
+  next.setHours(0, 0, 0, 0);
+  return next;
+}
 
 export default function HomeScreen() {
   const { c, s, ty, r } = useTokens();
@@ -54,23 +69,39 @@ export default function HomeScreen() {
   }, [now]);
   const { data: todaysWorkout } = useTodaysWorkout();
   const { data: todaySchedule } = useTodayWorkoutScheduleEntry();
+  const { data: activeWorkoutPlan } = useActiveWorkoutPlan();
   const { data: tomorrowSchedule } = useWorkoutSchedule(tomorrowDate, tomorrowDate);
   const { data: streak } = useStreak();
   const { data: profile } = useProfile();
   const { data: onboardingAnswers } = useOnboardingAnswers();
-  const { data: dailyTotals } = useDailyTotals();
+  const { data: dailyTotals } = useDailyTotals(todayDate);
   const { data: waterSummary } = useDailyWaterSummary(todayDate);
   const { data: prepCoachState } = usePrepCoachState();
   const { data: homeSnapshot } = useHomeSnapshot();
-  const { data: weeklyActivity } = useWeeklyActivity();
   const mealTimesDisplay = useFormattedMealTimes();
   const quickAddWater = useQuickAddWater();
+  const logPlannedMealMutation = useLogPlannedMeal();
   const hasTrackedHomeViewRef = useRef(false);
   const renderedHomeCardsRef = useRef<Record<string, boolean>>({});
-  const [showAlignmentBanner, setShowAlignmentBanner] = useState(false);
+  const mealLogSuccessTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [mealCardIndex, setMealCardIndex] = useState(0);
+  const [recentlyLoggedPlanMealId, setRecentlyLoggedPlanMealId] = useState<string | null>(null);
   const { data: dayPlan, isLoading: isDayPlanLoading } = useNutritionPlanDay(dayOfWeek, { enabled: true });
   const { data: dailyMeals } = useDailyMeals(todayDate);
+
+  const weekStart = useMemo(() => startOfWeek(new Date(`${todayDate}T12:00:00`)), [todayDate]);
+  const weekEnd = useMemo(() => {
+    const next = new Date(weekStart);
+    next.setDate(weekStart.getDate() + 6);
+    return next;
+  }, [weekStart]);
+  const { data: weekSchedule = [] } = useWorkoutSchedule(toLocalDateKey(weekStart), toLocalDateKey(weekEnd), {
+    enabled: !!activeWorkoutPlan,
+  });
+  const calendarFallbackContext = useMemo(
+    () => buildWorkoutCalendarFallbackContext(activeWorkoutPlan),
+    [activeWorkoutPlan, todayDate],
+  );
 
   useFocusEffect(
     useCallback(() => {
@@ -87,58 +118,30 @@ export default function HomeScreen() {
   }, []);
 
   useEffect(() => {
-    let isMounted = true;
-
-    const loadBannerState = async () => {
-      const completedAt = onboardingAnswers?.completed_at;
-      if (!user?.id || !completedAt) {
-        if (isMounted) setShowAlignmentBanner(false);
-        return;
-      }
-
-      const completedDate = new Date(completedAt);
-      const ageMs = Date.now() - completedDate.getTime();
-      const withinWindow = ageMs >= 0 && ageMs <= ALIGNMENT_BANNER_RECENT_DAYS * 24 * 60 * 60 * 1000;
-
-      if (!withinWindow) {
-        if (isMounted) setShowAlignmentBanner(false);
-        return;
-      }
-
-      const key = `${ALIGNMENT_BANNER_STORAGE_KEY}:${user.id}`;
-      const dismissed = await AsyncStorage.getItem(key);
-      if (isMounted) setShowAlignmentBanner(dismissed !== '1');
-    };
-
-    loadBannerState();
-
-    return () => {
-      isMounted = false;
-    };
-  }, [onboardingAnswers?.completed_at, user?.id]);
-
-  useEffect(() => {
     if (!hasTrackedHomeViewRef.current) {
       trackHomeViewed({ source: 'home_tab' });
       hasTrackedHomeViewRef.current = true;
     }
   }, []);
 
+
   useEffect(() => {
     if (!homeSnapshot) return;
-    ['focus_strip', 'week_strip', 'tomorrow_preview', 'coach_pulse', 'habit_dock'].forEach((cardId) => {
-      if (renderedHomeCardsRef.current[cardId]) return;
-      trackHomeCardRendered({ card_id: cardId });
-      renderedHomeCardsRef.current[cardId] = true;
+    [
+      { card_id: 'focus_strip', position_index: 1 },
+      { card_id: 'workout_primary', position_index: 2 },
+      { card_id: 'meal_preview', position_index: 3 },
+      { card_id: 'quick_actions', position_index: 4 },
+      { card_id: 'week_strip', position_index: 5 },
+      { card_id: 'coach_pulse', position_index: 6 },
+      { card_id: 'tomorrow_preview', position_index: 7 },
+    ].forEach(({ card_id, position_index }) => {
+      const trackingKey = `${card_id}:${position_index}`;
+      if (renderedHomeCardsRef.current[trackingKey]) return;
+      trackHomeCardRendered({ card_id, position_index });
+      renderedHomeCardsRef.current[trackingKey] = true;
     });
   }, [homeSnapshot]);
-
-  const dismissAlignmentBanner = async () => {
-    if (!user?.id) return;
-    const key = `${ALIGNMENT_BANNER_STORAGE_KEY}:${user.id}`;
-    await AsyncStorage.setItem(key, '1');
-    setShowAlignmentBanner(false);
-  };
 
   const slotTimeLabelMap = useMemo(() => ({
     breakfast: mealTimesDisplay.breakfast,
@@ -152,45 +155,18 @@ export default function HomeScreen() {
     mealTimesDisplay.snack,
   ]);
 
+  // Use shared utility to ensure sync between Home and Nutrition tabs
   const plannedMeals = useMemo(() => {
-    const mealsBySlot = new Map(
-      (dailyMeals || []).map((mealLog: any) => [
-        String(mealLog.mealSlot || '').toLowerCase(),
-        mealLog,
-      ]),
-    );
-
-    return [...(dayPlan?.meals || [])]
-      .sort((a: any, b: any) => {
-        const aIndex = SLOT_ORDER.indexOf((a.meal_slot || 'snack') as any);
-        const bIndex = SLOT_ORDER.indexOf((b.meal_slot || 'snack') as any);
-        return aIndex - bIndex;
-      })
-      .map((meal: any) => {
-        const slot = String(meal.meal_slot || 'snack').toLowerCase() as typeof SLOT_ORDER[number];
-        const matchingLog = mealsBySlot.get(slot);
-        const items = matchingLog?.items || [];
-        const loggedCalories = items.reduce((sum: number, item: any) => sum + Number(item.calories || 0), 0);
-
-        return {
-          slot,
-          label: SLOT_LABEL_MAP[slot] || slot,
-          plannedName: meal.selected_variant?.name || meal.name || 'Planned Meal',
-          targetCalories: Number(meal.target_calories || meal.selected_variant?.target_calories || 0),
-          targetProtein: Number(meal.target_protein || meal.selected_variant?.target_protein || 0),
-          targetCarbs: Number(meal.target_carbs || meal.selected_variant?.target_carbs || 0),
-          targetFat: Number(meal.target_fat || meal.selected_variant?.target_fat || 0),
-          loggedCalories,
-          loggedItemCount: items.length,
-          isLogged: items.length > 0,
-          planMealId: meal.id,
-          scheduledTimeLabel: slotTimeLabelMap[slot],
-        };
-      });
+    const previewItems = buildHomeMealPreviewItems(dayPlan?.meals, dailyMeals);
+    // Add scheduledTimeLabel which is specific to Home Screen layout
+    return previewItems.map(item => ({
+      ...item,
+      scheduledTimeLabel: slotTimeLabelMap[item.slot as keyof typeof slotTimeLabelMap]
+    }));
   }, [dailyMeals, dayPlan?.meals, slotTimeLabelMap]);
 
-  const plannedCaloriesTotal = plannedMeals.reduce((sum, meal) => sum + meal.targetCalories, 0);
-  const plannedProteinTotal = plannedMeals.reduce((sum, meal) => sum + (meal.targetProtein || 0), 0);
+  const plannedCaloriesTotal = plannedMeals.reduce((sum: number, meal: any) => sum + meal.targetCalories, 0);
+  const plannedProteinTotal = plannedMeals.reduce((sum: number, meal: any) => sum + (meal.targetProtein || 0), 0);
   const caloriesRemaining = Math.max(0, Math.round(plannedCaloriesTotal - Number(dailyTotals?.calories || 0)));
   const proteinRemaining = Math.max(0, Math.round(plannedProteinTotal - Number(dailyTotals?.protein || 0)));
   const waterPercent = waterSummary?.percentageComplete ?? homeSnapshot?.todayStatus.hydrationReadiness ?? 0;
@@ -205,11 +181,22 @@ export default function HomeScreen() {
       : null
   ), [tomorrowSchedule]);
 
+  // Derive workout status from live schedule data (not stale homeSnapshot)
+  const workoutStatus = useMemo(() => {
+    if (todaySchedule?.session_type === 'workout') {
+      return todaySchedule.status === 'completed' ? 'completed' : 'planned';
+    }
+    if (todaySchedule?.session_type) {
+      return 'rest';
+    }
+    return homeSnapshot?.todayStatus.workoutStatus || 'none';
+  }, [todaySchedule, homeSnapshot?.todayStatus.workoutStatus]);
+
   const dashboardState = useMemo(() => buildHomeDashboardState({
     now,
     meals: plannedMeals,
     mealTimes: mealTimesDisplay.raw as any,
-    workoutStatus: homeSnapshot?.todayStatus.workoutStatus || 'none',
+    workoutStatus,
     proteinRemaining,
     caloriesRemaining,
     waterPercent,
@@ -223,7 +210,7 @@ export default function HomeScreen() {
     caloriesRemaining,
     homeSnapshot?.kpiStrip.consistencyScore,
     homeSnapshot?.kpiStrip.sessionsThisWeek,
-    homeSnapshot?.todayStatus.workoutStatus,
+    workoutStatus,
     mealTimesDisplay.raw,
     now,
     plannedMeals,
@@ -254,6 +241,19 @@ export default function HomeScreen() {
   const safeMealIndex = dashboardState.meals.length ? Math.min(mealCardIndex, dashboardState.meals.length - 1) : 0;
   const activeMeal = dashboardState.meals[safeMealIndex] || null;
 
+  const clearMealLogSuccessTimeout = useCallback(() => {
+    if (mealLogSuccessTimeoutRef.current) {
+      clearTimeout(mealLogSuccessTimeoutRef.current);
+      mealLogSuccessTimeoutRef.current = null;
+    }
+  }, []);
+
+  useEffect(() => {
+    return () => {
+      clearMealLogSuccessTimeout();
+    };
+  }, [clearMealLogSuccessTimeout]);
+
   const restTitle =
     todaySchedule?.session_type === 'active_recovery'
       ? 'Active Recovery'
@@ -268,24 +268,41 @@ export default function HomeScreen() {
       : 'Recovery, mobility, and hydration.';
 
   const weekStripDays = useMemo(() => {
-    return (weeklyActivity || []).map((day) => {
-      const date = new Date(day.date);
-      const isToday = day.isToday;
-      const plannedWorkoutToday = isToday && homeSnapshot?.todayStatus.workoutStatus === 'planned';
-      const sessionType: 'workout' | 'rest' = day.workoutCompleted || plannedWorkoutToday ? 'workout' : 'rest';
-      const status: 'planned' | 'completed' | null = day.workoutCompleted ? 'completed' : plannedWorkoutToday ? 'planned' : null;
+    return Array.from({ length: 7 }, (_, index) => {
+      const date = new Date(weekStart);
+      date.setDate(weekStart.getDate() + index);
+      const dateText = toLocalDateKey(date);
+      const schedule = weekSchedule.find((entry) => entry.scheduled_date === dateText) || null;
+      const calendarState = buildWorkoutCalendarDayState({
+        dateKey: dateText,
+        todayKey: todayDate,
+        scheduleEntry: schedule,
+        fallback: calendarFallbackContext,
+      });
+
       return {
-        dateText: day.date,
-        label: day.dayLabel,
+        dateText,
+        label: date.toLocaleDateString('en-US', { weekday: 'short' }),
         dayNumber: date.getDate(),
-        isToday,
-        isSelected: isToday,
-        sessionType,
-        status,
-        onPress: () => router.push('/(tabs)/workout'),
+        isToday: dateText === todayDate,
+        isSelected: dateText === todayDate,
+        sessionType: calendarState.sessionType,
+        scheduleStatus: calendarState.scheduleStatus,
+        calendarStatus: calendarState.calendarStatus,
+        isWorkoutExpected: calendarState.isWorkoutExpected,
+        onPress: () => {
+          if (calendarState.isWorkoutExpected && calendarState.planDayId) {
+            router.push({
+              pathname: '/(tabs)/workout/day-preview',
+              params: { dayId: calendarState.planDayId },
+            });
+            return;
+          }
+          router.push('/(tabs)/workout/my-plan');
+        },
       };
     });
-  }, [homeSnapshot?.todayStatus.workoutStatus, router, weeklyActivity]);
+  }, [calendarFallbackContext, router, todayDate, weekSchedule, weekStart]);
 
   const handleOpenMealSlot = useCallback((slot?: string | null, source = 'home-dashboard') => {
     if (!slot) {
@@ -307,6 +324,53 @@ export default function HomeScreen() {
   const handleOpenActiveMeal = useCallback(() => {
     handleOpenMealSlot(activeMeal?.slot, 'home-slider');
   }, [activeMeal?.slot, handleOpenMealSlot]);
+
+  const handleQuickLogMeal = useCallback((planMealId: string) => {
+    if (!planMealId) return;
+    if (
+      logPlannedMealMutation.isPending
+      && logPlannedMealMutation.variables?.planMealId === planMealId
+    ) {
+      return;
+    }
+
+    clearMealLogSuccessTimeout();
+    setRecentlyLoggedPlanMealId(null);
+
+    logPlannedMealMutation.mutate(
+      { planMealId, date: todayDate },
+      {
+        onSuccess: (result) => {
+          setRecentlyLoggedPlanMealId(result.planMealId);
+
+          const nextUnloggedIndex = dashboardState.meals.findIndex((meal, index) => (
+            index > safeMealIndex
+            && meal.planMealId !== result.planMealId
+            && !meal.isLogged
+          ));
+
+          mealLogSuccessTimeoutRef.current = setTimeout(() => {
+            if (nextUnloggedIndex >= 0) {
+              setMealCardIndex(nextUnloggedIndex);
+            }
+            setRecentlyLoggedPlanMealId(null);
+            mealLogSuccessTimeoutRef.current = null;
+          }, 800);
+        },
+        onError: (error) => {
+          clearMealLogSuccessTimeout();
+          setRecentlyLoggedPlanMealId(null);
+          Alert.alert('Unable to log meal', error.message || 'Try adding food manually.');
+        },
+      },
+    );
+  }, [
+    clearMealLogSuccessTimeout,
+    dashboardState.meals,
+    logPlannedMealMutation,
+    safeMealIndex,
+    todayDate,
+  ]);
 
   const handleRunHomeAction = useCallback((action: HomeActionKey) => {
     trackHomeCtaTapped({ cta_id: `home_${action}` });
@@ -353,40 +417,6 @@ export default function HomeScreen() {
       && (new Date(prepCoachState.nextCheckInDate).getTime() - now.getTime()) <= 2 * 24 * 60 * 60 * 1000,
   );
 
-  const momentumItems = [
-    {
-      label: 'Workouts',
-      value: `${homeSnapshot?.kpiStrip.sessionsThisWeek || 0}`,
-      detail: 'sessions this week',
-      icon: 'barbell-outline',
-      tone: 'primary' as const,
-    },
-    {
-      label: 'Meals',
-      value: dashboardState.meals.length ? `${dashboardState.completedMealCount}/${dashboardState.meals.length}` : '0/0',
-      detail: 'planned meals logged',
-      icon: 'restaurant-outline',
-      tone: dashboardState.isMealDayComplete ? 'success' as const : 'accent' as const,
-    },
-    {
-      label: 'Score',
-      value: `${homeSnapshot?.kpiStrip.consistencyScore || 0}%`,
-      detail: '7 day consistency',
-      icon: 'analytics-outline',
-      tone: 'accent' as const,
-    },
-  ];
-
-  const getMomentumSummary = () => {
-    if (dashboardState.isDayWrapped) {
-      return `${dashboardState.tomorrowPreview.title}. Keep tonight light and make tomorrow obvious.`;
-    }
-    if (homeSnapshot?.todayStatus.workoutStatus === 'planned') {
-      return 'The week is still gaining shape. Close the workout and keep meals simple.';
-    }
-    return 'Momentum is built through clean repeats. Stay steady on meals, water, and the next training block.';
-  };
-
   const habitDockActions = [
     {
       label: 'Water',
@@ -413,8 +443,6 @@ export default function HomeScreen() {
       active: Boolean(dashboardState.activeMeal && !dashboardState.isMealDayComplete),
     },
   ];
-
-  const showMealFirst = !dashboardState.isDayWrapped && dashboardState.showMealFirst;
 
   const renderWorkoutCard = (delay: number) =>
     homeSnapshot?.todayStatus.workoutStatus === 'completed' ? (
@@ -443,12 +471,14 @@ export default function HomeScreen() {
         }}
       />
     ) : (
-      <RestDayCard
-        delay={delay}
-        title={restTitle}
-        subtitle={restSubtitle}
-        onPress={() => router.push('/(tabs)/workout')}
-      />
+      <>
+        <RestDayCard
+          delay={delay}
+          title={restTitle}
+          subtitle={restSubtitle}
+          onPress={() => router.push('/(tabs)/workout')}
+        />
+      </>
     );
 
   return (
@@ -456,7 +486,9 @@ export default function HomeScreen() {
       <ScrollView
         style={styles.container}
         contentContainerStyle={[styles.content, { paddingTop: insets.top + s.lg, paddingBottom: 120 }]}
+        showsVerticalScrollIndicator={false}
       >
+
         <MotiView
           from={{ opacity: 0, translateY: -20 }}
           animate={{ opacity: 1, translateY: 0 }}
@@ -496,12 +528,7 @@ export default function HomeScreen() {
           </View>
           <View style={styles.headerButtons}>
             {/* Streak Counter */}
-            <View style={[styles.headerButton, { flexDirection: 'row', gap: 4, width: 'auto', paddingHorizontal: 12, borderRadius: r.pill, borderWidth: 1, borderColor: `${c.primary}20` }]}>
-              <TabBarIcon name="flame" color={c.primary} size={18} />
-              <Text style={{ color: c.primary, fontFamily: ty.mono.family, fontSize: 14 }}>
-                {streak || 0}
-              </Text>
-            </View>
+            <StreakCounter />
 
             <Pressable
               style={[
@@ -523,152 +550,39 @@ export default function HomeScreen() {
           </View>
         </MotiView>
 
-        {/* Macro Dashboard */}
-        {showAlignmentBanner ? (
-          <View style={[styles.section, { marginTop: s.lg, paddingHorizontal: s.lg }]}>
-            <GlassCard intensity="light" animated delay={480}>
-              <View style={styles.bannerRow}>
-                <View style={styles.bannerCopy}>
-                  <Text style={[styles.bannerLabel, { color: c.primary, fontFamily: ty.body.familySemibold }]}>
-                    NEW PERSONALIZATION
-                  </Text>
-                  <Text style={[styles.bannerText, { color: c.text, fontFamily: ty.body.family }]}>
-                    Plans are now strictly aligned to your onboarding settings.
-                  </Text>
-                </View>
-                <Pressable
-                  onPress={dismissAlignmentBanner}
-                  style={[styles.bannerDismiss, { borderColor: c.border, borderRadius: r.pill }]}
-                  accessibilityRole="button"
-                  accessibilityLabel="Dismiss personalization banner"
-                >
-                  <TabBarIcon name="close" color={c.textMuted} size={16} />
-                </Pressable>
-              </View>
-            </GlassCard>
-          </View>
-        ) : null}
+        {/* Level Progress Card */}
+        <View style={[styles.section, { marginTop: s.lg, paddingHorizontal: s.lg }]}>
+          <LevelProgressCard delay={480} />
+        </View>
 
         {/* Macro Dashboard */}
         <View style={[styles.dashboardContainer, { marginTop: s.xl }]}>
-          <MacroDashboard />
+          <MacroDashboard consumed={dailyTotals} />
         </View>
 
         <View style={[styles.section, { marginTop: s.xl, paddingHorizontal: s.lg }]}>
-          <HomeFocusStrip
-            title={dashboardState.focus.title}
-            subtitle={dashboardState.focus.subtitle}
-            icon={dashboardState.focus.icon}
-            ctaLabel={dashboardState.focus.ctaLabel}
-            onPress={() => handleRunHomeAction(dashboardState.focus.action)}
-            secondaryLabel={dashboardState.focus.secondaryLabel}
-            onSecondaryPress={
-              dashboardState.focus.secondaryAction
-                ? () => handleRunHomeAction(dashboardState.focus.secondaryAction!)
-                : undefined
+          {renderWorkoutCard(700)}
+        </View>
+
+        <View style={[styles.section, { marginTop: s.lg, paddingHorizontal: s.lg }]}>
+          <HomeMealPreviewCard
+            meals={dashboardState.meals}
+            activeIndex={safeMealIndex}
+            completedCount={dashboardState.completedMealCount}
+            isDayComplete={dashboardState.isMealDayComplete}
+            loading={isDayPlanLoading}
+            pendingPlanMealId={
+              logPlannedMealMutation.isPending
+                ? logPlannedMealMutation.variables?.planMealId ?? null
+                : null
             }
-            metrics={dashboardState.focus.metrics}
-            tone={dashboardState.focus.tone}
-            delay={560}
-          />
-        </View>
-
-        <View style={[styles.section, { marginTop: s.xl }]}>
-          <Text
-            style={[
-              styles.sectionTitle,
-              {
-                color: c.textMuted,
-                fontFamily: ty.body.familySemibold,
-                fontSize: ty.sizes.sm,
-                letterSpacing: 1.5,
-                marginBottom: s.lg,
-                paddingHorizontal: s.lg,
-              },
-            ]}
-          >
-            THIS WEEK
-          </Text>
-          <WorkoutWeekStrip days={weekStripDays} />
-        </View>
-
-        <View style={[styles.section, { marginTop: s.lg, paddingHorizontal: s.lg }]}>
-          <HomeTomorrowPreviewCard
-            title={dashboardState.tomorrowPreview.title}
-            subtitle={dashboardState.tomorrowPreview.subtitle}
-            icon={dashboardState.tomorrowPreview.icon}
-            onPress={() => handleRunHomeAction('tomorrow')}
-            delay={620}
-          />
-        </View>
-
-        {dashboardState.isDayWrapped ? (
-          <View style={[styles.section, { marginTop: s.xl, paddingHorizontal: s.lg }]}>
-            <HomeMealPreviewCard
-              meals={dashboardState.meals as any}
-              activeIndex={safeMealIndex}
-              completedCount={dashboardState.completedMealCount}
-              isDayComplete={dashboardState.isMealDayComplete}
-              loading={isDayPlanLoading}
-              onPrevious={() => setMealCardIndex((current) => Math.max(0, current - 1))}
-              onNext={() => setMealCardIndex((current) => Math.min(dashboardState.meals.length - 1, current + 1))}
-              onOpenMealDetail={handleOpenActiveMeal}
-              onOpenPlan={() => handleRunHomeAction('meal_plan')}
-              delay={700}
-            />
-          </View>
-        ) : showMealFirst ? (
-          <>
-            <View style={[styles.section, { marginTop: s.xl, paddingHorizontal: s.lg }]}>
-              <HomeMealPreviewCard
-                meals={dashboardState.meals as any}
-                activeIndex={safeMealIndex}
-                completedCount={dashboardState.completedMealCount}
-                isDayComplete={dashboardState.isMealDayComplete}
-                loading={isDayPlanLoading}
-                onPrevious={() => setMealCardIndex((current) => Math.max(0, current - 1))}
-                onNext={() => setMealCardIndex((current) => Math.min(dashboardState.meals.length - 1, current + 1))}
-                onOpenMealDetail={handleOpenActiveMeal}
-                onOpenPlan={() => handleRunHomeAction('meal_plan')}
-                delay={700}
-              />
-            </View>
-
-            <View style={[styles.section, { marginTop: s.lg, paddingHorizontal: s.lg }]}>
-              {renderWorkoutCard(760)}
-            </View>
-          </>
-        ) : (
-          <>
-            <View style={[styles.section, { marginTop: s.xl, paddingHorizontal: s.lg }]}>
-              {renderWorkoutCard(700)}
-            </View>
-
-            <View style={[styles.section, { marginTop: s.lg, paddingHorizontal: s.lg }]}>
-              <HomeMealPreviewCard
-                meals={dashboardState.meals as any}
-                activeIndex={safeMealIndex}
-                completedCount={dashboardState.completedMealCount}
-                isDayComplete={dashboardState.isMealDayComplete}
-                loading={isDayPlanLoading}
-                onPrevious={() => setMealCardIndex((current) => Math.max(0, current - 1))}
-                onNext={() => setMealCardIndex((current) => Math.min(dashboardState.meals.length - 1, current + 1))}
-                onOpenMealDetail={handleOpenActiveMeal}
-                onOpenPlan={() => handleRunHomeAction('meal_plan')}
-                delay={760}
-              />
-            </View>
-          </>
-        )}
-
-        <View style={[styles.section, { marginTop: s.lg, paddingHorizontal: s.lg }]}>
-          <HomeCoachPulseCard
-            title={dashboardState.coachPulse.title}
-            message={dashboardState.coachPulse.message}
-            icon={dashboardState.coachPulse.icon}
-            ctaLabel={dashboardState.coachPulse.ctaLabel}
-            onPress={() => handleRunHomeAction(dashboardState.coachPulse.action)}
-            delay={820}
+            recentlyLoggedPlanMealId={recentlyLoggedPlanMealId}
+            onPrevious={() => setMealCardIndex((current) => Math.max(0, current - 1))}
+            onNext={() => setMealCardIndex((current) => Math.min(dashboardState.meals.length - 1, current + 1))}
+            onOpenMealDetail={handleOpenActiveMeal}
+            onOpenPlan={() => handleRunHomeAction('meal_plan')}
+            onQuickLog={handleQuickLogMeal}
+            delay={760}
           />
         </View>
 
@@ -677,14 +591,6 @@ export default function HomeScreen() {
             title={dashboardState.habitDockLabel}
             actions={habitDockActions}
             delay={860}
-          />
-        </View>
-
-        <View style={[styles.section, { marginTop: s.xl, paddingHorizontal: s.lg }]}>
-          <HomeWeeklyMomentumCard
-            summary={getMomentumSummary()}
-            items={momentumItems}
-            delay={980}
           />
         </View>
       </ScrollView>

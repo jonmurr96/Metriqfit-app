@@ -30,11 +30,13 @@ export const AuthPasswordField = forwardRef<TextInput, AuthPasswordFieldProps>(f
             paddingHorizontal: s.md,
           },
         ]}
+        pointerEvents="box-none"
       >
         <TextInput
           {...inputProps}
           ref={ref}
           secureTextEntry={!showPassword}
+          editable={inputProps.editable !== false}
           style={[
             styles.input,
             {
@@ -51,6 +53,7 @@ export const AuthPasswordField = forwardRef<TextInput, AuthPasswordFieldProps>(f
           accessibilityLabel={showPassword ? 'Hide password' : 'Show password'}
           accessibilityHint="Toggles password visibility"
           hitSlop={8}
+          pointerEvents="auto"
         >
           <Ionicons name={showPassword ? 'eye-off-outline' : 'eye-outline'} size={18} color={c.textMuted} />
         </Pressable>
@@ -77,8 +80,8 @@ const styles = StyleSheet.create({
   },
   input: {
     flex: 1,
-    height: '100%',
     fontSize: 15,
+    paddingVertical: 12,
   },
   helper: {
     fontSize: 12,

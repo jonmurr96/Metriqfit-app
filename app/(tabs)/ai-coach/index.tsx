@@ -53,6 +53,8 @@ import {
   useApplyWorkoutAdaptationRecommendation,
   useSetWorkoutAdaptationRecommendationStatus,
 } from '../../../hooks/useWorkoutAdaptation';
+import { useFeatureAccess } from '../../../hooks/useSubscription';
+import { trackEvent } from '../../../lib/analytics';
 import {
   buildThreadItems,
   createAICoachMemoryItem,
@@ -208,6 +210,7 @@ export default function AICoachScreen() {
   const rejectWorkoutRecommendation = useSetWorkoutAdaptationRecommendationStatus();
   const applyMealPlanBatchChange = useApplyMealPlanBatchChange();
   const revertPrepAdjustment = useRevertPrepAdjustment();
+  const historyAccess = useFeatureAccess('unlimited_history');
 
   const conversationSummaries = threadsQuery.data ?? EMPTY_CONVERSATIONS;
   const latestConversationId = conversationSummaries[0]?.id || null;
@@ -655,7 +658,15 @@ export default function AICoachScreen() {
               <Pressable
                 accessibilityRole="button"
                 accessibilityLabel="Open conversation history"
-                onPress={() => setIsHistoryOpen(true)}
+                onPress={() => {
+                  if (!historyAccess.hasAccess) {
+                    trackEvent('ai_coach_history_gate_viewed', {
+                      source: 'ai_coach_header',
+                      required_tier: historyAccess.upgradeTier,
+                    });
+                  }
+                  setIsHistoryOpen(true);
+                }}
                 style={({ pressed }) => [
                   styles.iconButton,
                   {
@@ -1688,9 +1699,11 @@ export default function AICoachScreen() {
         visible={isHistoryOpen}
         items={conversationSummaries}
         activeConversationId={activeConversationId}
+        locked={!historyAccess.hasAccess}
+        upgradeTier={historyAccess.upgradeTier}
         onClose={() => setIsHistoryOpen(false)}
         onSelect={handleSelectHistory}
-        onClearHistory={handleClearHistory}
+        onClearHistory={historyAccess.hasAccess ? handleClearHistory : undefined}
       />
       <CoachMemorySheet
         visible={isMemoryOpen}

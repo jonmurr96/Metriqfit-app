@@ -25,6 +25,7 @@ import {
   PhotoScanUsage,
 } from '../../../services/foodPhotoService';
 import { createUserFood, searchFoods } from '../../../services/nutritionService';
+import { getTierLabel } from '../../../lib/subscription/plans';
 
 export default function FoodCameraScreen() {
   const { c, s, ty, r } = useTokens();
@@ -81,6 +82,8 @@ export default function FoodCameraScreen() {
   }
 
   if (!foodPhotoAccess.hasAccess) {
+    const upgradeTierLabel = foodPhotoAccess.upgradeTier === 'elite' ? 'Elite' : 'Premium';
+
     return (
       <View style={[styles.container, { backgroundColor: c.bg, paddingTop: insets.top }]}>
         <View style={[styles.header, { paddingHorizontal: s.lg }]}>
@@ -128,7 +131,7 @@ export default function FoodCameraScreen() {
                 marginTop: s.lg,
               }}
             >
-              Elite Feature
+              MetriqFit {upgradeTierLabel}
             </Text>
             <Text
               style={{
@@ -139,7 +142,7 @@ export default function FoodCameraScreen() {
                 marginTop: s.sm,
               }}
             >
-              Scan Meal Photo is available for Elite members.
+              Scan Meal Photo is available on {upgradeTierLabel}. Upgrade for higher daily scan limits and faster nutrition logging.
             </Text>
             <Pressable
               style={[
@@ -159,7 +162,7 @@ export default function FoodCameraScreen() {
                   fontSize: ty.sizes.md,
                 }}
               >
-                Upgrade to Elite
+                View Plans
               </Text>
             </Pressable>
           </View>
@@ -172,10 +175,11 @@ export default function FoodCameraScreen() {
     if (!cameraRef.current || !user) return;
 
     // Check rate limit before capturing
-    if (scanUsage && !scanUsage.isElite && scanUsage.remainingScans <= 0) {
+    if (scanUsage && !scanUsage.isUnlimited && scanUsage.remainingScans <= 0) {
+      const upgradeTierLabel = scanUsage.tier === 'premium' ? 'Elite' : 'Premium';
       Alert.alert(
         'Daily Limit Reached',
-        `Free users can scan ${scanUsage.scansLimit} photos per day. Upgrade to Elite for unlimited scans.`,
+        `${getTierLabel(scanUsage.tier)} includes ${scanUsage.scansLimit} photo scans per day. Upgrade to ${upgradeTierLabel}${upgradeTierLabel === 'Elite' ? ' for unlimited scans.' : ' for more daily scans.'}`,
         [
           { text: 'Cancel', style: 'cancel' },
           { text: 'Upgrade', onPress: () => router.push('/settings/subscription') },
@@ -622,7 +626,7 @@ export default function FoodCameraScreen() {
       </View>
 
       {/* Usage Badge */}
-      {scanUsage && !scanUsage.isElite && (
+      {scanUsage && !scanUsage.isUnlimited && (
         <View
           style={[
             styles.usageBadge,
@@ -692,7 +696,7 @@ export default function FoodCameraScreen() {
               fontSize: ty.sizes.sm,
             }}
           >
-            ✨ Elite Feature
+            ✨ AI-powered logging
           </Text>
         </View>
       </View>

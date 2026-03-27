@@ -42,17 +42,17 @@ export function WorkoutToolsGrid({ items, title = 'TOOLS' }: Props) {
                   intensity="medium"
                   animated
                   style={{
-                    minHeight: 84,
+                    minHeight: 88,
                     borderRadius: r.lg,
                     borderColor: pressed ? `${c.primary}88` : undefined,
                     transform: [{ scale: pressed ? 0.98 : 1 }],
                   }}
                 >
-                  <View style={{ flexDirection: 'row', alignItems: 'center', gap: s.sm, minHeight: 52 }}>
+                  <View style={{ flexDirection: 'row', alignItems: 'center', gap: s.sm, minHeight: 48 }}>
                     <View
                       style={{
-                        width: 32,
-                        height: 32,
+                        width: 34,
+                        height: 34,
                         borderRadius: r.md,
                         alignItems: 'center',
                         justifyContent: 'center',
@@ -71,6 +71,7 @@ export function WorkoutToolsGrid({ items, title = 'TOOLS' }: Props) {
                         fontSize: ty.sizes.sm,
                         lineHeight: 18,
                       }}
+                      numberOfLines={2}
                     >
                       {item.label}
                     </Text>

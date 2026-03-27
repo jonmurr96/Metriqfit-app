@@ -5,11 +5,14 @@ import { useRouter } from 'expo-router';
 import { TabBarIcon } from '../../../components/navigation/TabBarIcon';
 import { PRHighlightCard, ProgressSectionShell, RecordSummaryStrip } from '../../../components/progress';
 import { GlassCard } from '../../../components/premium/GlassCard';
+import { SubscriptionFeatureGate } from '../../../components/premium/SubscriptionFeatureGate';
 import {
+  trackEvent,
   trackProgressCardRendered,
   trackProgressPrHighlightOpened,
   trackProgressViewed,
 } from '../../../lib/analytics';
+import { useFeatureAccess } from '../../../hooks/useSubscription';
 import { useTokens } from '../../../lib/theme';
 import { useProgressRecordSummary } from '../../../hooks/useProgressMetrics';
 
@@ -27,6 +30,7 @@ export default function PersonalRecordsScreen() {
   const { c, s, ty, r } = useTokens();
   const router = useRouter();
   const [range, setRange] = useState<'90d' | 'all'>('90d');
+  const analyticsAccess = useFeatureAccess('advanced_analytics');
   const { data: summary, isLoading } = useProgressRecordSummary(range);
 
   useEffect(() => {
@@ -41,6 +45,16 @@ export default function PersonalRecordsScreen() {
       trackProgressPrHighlightOpened({ exercise: summary.highlight.exercise, range });
     }
   }, [range, summary]);
+
+  useEffect(() => {
+    if (!analyticsAccess.isLoading && !analyticsAccess.hasAccess) {
+      trackEvent('feature_gate_viewed', {
+        feature: 'advanced_analytics',
+        source: 'progress_personal_records',
+        required_tier: analyticsAccess.upgradeTier,
+      });
+    }
+  }, [analyticsAccess.hasAccess, analyticsAccess.isLoading, analyticsAccess.upgradeTier]);
 
   const topLiftItems = useMemo(() => (
     (summary?.topEstimated1Rm || []).map((item) => ({
@@ -60,11 +74,30 @@ export default function PersonalRecordsScreen() {
     }))
   ), [summary?.movementFamilies]);
 
-  if (isLoading && !summary) {
+  if ((isLoading || analyticsAccess.isLoading) && !summary) {
     return (
       <View style={[styles.loadingContainer, { backgroundColor: c.bg }]}>
         <ActivityIndicator size="large" color={c.primary} />
       </View>
+    );
+  }
+
+  if (!analyticsAccess.hasAccess) {
+    return (
+      <ProgressSectionShell
+        title="Personal Records"
+        primarySection="performance"
+        secondarySection="performance"
+        secondaryItem="records"
+      >
+        <View style={{ paddingHorizontal: s.lg, paddingTop: s.lg }}>
+          <SubscriptionFeatureGate
+            requiredTier={analyticsAccess.upgradeTier}
+            title="Personal record tracking is on Premium"
+            subtitle="Upgrade to reopen your PR history, top lifts, and all-time strength milestones."
+          />
+        </View>
+      </ProgressSectionShell>
     );
   }
 

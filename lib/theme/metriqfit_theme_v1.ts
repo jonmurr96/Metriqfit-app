@@ -316,9 +316,45 @@ export const metriqfitTheme = {
     pressed: "rgba(136,230,234,0.12)",
     focusRing: "rgba(136,230,234,0.28)",
   },
-} as const;
+};
 
 export type MetriqfitTheme = typeof metriqfitTheme;
+
+export function createMetriqfitTheme(options?: {
+  highContrast?: boolean;
+  reduceMotion?: boolean;
+}): MetriqfitTheme {
+  const highContrast = Boolean(options?.highContrast);
+  const reduceMotion = Boolean(options?.reduceMotion);
+
+  return {
+    ...metriqfitTheme,
+    colors: {
+      ...metriqfitTheme.colors,
+      textMuted: highContrast ? "#D4D4D8" : metriqfitTheme.colors.textMuted,
+      textSubtle: highContrast ? "#A1A1AA" : metriqfitTheme.colors.textSubtle,
+      border: highContrast ? "#52525B" : metriqfitTheme.colors.border,
+      borderStrong: highContrast ? "rgba(255, 255, 255, 0.35)" : metriqfitTheme.colors.borderStrong,
+      opacity: {
+        ...metriqfitTheme.colors.opacity,
+        primaryMedium: highContrast
+          ? "rgba(45, 212, 191, 0.4)"
+          : metriqfitTheme.colors.opacity.primaryMedium,
+      },
+    },
+    animation: reduceMotion
+      ? {
+          ...metriqfitTheme.animation,
+          duration: {
+            fast: 0,
+            normal: 0,
+            slow: 0,
+            verySlow: 0,
+          },
+        }
+      : metriqfitTheme.animation,
+  };
+}
 
 /**
  * Utility: convert a hex color to rgba string.

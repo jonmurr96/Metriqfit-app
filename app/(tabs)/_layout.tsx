@@ -1,5 +1,5 @@
-import { Redirect, Tabs, useSegments } from 'expo-router';
-import { StyleSheet, View, Pressable, Platform, ActivityIndicator } from 'react-native';
+import { Redirect, Tabs, useSegments, usePathname } from 'expo-router';
+import { StyleSheet, View, Pressable, Platform, ActivityIndicator, Text, Alert } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useState, useCallback, useEffect } from 'react';
 import * as Haptics from 'expo-haptics';
@@ -10,11 +10,16 @@ import { QuickAddSheet } from '../../components/sheets/QuickAddSheet';
 import { trackQuickAddOpen } from '../../lib/analytics';
 import { useAuth, checkOnboardingStatus } from '../../lib/auth';
 
+const tabBarHeight = 84;
+
 export default function TabLayout() {
   const { c } = useTokens();
   const insets = useSafeAreaInsets();
   const segments = useSegments();
   const { user, isAuthenticated, loading: authLoading } = useAuth();
+  const pathname = usePathname();
+  const isAiCoachTab = pathname.includes('ai-coach') || (segments as any[]).includes('ai-coach');
+
   const [isQuickAddOpen, setIsQuickAddOpen] = useState(false);
   const [isCheckingOnboarding, setIsCheckingOnboarding] = useState(true);
   const [redirectTo, setRedirectTo] = useState<string | null>(null);
@@ -100,7 +105,6 @@ export default function TabLayout() {
     return <Redirect href={redirectTo as any} />;
   }
 
-  const tabBarHeight = 70 + insets.bottom;
 
   return (
     <View style={{ flex: 1, backgroundColor: c.bg }}>
@@ -110,7 +114,7 @@ export default function TabLayout() {
           headerShown: false,
           sceneStyle: { backgroundColor: c.bg },
           tabBarActiveTintColor: c.primary,
-          tabBarInactiveTintColor: c.textSubtle,
+          tabBarInactiveTintColor: c.textMuted,
           tabBarShowLabel: true,
           tabBarLabelPosition: 'below-icon',
           tabBarStyle: hideBottomTabChrome
@@ -122,8 +126,8 @@ export default function TabLayout() {
                 borderTopColor: c.border,
                 borderTopWidth: 1,
                 height: tabBarHeight,
-                paddingBottom: insets.bottom + 6,
-                paddingTop: 8,
+                paddingBottom: insets.bottom + 4,
+                paddingTop: 12,
                 paddingHorizontal: 0,
                 position: 'absolute',
                 bottom: 0,
@@ -134,14 +138,14 @@ export default function TabLayout() {
           tabBarLabelStyle: {
             fontFamily: 'Sora_500Medium',
             fontSize: 10,
-            marginTop: 2,
+            marginTop: 4,
             marginBottom: 0,
           },
           tabBarIconStyle: {
-            marginTop: 4,
+            marginTop: 0,
           },
           tabBarItemStyle: {
-            paddingVertical: 0,
+            paddingVertical: 4,
             gap: 2,
           },
         }}
@@ -200,7 +204,7 @@ export default function TabLayout() {
         />
       </Tabs>
 
-      {!hideBottomTabChrome && (
+      {!hideBottomTabChrome && !isAiCoachTab && (
         <View
           style={[
             styles.fabWrapper,

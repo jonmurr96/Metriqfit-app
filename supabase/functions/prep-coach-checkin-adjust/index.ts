@@ -564,7 +564,7 @@ serve(async (req) => {
   const now = Date.now();
   const subscription = subscriptionResult.data;
   const isElite = !!subscription
-    && subscription.plan_type !== "free"
+    && ["elite_monthly", "elite_annual", "elite_lifetime"].includes(subscription.plan_type)
     && (
       (subscription.status === "active" && (!subscription.expires_at || Date.parse(subscription.expires_at) > now))
       || (subscription.status === "trial" && (!subscription.trial_ends_at || Date.parse(subscription.trial_ends_at) > now))

@@ -11,6 +11,10 @@ import { useEntitlementStatus } from '../../hooks/useSubscription';
 import { TabBarIcon } from '../../components/navigation/TabBarIcon';
 import { GlassCard } from '../../components/premium/GlassCard';
 import { BrandMark } from '../../components/branding/BrandMark';
+import { getAppVersionInfo } from '../../lib/appConfig';
+import { formatTime12h } from '../../hooks/useMealTimes';
+import { getPreferredAppearanceLabel } from '../../lib/preferences';
+import { getTierIconName, getTierLabel } from '../../lib/subscription/plans';
 
 export default function SettingsScreen() {
     const { c, s, ty } = useTokens();
@@ -21,13 +25,25 @@ export default function SettingsScreen() {
     const { data: entitlement } = useEntitlementStatus();
 
     // Derive display data from real profile (with safe fallbacks)
-    const isElite = entitlement?.isElite ?? false;
+    const tier = entitlement?.tier ?? 'free';
+    const planLabel = entitlement?.planLabel ?? getTierLabel(tier);
+    const tierIcon = getTierIconName(tier);
     const userName = profile
         ? `${profile.first_name || ''} ${profile.last_name || ''}`.trim() || profile.email || 'User'
         : 'Loading...';
     const memberSince = profile?.created_at
         ? new Date(profile.created_at).toLocaleDateString('en-US', { month: 'short', year: 'numeric' })
         : '...';
+    const versionInfo = getAppVersionInfo();
+    const notificationValue = profile?.notification_preferences
+        ? Object.values(profile.notification_preferences).some(Boolean) ? 'Enabled' : 'Off'
+        : 'Off';
+    const mealScheduleValue = profile?.meal_times?.breakfast
+        ? `${formatTime12h(profile.meal_times.breakfast)} start`
+        : 'Edit Times';
+    const displayValue = profile?.display_preferences
+        ? getPreferredAppearanceLabel(profile.display_preferences)
+        : 'Standard';
 
     const renderSectionHeader = (title: string) => (
         <Text style={[styles.sectionHeader, { color: c.textMuted, fontFamily: ty.body.familySemibold }]}>
@@ -119,9 +135,9 @@ export default function SettingsScreen() {
                             {userName}
                         </Text>
                         <View style={styles.memberBadge}>
-                            <TabBarIcon name={isElite ? "diamond" : "leaf"} color={isElite ? c.primary : c.textMuted} size={12} />
+                            <TabBarIcon name={tierIcon} color={tier === 'free' ? c.textMuted : c.primary} size={12} />
                             <Text style={[styles.memberText, { color: c.textMuted, fontFamily: ty.body.family }]}>
-                                {isElite ? 'MetriqFit Elite' : 'Starter Plan'} • Since {memberSince}
+                                {planLabel} • Since {memberSince}
                             </Text>
                         </View>
                     </View>
@@ -136,7 +152,7 @@ export default function SettingsScreen() {
                     <SettingsItem
                         icon="card-outline"
                         label="Manage Subscription"
-                        value={isElite ? "Active" : "Upgrade"}
+                        value={tier === 'free' ? 'Upgrade' : planLabel}
                         onPress={() => router.push('/settings/subscription')}
                     />
                 </GlassCard>
@@ -152,14 +168,14 @@ export default function SettingsScreen() {
                     <View style={{ height: 1, backgroundColor: c.surface }} />
                     <SettingsItem
                         icon="lock-closed-outline"
-                        label="Security & Privacy"
+                        label="Account & Security"
                         onPress={() => router.push('/settings/security' as any)}
                     />
                     <View style={{ height: 1, backgroundColor: c.surface }} />
                     <SettingsItem
                         icon="notifications-outline"
                         label="Notifications"
-                        value="On"
+                        value={notificationValue}
                         onPress={() => router.push('/settings/notifications' as any)}
                     />
                 </GlassCard>
@@ -170,7 +186,7 @@ export default function SettingsScreen() {
                     <SettingsItem
                         icon="time-outline"
                         label="Meal Schedule"
-                        value="Edit Times"
+                        value={mealScheduleValue}
                         onPress={() => router.push('/settings/meal-times')}
                     />
                     <View style={{ height: 1, backgroundColor: c.surface }} />
@@ -183,8 +199,8 @@ export default function SettingsScreen() {
                     <View style={{ height: 1, backgroundColor: c.surface }} />
                     <SettingsItem
                         icon="moon-outline"
-                        label="Theme"
-                        value="Neon Void"
+                        label="Accessibility & Display"
+                        value={displayValue}
                         onPress={() => router.push('/settings/theme' as any)}
                     />
                 </GlassCard>
@@ -194,7 +210,7 @@ export default function SettingsScreen() {
                 <GlassCard intensity="light" style={{ padding: 0, marginBottom: s.xl, overflow: 'hidden' }}>
                     <SettingsItem
                         icon="help-circle-outline"
-                        label="Help Center"
+                        label="Help & Legal"
                         onPress={() => router.push('/settings/help' as any)}
                     />
                     <View style={{ height: 1, backgroundColor: c.surface }} />
@@ -207,7 +223,7 @@ export default function SettingsScreen() {
                 </GlassCard>
 
                 <Text style={[styles.versionText, { color: c.textSubtle, fontFamily: ty.mono.family }]}>
-                    v3.0.0 (Build 2025.12)
+                    {versionInfo.display}
                 </Text>
 
             </ScrollView>

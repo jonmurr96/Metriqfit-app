@@ -27,7 +27,7 @@ export default function NutritionToolsScreen() {
   React.useEffect(() => {
     if (!snapshot) return;
     for (const card of snapshot.cards) {
-      if (card.accessState === 'elite_required') {
+      if (card.accessState !== 'available') {
         trackNutritionToolGateViewed({ tool: card.id, source: 'nutrition_tools' });
       }
     }

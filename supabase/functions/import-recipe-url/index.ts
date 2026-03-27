@@ -342,11 +342,11 @@ async function isEliteUser(supabase: ReturnType<typeof createClient>, userId: st
     .maybeSingle();
 
   if (!sub) return false;
-  if (sub.plan_type === "free") return false;
-  if (["active", "trial", "grace_period"].includes(sub.status)) return true;
+  if (!["elite_monthly", "elite_annual", "elite_lifetime"].includes(sub.plan_type)) return false;
   if (sub.plan_type === "elite_lifetime") return true;
+  if (!["active", "trial", "grace_period"].includes(sub.status)) return false;
   if (sub.expires_at) return new Date(sub.expires_at) > new Date();
-  return false;
+  return true;
 }
 
 serve(async (req) => {

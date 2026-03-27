@@ -15,6 +15,8 @@ import { buildAICoachDashboardState, type AICoachDashboardBuildInput } from '../
 import { getNutritionTodaySnapshot, type NutritionTodaySnapshot } from './nutritionDashboardService';
 import { getActiveWorkoutPlan } from './planService';
 import { getWorkoutAdaptationRecommendations } from './workoutAdaptationService';
+import { checkEntitlementStatus, getFeatureLimit } from './subscriptionService';
+import { type SubscriptionTier } from '../lib/subscription/plans';
 
 // ============================================================================
 // Types
@@ -26,8 +28,9 @@ export type AIUsageDaily = Database['public']['Tables']['ai_usage_daily']['Row']
 export interface RateLimitStatus {
   canSendMessage: boolean;
   messagesUsed: number;
-  messagesLimit: number; // -1 for unlimited (Elite)
+  messagesLimit: number; // -1 for unlimited
   resetTime: string; // ISO timestamp of when limit resets
+  tier?: SubscriptionTier;
 }
 
 export interface CoachContext {
@@ -1131,7 +1134,7 @@ export async function sendMessage(
   const rateLimitStatus = await checkRateLimit(userId);
   if (!rateLimitStatus.canSendMessage) {
     throw new Error(
-      `Daily message limit reached (${rateLimitStatus.messagesLimit}). Upgrade to Elite for unlimited messages.`,
+      `Daily message limit reached (${rateLimitStatus.messagesLimit}). Upgrade to ${rateLimitStatus.tier === 'premium' ? 'Elite' : 'Premium'} for ${rateLimitStatus.tier === 'premium' ? 'unlimited messages' : 'more coaching access'}.`,
     );
   }
 
@@ -1409,18 +1412,19 @@ export async function getSettingsSnapshot(userId: string): Promise<{
 
 export async function checkRateLimit(userId: string, isElite = false): Promise<RateLimitStatus> {
   const today = new Date().toISOString().split('T')[0];
-  const effectiveElite = isElite || await getIsEliteSubscriber(userId);
+  const entitlement = await checkEntitlementStatus(userId);
+  const tier = isElite ? 'elite' : entitlement.tier;
+  const messageLimit = getFeatureLimit('ai_messages', tier);
 
-  if (effectiveElite) {
+  if (!Number.isFinite(messageLimit)) {
     return {
       canSendMessage: true,
       messagesUsed: 0,
       messagesLimit: -1,
       resetTime: new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString(),
+      tier,
     };
   }
-
-  const FREE_LIMIT = 10;
   const { data: usage } = await supabase
     .from('ai_usage_daily')
     .select('coach_messages')
@@ -1434,35 +1438,12 @@ export async function checkRateLimit(userId: string, isElite = false): Promise<R
   resetTime.setHours(24, 0, 0, 0);
 
   return {
-    canSendMessage: messagesUsed < FREE_LIMIT,
+    canSendMessage: messagesUsed < messageLimit,
     messagesUsed,
-    messagesLimit: FREE_LIMIT,
+    messagesLimit: messageLimit,
     resetTime: resetTime.toISOString(),
+    tier,
   };
-}
-
-async function getIsEliteSubscriber(userId: string): Promise<boolean> {
-  const { data, error } = await supabase
-    .from('subscriptions')
-    .select('plan_type,status,expires_at,trial_ends_at')
-    .eq('user_id', userId)
-    .in('status', ['active', 'trial', 'grace_period'])
-    .order('updated_at', { ascending: false })
-    .limit(1)
-    .maybeSingle();
-
-  if (error || !data) return false;
-  if (data.plan_type === 'free') return false;
-
-  const now = Date.now();
-  const expiresAt = data.expires_at ? Date.parse(data.expires_at) : null;
-  const trialEndsAt = data.trial_ends_at ? Date.parse(data.trial_ends_at) : null;
-
-  if (data.status === 'active') return !expiresAt || expiresAt > now;
-  if (data.status === 'trial') return !trialEndsAt || trialEndsAt > now;
-  if (data.status === 'grace_period') return !expiresAt || expiresAt > now;
-
-  return false;
 }
 
 export async function getDailyUsage(userId: string, date?: string): Promise<AIUsageDaily | null> {

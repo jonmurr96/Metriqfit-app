@@ -43,3 +43,8 @@ Thumbs.db
 
 # Debug
 *.log
+
+# Exercise Assets (large files - download via script)
+assets/exercises/*.gif
+!assets/exercises/README.md
+!assets/exercises/exercises.csv

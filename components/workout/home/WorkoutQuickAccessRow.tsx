@@ -21,17 +21,18 @@ export function WorkoutQuickAccessRow({ items, delayBase = 120, size = 72 }: Pro
   const { s } = useTokens();
 
   return (
-    <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start', gap: s.sm }}>
+    <View style={{ flexDirection: 'row', alignItems: 'flex-start', gap: s.xs }}>
       {items.map((item, index) => (
-        <RingIconButton
-          key={item.label}
-          icon={item.icon}
-          label={item.label}
-          onPress={item.onPress}
-          size={size}
-          delay={delayBase + index * 70}
-          active={item.active}
-        />
+        <View key={item.label} style={{ flex: 1, alignItems: 'center' }}>
+          <RingIconButton
+            icon={item.icon}
+            label={item.label}
+            onPress={item.onPress}
+            size={size}
+            delay={delayBase + index * 70}
+            active={item.active}
+          />
+        </View>
       ))}
     </View>
   );

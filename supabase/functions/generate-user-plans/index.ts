@@ -1123,7 +1123,15 @@ function scoreTemplateForContext(
       score += 30;
       rationale.push("Matched preferred split family.");
     } else {
-      score -= 4;
+      // 🔧 FIX: Increase penalty for split mismatch when explicitly requested
+      // If user explicitly requested a split family (via opts.programFamilyPreference),
+      // apply a much stronger penalty to ensure we respect their preference
+      const explicitRequest = !!opts.programFamilyPreference;
+      const penalty = explicitRequest ? -50 : -4;
+      score += penalty;
+      if (explicitRequest) {
+        rationale.push(`Strong penalty for split mismatch (requested: ${requestedFamily}, template: ${familyKey}).`);
+      }
     }
   }
 
@@ -1144,6 +1152,10 @@ function scoreTemplateForContext(
     if (progressionModel.includes(requestedProgression)) {
       score += 10;
       rationale.push("Matched progression preference.");
+    } else if (opts.progressionPreference) {
+      // 🔧 FIX: Apply penalty when explicitly requested progression doesn't match
+      score -= 25;
+      rationale.push(`Penalty for progression mismatch (requested: ${requestedProgression}, template: ${progressionModel}).`);
     }
   }
 
@@ -1171,6 +1183,17 @@ async function chooseTemplateFromCatalog(
 ): Promise<{ template: SelectedTemplate | null; warnings: string[] }> {
   const warnings: string[] = [];
   const targetDays = context.onboarding.training_days_per_week;
+
+  // 🔍 DIAGNOSTIC: Log template selection criteria
+  console.log('🔍 Template selection criteria:', {
+    targetDays,
+    preferredSplit: context.onboarding.preferred_split_family,
+    programFamilyPref: opts.programFamilyPreference,
+    progression: opts.progressionPreference,
+    trainingStyles: opts.trainingStylePreferences,
+    strictDaysMatch: opts.strictDaysMatch,
+    excludeFamily: opts.excludeFamilyKey,
+  });
 
   let query = supabase
     .from("workout_program_templates_v2")
@@ -1227,6 +1250,22 @@ async function chooseTemplateFromCatalog(
     warnings.push("Template fit score below threshold; falling back to legacy generator.");
     return { template: null, warnings };
   }
+
+  // 🔍 DIAGNOSTIC: Log selected template
+  console.log('🔍 Selected template:', {
+    templateId: selected.template.id,
+    templateName: selected.template.name,
+    familyKey: selected.template.family?.external_key,
+    daysPerWeek: selected.template.days_per_week,
+    progressionModel: selected.template.progression_model,
+    score: selected.score,
+    rationale: selected.rationale,
+    topThree: ranked.slice(0, 3).map(r => ({
+      name: r.template.name,
+      family: r.template.family?.external_key,
+      score: r.score,
+    })),
+  });
 
   const { data: fullTemplate, error: fullError } = await supabase
     .from("workout_program_templates_v2")
@@ -3762,6 +3801,20 @@ serve(async (req) => {
     const workoutRegeneration = generationMode === "regenerate" && planType !== "nutrition"
       ? (body.workout_regeneration || null)
       : null;
+
+    // 🔍 DIAGNOSTIC: Log regeneration request
+    if (workoutRegeneration) {
+      console.log('🔍 Regeneration request received:', {
+        has_workout_regen: !!workoutRegeneration,
+        days_per_week: workoutRegeneration.days_per_week_override,
+        split_family: workoutRegeneration.preferred_split_family,
+        progression: workoutRegeneration.progression_preference,
+        days_off: workoutRegeneration.preferred_days_off,
+        goal_emphasis: workoutRegeneration.goal_emphasis,
+        keep_current_split: workoutRegeneration.keep_current_split,
+        start_fresh: workoutRegeneration.start_fresh,
+      });
+    }
     const nutritionRegeneration = generationMode === "regenerate" && planType !== "workout"
       ? (body.nutrition_regeneration || null)
       : null;
@@ -3853,6 +3906,18 @@ serve(async (req) => {
         workoutRegeneration,
         currentPlanContext,
       );
+
+      // 🔍 DIAGNOSTIC: Log context after regeneration
+      if (workoutRegeneration) {
+        console.log('🔍 Context after applying regeneration:', {
+          training_days: workoutContext.onboarding.training_days_per_week,
+          split_family: workoutContext.onboarding.preferred_split_family,
+          progression: workoutContext.onboarding.progression_preference,
+          days_off: workoutContext.onboarding.preferred_days_off,
+          session_emphasis: workoutContext.onboarding.session_emphasis,
+          equipment: workoutContext.onboarding.equipment_access,
+        });
+      }
       const nutritionContext = applyNutritionRegenerationToContext(
         workoutContext,
         nutritionRegeneration,
@@ -3870,6 +3935,17 @@ serve(async (req) => {
       const effectiveProgressionPreference =
         workoutRegeneration?.progression_preference
         || progressionPreference;
+
+      // 🔍 DIAGNOSTIC: Log effective preferences for template selection
+      if (workoutRegeneration) {
+        console.log('🔍 Effective preferences for template selection:', {
+          programFamily: effectiveProgramFamilyPreference,
+          progression: effectiveProgressionPreference,
+          trainingStyles: trainingStylePreferences,
+          splitOverride: body.split_override,
+          currentPlanFamily: currentPlanContext?.familyKey,
+        });
+      }
 
       let workoutResult:
         | Awaited<ReturnType<typeof storeWorkoutPlan>>

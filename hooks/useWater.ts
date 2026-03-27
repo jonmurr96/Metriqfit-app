@@ -14,6 +14,7 @@ import {
   deleteWaterLog,
   getWaterHistory,
 } from '../services/waterService';
+import type { XPAwardResult } from '../types/gamification';
 
 // Query Keys
 export const waterKeys = {

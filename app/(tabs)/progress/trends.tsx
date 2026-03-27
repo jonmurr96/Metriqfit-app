@@ -8,11 +8,14 @@ import {
   WeeklyTrendChart,
 } from '../../../components/progress';
 import { GlassCard } from '../../../components/premium/GlassCard';
+import { SubscriptionFeatureGate } from '../../../components/premium/SubscriptionFeatureGate';
 import {
+  trackEvent,
   trackProgressCardRendered,
   trackProgressTrendsRangeChanged,
   trackProgressViewed,
 } from '../../../lib/analytics';
+import { useFeatureAccess } from '../../../hooks/useSubscription';
 import { useTokens } from '../../../lib/theme';
 import { useProgressTrends } from '../../../hooks/useProgressMetrics';
 import type { ProgressRangeOption } from '../../../services/progressMetricsService';
@@ -28,6 +31,7 @@ function formatDirection(value: number | null) {
 export default function TrendsScreen() {
   const { c, s, ty } = useTokens();
   const [range, setRange] = useState<ProgressRangeOption>('1M');
+  const analyticsAccess = useFeatureAccess('advanced_analytics');
 
   const { data: snapshot, isLoading } = useProgressTrends(range);
 
@@ -41,6 +45,16 @@ export default function TrendsScreen() {
       trackProgressCardRendered({ card_id: cardId, range });
     });
   }, [range, snapshot]);
+
+  useEffect(() => {
+    if (!analyticsAccess.isLoading && !analyticsAccess.hasAccess) {
+      trackEvent('feature_gate_viewed', {
+        feature: 'advanced_analytics',
+        source: 'progress_trends',
+        required_tier: analyticsAccess.upgradeTier,
+      });
+    }
+  }, [analyticsAccess.hasAccess, analyticsAccess.isLoading, analyticsAccess.upgradeTier]);
 
   const handleRangeChange = (next: ProgressRangeOption) => {
     setRange(next);
@@ -56,11 +70,30 @@ export default function TrendsScreen() {
     }))
   ), [snapshot?.prEvents]);
 
-  if (isLoading && !snapshot) {
+  if ((isLoading || analyticsAccess.isLoading) && !snapshot) {
     return (
       <View style={[styles.loadingContainer, { backgroundColor: c.bg }]}>
         <ActivityIndicator size="large" color={c.primary} />
       </View>
+    );
+  }
+
+  if (!analyticsAccess.hasAccess) {
+    return (
+      <ProgressSectionShell
+        title="Trends"
+        primarySection="performance"
+        secondarySection="performance"
+        secondaryItem="trends"
+      >
+        <View style={{ paddingHorizontal: s.lg, paddingTop: s.lg }}>
+          <SubscriptionFeatureGate
+            requiredTier={analyticsAccess.upgradeTier}
+            title="Trend analysis is on Premium"
+            subtitle="Upgrade to unlock longer-range performance, adherence, and body trend views."
+          />
+        </View>
+      </ProgressSectionShell>
     );
   }
 

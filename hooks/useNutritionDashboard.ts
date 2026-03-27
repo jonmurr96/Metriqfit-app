@@ -15,8 +15,10 @@ export const nutritionDashboardKeys = {
   tools: (userId: string) => [...nutritionDashboardKeys.all, 'tools', userId] as const,
 };
 
+import { toLocalDateKey } from '../lib/home/dashboard-state';
+
 function resolveDate(date?: string) {
-  return date || new Date().toISOString().split('T')[0];
+  return date || toLocalDateKey(new Date());
 }
 
 export function useNutritionTodaySnapshot(date?: string) {

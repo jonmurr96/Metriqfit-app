@@ -1,100 +1,95 @@
-import React, { useEffect, useMemo, useState } from 'react';
-import { Pressable, StyleSheet, Switch, Text, View } from 'react-native';
-import AsyncStorage from '@react-native-async-storage/async-storage';
+import React from 'react';
+import { Alert, Pressable, StyleSheet, Switch, Text, View } from 'react-native';
 import { useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { useTokens } from '../../lib/theme';
-import { useAuth } from '../../lib/auth';
 import { TabBarIcon } from '../../components/navigation/TabBarIcon';
+import { useProfile, useUpdateProfile } from '../../hooks/useUser';
+import { getPreferredAppearanceLabel } from '../../lib/preferences';
 
-type ThemePrefs = {
-  reduceMotion: boolean;
-  highContrast: boolean;
-};
-
-const DEFAULT_PREFS: ThemePrefs = {
-  reduceMotion: false,
-  highContrast: false,
-};
-
-export default function ThemeSettingsScreen() {
+export default function AccessibilityDisplayScreen() {
   const { c, s, ty } = useTokens();
   const router = useRouter();
   const insets = useSafeAreaInsets();
-  const { user } = useAuth();
+  const { data: profile } = useProfile();
+  const updateProfileMutation = useUpdateProfile();
 
-  const [prefs, setPrefs] = useState<ThemePrefs>(DEFAULT_PREFS);
-  const storageKey = useMemo(() => `settings:theme:${user?.id ?? 'guest'}`, [user?.id]);
+  const prefs = profile?.display_preferences;
 
-  useEffect(() => {
-    let mounted = true;
+  const updatePreference = async (key: 'reduceMotion' | 'highContrast', value: boolean) => {
+    if (!prefs) return;
 
-    const load = async () => {
-      try {
-        const raw = await AsyncStorage.getItem(storageKey);
-        if (!mounted || !raw) return;
-        const parsed = JSON.parse(raw) as Partial<ThemePrefs>;
-        setPrefs({ ...DEFAULT_PREFS, ...parsed });
-      } catch {
-        // Keep defaults when no stored prefs exist.
-      }
-    };
-
-    load();
-    return () => {
-      mounted = false;
-    };
-  }, [storageKey]);
-
-  const updatePref = async (key: keyof ThemePrefs, value: boolean) => {
-    const next = { ...prefs, [key]: value };
-    setPrefs(next);
-    await AsyncStorage.setItem(storageKey, JSON.stringify(next));
+    try {
+      await updateProfileMutation.mutateAsync({
+        display_preferences: {
+          ...prefs,
+          [key]: value,
+          preferredAppearanceLabel: getPreferredAppearanceLabel({
+            ...prefs,
+            [key]: value,
+          }),
+        },
+      });
+    } catch (error: any) {
+      Alert.alert('Save failed', error?.message || 'Could not update display preferences.');
+    }
   };
 
   return (
-    <View style={[styles.container, { backgroundColor: c.bg, paddingTop: insets.top + s.md }]}> 
+    <View style={[styles.container, { backgroundColor: c.bg, paddingTop: insets.top + s.md }]}>
       <View style={styles.headerRow}>
         <Pressable onPress={() => router.back()} style={styles.backButton}>
           <TabBarIcon name="chevron-back" color={c.text} size={22} />
         </Pressable>
-        <Text style={{ color: c.text, fontFamily: ty.heading.familySemibold, fontSize: 18 }}>Theme</Text>
+        <Text style={{ color: c.text, fontFamily: ty.heading.familySemibold, fontSize: 18 }}>
+          Accessibility & Display
+        </Text>
         <View style={styles.backButton} />
       </View>
 
       <View style={{ paddingHorizontal: s.lg, marginTop: s.xl, gap: s.md }}>
-        <View style={[styles.card, { borderColor: c.border, backgroundColor: c.surface }]}> 
-          <Text style={{ color: c.text, fontFamily: ty.body.familySemibold, fontSize: 15 }}>Current theme</Text>
-          <Text style={{ color: c.primary, fontFamily: ty.body.familySemibold, marginTop: 6 }}>Neon Void</Text>
+        <View style={[styles.card, { borderColor: c.border, backgroundColor: c.surface }]}>
+          <Text style={{ color: c.text, fontFamily: ty.body.familySemibold, fontSize: 15 }}>
+            Current mode
+          </Text>
+          <Text style={{ color: c.primary, fontFamily: ty.body.familySemibold, marginTop: 6 }}>
+            {prefs?.preferredAppearanceLabel || 'Standard'}
+          </Text>
           <Text style={{ color: c.textMuted, fontFamily: ty.body.family, marginTop: 6, lineHeight: 20 }}>
-            Additional theme packs are planned. This screen controls readability preferences today.
+            These controls affect app motion and contrast globally. Cosmetic theme packs are not exposed in production.
           </Text>
         </View>
 
-        <View style={[styles.switchRow, { borderColor: c.border, backgroundColor: c.surface }]}> 
+        <View style={[styles.switchRow, { borderColor: c.border, backgroundColor: c.surface }]}>
           <View style={{ flex: 1 }}>
             <Text style={{ color: c.text, fontFamily: ty.body.familySemibold }}>Reduce motion</Text>
-            <Text style={{ color: c.textMuted, fontFamily: ty.body.family, marginTop: 4 }}>Use calmer transitions where available</Text>
+            <Text style={{ color: c.textMuted, fontFamily: ty.body.family, marginTop: 4 }}>
+              Turns off screen transition animations and uses calmer movement.
+            </Text>
           </View>
           <Switch
-            value={prefs.reduceMotion}
-            onValueChange={(next) => updatePref('reduceMotion', next)}
+            value={Boolean(prefs?.reduceMotion)}
+            onValueChange={(next) => updatePreference('reduceMotion', next)}
             trackColor={{ false: c.surface2, true: `${c.primary}70` }}
-            thumbColor={prefs.reduceMotion ? c.primary : '#9ca3af'}
+            thumbColor={prefs?.reduceMotion ? c.primary : '#9ca3af'}
+            disabled={updateProfileMutation.isPending}
           />
         </View>
 
-        <View style={[styles.switchRow, { borderColor: c.border, backgroundColor: c.surface }]}> 
+        <View style={[styles.switchRow, { borderColor: c.border, backgroundColor: c.surface }]}>
           <View style={{ flex: 1 }}>
-            <Text style={{ color: c.text, fontFamily: ty.body.familySemibold }}>High contrast accents</Text>
-            <Text style={{ color: c.textMuted, fontFamily: ty.body.family, marginTop: 4 }}>Increase visual emphasis for key controls</Text>
+            <Text style={{ color: c.text, fontFamily: ty.body.familySemibold }}>High contrast</Text>
+            <Text style={{ color: c.textMuted, fontFamily: ty.body.family, marginTop: 4 }}>
+              Increases border and text contrast for key surfaces and controls.
+            </Text>
           </View>
           <Switch
-            value={prefs.highContrast}
-            onValueChange={(next) => updatePref('highContrast', next)}
+            value={Boolean(prefs?.highContrast)}
+            onValueChange={(next) => updatePreference('highContrast', next)}
             trackColor={{ false: c.surface2, true: `${c.primary}70` }}
-            thumbColor={prefs.highContrast ? c.primary : '#9ca3af'}
+            thumbColor={prefs?.highContrast ? c.primary : '#9ca3af'}
+            disabled={updateProfileMutation.isPending}
           />
         </View>
       </View>

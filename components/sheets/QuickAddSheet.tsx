@@ -42,21 +42,30 @@ export function QuickAddSheet({ isVisible, onClose }: QuickAddSheetProps) {
   const translateY = useRef(new Animated.Value(SHEET_HEIGHT)).current;
   const backdropOpacity = useRef(new Animated.Value(0)).current;
 
-  const getEliteActionAccess = useCallback((actionId: string) => {
+  const getActionAccess = useCallback((actionId: string) => {
     if (actionId === 'scan_meal_photo') {
       return {
         hasAccess: photoScanAccess.hasAccess,
         isLoading: photoScanAccess.isLoading,
+        upgradeTier: photoScanAccess.upgradeTier,
       };
     }
     if (actionId === 'scan_barcode') {
       return {
         hasAccess: barcodeScanAccess.hasAccess,
         isLoading: barcodeScanAccess.isLoading,
+        upgradeTier: barcodeScanAccess.upgradeTier,
       };
     }
-    return { hasAccess: true, isLoading: false };
-  }, [photoScanAccess.hasAccess, photoScanAccess.isLoading, barcodeScanAccess.hasAccess, barcodeScanAccess.isLoading]);
+    return { hasAccess: true, isLoading: false, upgradeTier: null };
+  }, [
+    barcodeScanAccess.hasAccess,
+    barcodeScanAccess.isLoading,
+    barcodeScanAccess.upgradeTier,
+    photoScanAccess.hasAccess,
+    photoScanAccess.isLoading,
+    photoScanAccess.upgradeTier,
+  ]);
 
   useEffect(() => {
     if (__DEV__) {
@@ -110,16 +119,19 @@ export function QuickAddSheet({ isVisible, onClose }: QuickAddSheetProps) {
 
   const handleActionPress = useCallback(async (action: typeof QUICK_ADD_ACTIONS[number]) => {
     try {
-      const access = getEliteActionAccess(action.id);
+      const access = getActionAccess(action.id);
+      const requiresPaidTier = action.requiredTier && action.requiredTier !== 'free';
 
-      if (action.isElite && access.isLoading) {
+      if (requiresPaidTier && access.isLoading) {
         return;
       }
 
-      if (action.isElite && !access.hasAccess) {
+      if (requiresPaidTier && !access.hasAccess) {
+        const upgradeTier = access.upgradeTier || action.requiredTier;
+        const tierLabel = upgradeTier === 'elite' ? 'Elite' : 'Premium';
         Alert.alert(
-          'MetriqFit Elite Required',
-          `${action.label} is available for Elite members. Upgrade to unlock this feature.`,
+          `MetriqFit ${tierLabel} Required`,
+          `${action.label} is available on ${tierLabel}. Upgrade to unlock this feature.`,
           [
             { text: 'Not now', style: 'cancel' },
             { text: 'Upgrade', onPress: () => router.push('/settings/subscription') },
@@ -147,7 +159,7 @@ export function QuickAddSheet({ isVisible, onClose }: QuickAddSheetProps) {
       console.error('[QuickAdd] Action failed:', error);
       onClose(); // Ensure we close even if tracking fails
     }
-  }, [getEliteActionAccess, onClose, router]);
+  }, [getActionAccess, onClose, router]);
 
   if (!isVisible) return null;
 
@@ -218,8 +230,14 @@ export function QuickAddSheet({ isVisible, onClose }: QuickAddSheetProps) {
         <View style={[styles.actionsList, { paddingHorizontal: s.lg }]}>
           {QUICK_ADD_ACTIONS.map((action, index) => (
             (() => {
-              const access = getEliteActionAccess(action.id);
-              const isDisabled = action.isElite && access.isLoading;
+              const access = getActionAccess(action.id);
+              const requiresPaidTier = action.requiredTier && action.requiredTier !== 'free';
+              const isDisabled = requiresPaidTier && access.isLoading;
+              const badgeLabel = action.requiredTier === 'elite'
+                ? 'ELITE'
+                : action.requiredTier === 'premium'
+                  ? 'PREMIUM'
+                  : null;
 
               return (
                 <Pressable
@@ -276,7 +294,7 @@ export function QuickAddSheet({ isVisible, onClose }: QuickAddSheetProps) {
                       {action.description}
                     </Text>
                   </View>
-                  {action.isElite && (
+                  {badgeLabel ? (
                     <View
                       style={[
                         styles.eliteBadge,
@@ -293,10 +311,10 @@ export function QuickAddSheet({ isVisible, onClose }: QuickAddSheetProps) {
                           }
                         ]}
                       >
-                        ELITE
+                        {badgeLabel}
                       </Text>
                     </View>
-                  )}
+                  ) : null}
                   <TabBarIcon name="chevron-forward" color={c.textSubtle} size={18} />
                 </Pressable>
               );

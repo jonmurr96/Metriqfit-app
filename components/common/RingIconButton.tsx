@@ -43,6 +43,7 @@ export function RingIconButton({
                 onPress={onPress}
                 style={({ pressed }) => [
                     styles.pressable,
+                    { minWidth: size + 12 },
                     { transform: [{ scale: pressed ? 0.92 : 1 }] },
                 ]}
             >
@@ -87,8 +88,10 @@ export function RingIconButton({
                                     color: active ? c.primary : c.textMuted,
                                     fontFamily: ty.body.familySemibold,
                                     fontSize: 10,
+                                    lineHeight: 13,
                                     letterSpacing: 1.2,
                                     marginTop: s.sm,
+                                    maxWidth: size + 16,
                                 },
                             ]}
                         >

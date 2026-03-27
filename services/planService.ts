@@ -22,6 +22,9 @@ import {
   isPreviewNutritionPlanRecord,
   normalizePreviewNutritionPlanName,
 } from '../lib/nutrition/plan-lifecycle';
+import { getLocalDateKey } from '../lib/nutrition/meal-slots';
+import { getFeatureLimit } from './subscriptionService';
+import { getSubscriptionTier, getTierLabel, type SubscriptionTier } from '../lib/subscription/plans';
 
 type WorkoutPlan = Database['public']['Tables']['user_workout_plans']['Row'];
 type WorkoutPlanDay = Database['public']['Tables']['user_workout_plan_days']['Row'];
@@ -102,6 +105,8 @@ export interface NutritionPlanWithDetails extends NutritionPlan {
 export interface PlanRegenerationUsage {
   regenerationsToday: number;
   regenerationsLimit: number;
+  tier: SubscriptionTier;
+  isUnlimited: boolean;
   isElite: boolean;
   remainingRegenerations: number;
 }
@@ -780,7 +785,7 @@ function getMealMappingReadiness(
 }
 
 function todayDate() {
-  return new Date().toISOString().split('T')[0];
+  return getLocalDateKey();
 }
 
 function dateRange(days: number) {
@@ -788,8 +793,8 @@ function dateRange(days: number) {
   const start = new Date();
   start.setDate(end.getDate() - Math.max(0, days - 1));
   return {
-    from: start.toISOString().split('T')[0],
-    to: end.toISOString().split('T')[0],
+    from: getLocalDateKey(start),
+    to: getLocalDateKey(end),
   };
 }
 
@@ -1608,23 +1613,38 @@ export async function getPlanRegenerationUsage(
     .order('updated_at', { ascending: false })
     .maybeSingle();
 
-  const isElite = !!subscription && subscription.plan_type !== 'free';
-  const regenerationsLimit = isElite ? 3 : 1;
+  const tier = getSubscriptionTier(subscription?.plan_type);
+  const regenerationsLimit = getFeatureLimit('plan_regenerations', tier);
+  const isUnlimited = !Number.isFinite(regenerationsLimit);
 
-  const oneHourAgo = new Date(Date.now() - 60 * 60 * 1000).toISOString();
+  if (isUnlimited) {
+    return {
+      regenerationsToday: 0,
+      regenerationsLimit: -1,
+      tier,
+      isUnlimited: true,
+      isElite: tier === 'elite',
+      remainingRegenerations: -1,
+    };
+  }
+
+  const todayStart = new Date();
+  todayStart.setHours(0, 0, 0, 0);
 
   const { data: recentRuns } = await supabase
     .from('plan_generation_runs')
     .select('id')
     .eq('user_id', userId)
-    .gte('created_at', oneHourAgo);
+    .gte('created_at', todayStart.toISOString());
 
   const regenerationsToday = recentRuns?.length || 0;
 
   return {
     regenerationsToday,
-    regenerationsLimit,
-    isElite,
+    regenerationsLimit: Number(regenerationsLimit),
+    tier,
+    isUnlimited: false,
+    isElite: tier === 'elite',
     remainingRegenerations: Math.max(0, regenerationsLimit - regenerationsToday),
   };
 }
@@ -1648,7 +1668,7 @@ export async function regeneratePlans(
   if (!canRegenerate) {
     const usage = await getPlanRegenerationUsage(userId);
     throw new Error(
-      `Plan regeneration limit reached (${usage.regenerationsLimit} per hour for ${usage.isElite ? 'Elite' : 'free'} users). Please try again later.`,
+      `Plan regeneration limit reached (${usage.regenerationsLimit} per day on ${getTierLabel(usage.tier)}). Please try again later.`,
     );
   }
 
@@ -1854,7 +1874,7 @@ export async function triggerPlanGeneration(
   if (!canRegenerate) {
     const usage = await getPlanRegenerationUsage(userId);
     throw new Error(
-      `Plan regeneration limit reached (${usage.regenerationsLimit} per hour for ${usage.isElite ? 'Elite' : 'free'} users). Please try again later.`,
+      `Plan regeneration limit reached (${usage.regenerationsLimit} per day on ${getTierLabel(usage.tier)}). Please try again later.`,
     );
   }
 

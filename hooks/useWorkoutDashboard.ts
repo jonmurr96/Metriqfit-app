@@ -1,3 +1,5 @@
+import { useMemo } from 'react';
+
 import {
   useActiveWorkoutPlan,
   useLatestConsistency,
@@ -16,6 +18,18 @@ import {
   type WorkoutDashboardScheduleEntry,
   type WorkoutDashboardState,
 } from '../lib/workout/dashboard-state';
+import {
+  buildWorkoutCalendarDayState,
+  buildWorkoutCalendarFallbackContext,
+} from '../lib/workout/calendar-status';
+
+function humanizeProgramMeta(value?: string | null) {
+  if (!value) {
+    return null;
+  }
+
+  return value.replaceAll('_', ' ').replace(/\b\w/g, (match) => match.toUpperCase());
+}
 
 function toLocalDateKey(date: Date) {
   const year = date.getFullYear();
@@ -48,11 +62,19 @@ function mapScheduleEntry(entry: WorkoutScheduleEntry | null | undefined): Worko
 function mapActiveSession(session: WorkoutSessionWithDetails | null | undefined): WorkoutDashboardActiveSession | null {
   if (!session) return null;
 
+  const resumableExercises = (session.exercises || []).filter((exercise) => (
+    !!exercise?.id && !!exercise?.exercise?.id
+  ));
+
+  if (resumableExercises.length === 0) {
+    return null;
+  }
+
   return {
     id: session.id,
     name: session.name || 'Active session',
     startedAt: session.started_at,
-    exercises: (session.exercises || []).map((exercise) => ({
+    exercises: resumableExercises.map((exercise) => ({
       id: exercise.id,
       name: exercise.exercise?.name || 'Exercise',
       loggedSetCount: (exercise.sets || []).filter((set) => !set.is_warmup).length,
@@ -94,7 +116,9 @@ export type WorkoutDashboardWeekDay = {
   isToday: boolean;
   isSelected: boolean;
   sessionType: WorkoutScheduleEntry['session_type'] | null;
-  status: WorkoutScheduleEntry['status'] | null;
+  scheduleStatus: WorkoutScheduleEntry['status'] | null;
+  calendarStatus: 'completed' | 'missed' | 'rest' | 'scheduled_future' | 'rescheduled' | 'none';
+  isWorkoutExpected: boolean;
   planDayId: string | null;
 };
 
@@ -148,6 +172,26 @@ export function useWorkoutDashboard(): WorkoutDashboardResult {
   const { data: latestConsistency, isLoading: isConsistencyLoading, isFetching: isConsistencyFetching } = useLatestConsistency();
   const { data: history = [], isLoading: isHistoryLoading, isFetching: isHistoryFetching } = useWorkoutHistory(8);
   const { data: weeklyStats, isLoading: isStatsLoading, isFetching: isStatsFetching } = useWorkoutStats(weekStartKey, todayKey);
+  const calendarFallbackContext = buildWorkoutCalendarFallbackContext(activePlan);
+  const activePlanLabel = useMemo(() => {
+    const meta = activePlan?.programMeta;
+    if (!meta) {
+      return null;
+    }
+
+    const parts = [
+      humanizeProgramMeta(meta.programFamilyKey),
+      humanizeProgramMeta(meta.progressionModel),
+    ].filter(Boolean);
+
+    return parts.length > 0 ? parts.join(' • ') : null;
+  }, [activePlan?.programMeta]);
+  const resumableActiveSession = (
+    activeSession
+    && mapActiveSession(activeSession)
+      ? activeSession
+      : null
+  );
 
   const tomorrowEntry = tomorrowSchedule[0] || null;
 
@@ -157,6 +201,12 @@ export function useWorkoutDashboard(): WorkoutDashboardResult {
       date.setDate(weekStart.getDate() + index);
       const dateText = toLocalDateKey(date);
       const schedule = weekSchedule.find((entry) => entry.scheduled_date === dateText) || null;
+      const calendarState = buildWorkoutCalendarDayState({
+        dateKey: dateText,
+        todayKey,
+        scheduleEntry: schedule,
+        fallback: calendarFallbackContext,
+      });
 
       return {
         date,
@@ -165,9 +215,11 @@ export function useWorkoutDashboard(): WorkoutDashboardResult {
         dayNumber: date.getDate(),
         isToday: dateText === todayKey,
         isSelected: dateText === todayKey,
-        sessionType: schedule?.session_type || null,
-        status: schedule?.status || null,
-        planDayId: schedule?.plan_day_id || null,
+        sessionType: calendarState.sessionType,
+        scheduleStatus: calendarState.scheduleStatus,
+        calendarStatus: calendarState.calendarStatus,
+        isWorkoutExpected: calendarState.isWorkoutExpected,
+        planDayId: calendarState.planDayId,
       };
     })
   );
@@ -175,7 +227,8 @@ export function useWorkoutDashboard(): WorkoutDashboardResult {
   const state = buildWorkoutDashboardState({
     now,
     hasActivePlan: !!activePlan,
-    activeSession: mapActiveSession(activeSession),
+    activePlanLabel,
+    activeSession: mapActiveSession(resumableActiveSession),
     todayEntry: mapScheduleEntry(todayEntry),
     tomorrowEntry: mapScheduleEntry(tomorrowEntry),
     latestConsistencyScore: latestConsistency?.overall_score ?? 0,
@@ -196,7 +249,7 @@ export function useWorkoutDashboard(): WorkoutDashboardResult {
       activePlan,
       todayEntry,
       tomorrowEntry,
-      activeSession,
+      activeSession: resumableActiveSession,
       history,
       recommendations,
     },

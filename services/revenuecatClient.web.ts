@@ -1,17 +1,28 @@
-export type RevenueCatPeriod = 'monthly' | 'annual' | 'lifetime';
+import type {
+  BillingPeriod,
+  SubscriptionPlanType,
+  SubscriptionTier,
+} from '../lib/subscription/plans';
+
+export type RevenueCatPeriod = BillingPeriod;
 
 export interface RevenueCatPackageSummary {
-  id: 'elite_monthly' | 'elite_annual' | 'elite_lifetime';
+  id: SubscriptionPlanType;
   identifier: string;
   product_id: string;
   price: number;
   price_string: string;
   period: RevenueCatPeriod;
   trial_days: number | null;
+  tier: SubscriptionTier;
+  tagline?: string;
+  badge?: string;
   nativePackage: any;
 }
 
 export interface RevenueCatEntitlementSnapshot {
+  tier: SubscriptionTier;
+  isPremium: boolean;
   isElite: boolean;
   isTrialing: boolean;
   expiresAt?: string;
@@ -61,7 +72,19 @@ export async function restoreRevenueCatPurchases(): Promise<{
 
 export async function getRevenueCatEntitlementSnapshot(): Promise<RevenueCatEntitlementSnapshot> {
   return {
+    tier: 'free',
+    isPremium: false,
     isElite: false,
     isTrialing: false,
   };
 }
+
+export type RevenueCatCustomerInfoListener = (snapshot: RevenueCatEntitlementSnapshot) => void;
+
+export function addRevenueCatCustomerInfoUpdateListener(
+  _listener: RevenueCatCustomerInfoListener,
+): () => void {
+  return () => {};
+}
+
+export async function logoutRevenueCat(): Promise<void> {}

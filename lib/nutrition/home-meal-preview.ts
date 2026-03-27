@@ -6,6 +6,8 @@ export interface HomeMealPreviewItem {
   slot: MealSlot;
   label: string;
   plannedName: string;
+  mealSummary: string | null;
+  canDirectLog: boolean;
   targetCalories: number;
   targetProtein: number;
   targetCarbs: number;
@@ -14,6 +16,22 @@ export interface HomeMealPreviewItem {
   loggedItemCount: number;
   isLogged: boolean;
   planMealId: string;
+}
+
+export interface HomeMealPreviewCardMeal {
+  slot: MealSlot;
+  label: string;
+  plannedName: string;
+  mealSummary?: string | null;
+  canDirectLog?: boolean;
+  targetCalories: number;
+  targetProtein?: number;
+  targetCarbs?: number;
+  targetFat?: number;
+  loggedCalories: number;
+  loggedItemCount: number;
+  isLogged: boolean;
+  planMealId?: string;
 }
 
 export interface HomeMealPreviewState {
@@ -28,6 +46,19 @@ function sumLoggedCalories(mealLog: MealLog | undefined): number {
   return Math.round(
     (mealLog?.items || []).reduce((total, item) => total + Number(item.calories || 0), 0)
   );
+}
+
+function buildMealSummary(meal: NutritionPlanMeal): string | null {
+  const itemNames = (meal.selected_variant?.items || [])
+    .slice()
+    .sort((a, b) => Number(a.order_index || 0) - Number(b.order_index || 0))
+    .map((item) => String(item.item_name || '').trim())
+    .filter(Boolean);
+
+  if (!itemNames.length) return null;
+  if (itemNames.length === 1) return itemNames[0];
+  if (itemNames.length === 2) return `${itemNames[0]} + ${itemNames[1]}`;
+  return `${itemNames[0]}, ${itemNames[1]} + ${itemNames.length - 2} more`;
 }
 
 export function buildHomeMealPreviewItems(
@@ -50,6 +81,8 @@ export function buildHomeMealPreviewItems(
         slot,
         label: getMealSlotLabel(slot),
         plannedName: selectedVariant?.name || meal.name || `${getMealSlotLabel(slot)} Meal`,
+        mealSummary: buildMealSummary(meal),
+        canDirectLog: !!meal.can_direct_log,
         targetCalories: Math.round(
           Number(selectedVariant?.target_calories ?? meal.target_calories ?? 0),
         ),

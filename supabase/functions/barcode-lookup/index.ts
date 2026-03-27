@@ -314,7 +314,7 @@ serve(async (req) => {
     return jsonResponse({ error: "Unauthorized" }, 401);
   }
 
-  // Enforce Elite access server-side for barcode scanning.
+  // Enforce Premium+ access server-side for barcode scanning.
   const { data: subscription, error: subscriptionError } = await supabase
     .from("subscriptions")
     .select("plan_type, status, updated_at")
@@ -328,12 +328,12 @@ serve(async (req) => {
     return jsonResponse({ error: "Failed to verify subscription" }, 500);
   }
 
-  const isElite = Boolean(subscription && subscription.plan_type !== "free");
-  if (!isElite) {
+  const hasPremiumAccess = Boolean(subscription && subscription.plan_type !== "free");
+  if (!hasPremiumAccess) {
     return jsonResponse(
       {
-        error: "MetriqFit Elite required",
-        code: "ELITE_REQUIRED",
+        error: "MetriqFit Premium required",
+        code: "PREMIUM_REQUIRED",
       },
       402,
     );

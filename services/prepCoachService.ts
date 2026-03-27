@@ -1,4 +1,5 @@
 import { supabase } from "../lib/supabase";
+import { checkEntitlementStatus } from "./subscriptionService";
 
 export type PrepDiscipline = "bodybuilding" | "powerlifting";
 export type PrepPhase = "cut" | "bulk";
@@ -124,7 +125,7 @@ function mapEvent(row: any): PrepCoachAdjustmentEvent {
 }
 
 export async function getPrepCoachState(userId: string): Promise<PrepCoachState> {
-  const [{ data: cycle }, { data: event }, { data: onboarding }, { data: subscription }] = await Promise.all([
+  const [{ data: cycle }, { data: event }, { data: onboarding }] = await Promise.all([
     (supabase as any)
       .from("prep_coach_cycles")
       .select("*")
@@ -144,14 +145,6 @@ export async function getPrepCoachState(userId: string): Promise<PrepCoachState>
       .select("answers")
       .eq("user_id", userId)
       .maybeSingle(),
-    supabase
-      .from("subscriptions")
-      .select("plan_type, status, expires_at, trial_ends_at")
-      .eq("user_id", userId)
-      .in("status", ["active", "trial", "grace_period"])
-      .order("updated_at", { ascending: false })
-      .limit(1)
-      .maybeSingle(),
   ]);
 
   const answers = (onboarding?.answers || {}) as Record<string, unknown>;
@@ -159,14 +152,8 @@ export async function getPrepCoachState(userId: string): Promise<PrepCoachState>
   const discipline = (cycle?.discipline || detectDiscipline(answers)) as PrepDiscipline;
   const phase = (cycle?.phase || mapGoalTypeToPhase(String(answers.goal_type || "")) || "cut") as PrepPhase;
   const explicitAutoAdjust = cycle?.auto_adjust_enabled === true || answers.prep_auto_adjust_enabled === true;
-  const now = Date.now();
-  const isElite = !!subscription
-    && subscription.plan_type !== "free"
-    && (
-      (subscription.status === "active" && (!subscription.expires_at || Date.parse(subscription.expires_at) > now))
-      || (subscription.status === "trial" && (!subscription.trial_ends_at || Date.parse(subscription.trial_ends_at) > now))
-      || (subscription.status === "grace_period" && (!subscription.expires_at || Date.parse(subscription.expires_at) > now))
-    );
+  const entitlement = await checkEntitlementStatus(userId);
+  const isElite = entitlement.isElite;
   const autoAdjustEnabled = prepEnabled && explicitAutoAdjust && isElite;
   const eliteRequired = prepEnabled && !isElite;
 

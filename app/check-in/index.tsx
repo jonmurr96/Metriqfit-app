@@ -14,6 +14,7 @@ import { useProfile } from '../../hooks/useUser';
 import { useApplyCheckInUpdates, usePreviewCheckIn } from '../../hooks/useCheckIn';
 import { usePrepCoachState, useRunPrepCheckInAdjustment } from '../../hooks/usePrepCoach';
 import { useEntitlementStatus } from '../../hooks/useSubscription';
+import { getTierLabel } from '../../lib/subscription/plans';
 import type { CheckInPreviewResult } from '../../services/checkInService';
 import type { PrepCoachAdjustmentResult } from '../../services/prepCoachService';
 
@@ -50,7 +51,9 @@ export default function CheckInScreen() {
     const [updatesApplied, setUpdatesApplied] = useState(false);
 
     const prepModeEnabled = prepState?.enabled === true;
+    const tier = entitlement?.tier ?? 'free';
     const isElite = entitlement?.isElite === true;
+    const tierLabel = getTierLabel(tier);
     const isApplyingAnyUpdate = applyUpdatesMutation.isPending || runPrepAdjustmentMutation.isPending;
 
     // Populate weight from profile when it loads
@@ -159,7 +162,7 @@ export default function CheckInScreen() {
             setUpdatesApplied(true);
 
             if (prepModeEnabled) {
-                if (isElite && prepAppliedResult?.applied) {
+                if (isElite && prepApplyResult?.applied) {
                     Alert.alert('Prep adjustments applied', 'Targets, nutrition plan, and workout adaptations have been updated for this prep cycle.', [
                         { text: 'Done', onPress: () => router.back() },
                     ]);
@@ -413,7 +416,7 @@ export default function CheckInScreen() {
                                                     Prep Adjustment Preview
                                                 </Text>
                                                 <Text style={{ color: c.textMuted, fontFamily: ty.body.family, fontSize: 12 }}>
-                                                    {isElite ? 'Elite' : 'Free'}
+                                                    {tierLabel}
                                                 </Text>
                                             </View>
                                             {prepPreviewResult ? (
@@ -429,7 +432,7 @@ export default function CheckInScreen() {
                                                     </Text>
                                                     {!isElite && (
                                                         <Text style={{ color: c.warning, fontFamily: ty.body.familyMedium, fontSize: 12 }}>
-                                                            Recommendation-only on Free. Upgrade to Elite for auto-apply.
+                                                            Recommendation-only on {tierLabel}. Upgrade to Elite for auto-apply.
                                                         </Text>
                                                     )}
                                                 </View>

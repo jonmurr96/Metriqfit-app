@@ -18,6 +18,8 @@ import { TabBarIcon } from '../../components/navigation/TabBarIcon';
 import { GlassCard } from '../../components/premium/GlassCard';
 import { useMealTimes, formatTime12h, DEFAULT_MEAL_TIMES, type MealTimes } from '../../hooks/useMealTimes';
 import { isValidTime } from '../../services/mealTimesService';
+import { useProfile } from '../../hooks/useUser';
+import { rescheduleEnabledNotifications } from '../../services/notificationService';
 
 type MealType = 'breakfast' | 'lunch' | 'dinner' | 'snack';
 
@@ -96,6 +98,7 @@ export default function MealTimesScreen() {
   const insets = useSafeAreaInsets();
   
   const { mealTimes, isLoading, updateMealTimes, isUpdating } = useMealTimes();
+  const { data: profile } = useProfile();
   const [localTimes, setLocalTimes] = useState<MealTimes>(DEFAULT_MEAL_TIMES);
   const [hasChanges, setHasChanges] = useState(false);
 
@@ -119,7 +122,14 @@ export default function MealTimesScreen() {
     }
 
     updateMealTimes(localTimes, {
-      onSuccess: () => {
+      onSuccess: async (savedTimes) => {
+        if (profile?.id && profile.notification_preferences?.mealReminders) {
+          await rescheduleEnabledNotifications(
+            profile.id,
+            profile.notification_preferences,
+            savedTimes,
+          );
+        }
         setHasChanges(false);
         Alert.alert('Success', 'Meal times updated successfully!');
       },

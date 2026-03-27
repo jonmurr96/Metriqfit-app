@@ -11,6 +11,7 @@ import {
   type ProgramExercise,
   type WorkoutFocusTag,
 } from './programMappingRules.ts';
+import { classifyExercise } from './exerciseClassification.ts';
 
 export type GeneratedSplitDayDefinition = {
   key: string;
@@ -316,16 +317,93 @@ function rankCandidate(
   profile: ResolvedGeneratedSplitDayProfile,
   keepTerms: string[],
   coverageTag: WorkoutFocusTag | null,
+  slotIndex?: number,
+  usedPatternGroups?: Set<string>,
 ) {
   let score = 0;
   const primaryFocus = inferPrimaryExerciseFocus(exercise);
+  const classification = classifyExercise(exercise);
 
+  // Existing scoring
   if (matchesNamePreference(exercise.name, keepTerms)) score += 500;
   if (coverageTag && matchesFocus(exercise, coverageTag)) score += 250;
   if (bucket === 'primary') score += 100;
   if (primaryFocus && profile.primaryFocuses.includes(primaryFocus as WorkoutFocusTag)) score += 40;
   if (primaryFocus && profile.supportFocuses.includes(primaryFocus as WorkoutFocusTag)) score += 10;
   if ((exercise.difficulty || '').toLowerCase() === 'intermediate') score += 4;
+
+  // OPTIMIZATION 1: Common Exercise Prioritization
+  if (classification.isCommon) {
+    score += 45;
+  }
+
+  // OPTIMIZATION 2: Compound Slot Ordering
+  if (slotIndex !== undefined) {
+    if (slotIndex <= 2 && classification.isCompound) {
+      score += 40;
+    } else if (slotIndex <= 4 && classification.isCompound) {
+      score += 20;
+    } else if (slotIndex > 4 && !classification.isCompound) {
+      score += 10;
+    }
+  }
+
+  // OPTIMIZATION 3: Muscle Growth Stimulus
+  let growthScore = 0;
+  if (classification.isCompound) growthScore += 30;
+  if (classification.equipmentTier === 'common_gym') growthScore += 15;
+
+  const highGrowthPatterns = ['horizontal_push', 'vertical_push', 'horizontal_pull', 'vertical_pull', 'squat', 'hinge'];
+  if (highGrowthPatterns.includes(classification.movementPatternGroup)) {
+    growthScore += 25;
+  }
+  score += growthScore;
+
+  // OPTIMIZATION 4: Exercise Complementarity
+  if (usedPatternGroups) {
+    const pattern = classification.movementPatternGroup;
+
+    // Antagonist pairing
+    if (pattern === 'horizontal_push' && usedPatternGroups.has('horizontal_pull')) score += 20;
+    if (pattern === 'horizontal_pull' && usedPatternGroups.has('horizontal_push')) score += 20;
+    if (pattern === 'vertical_push' && usedPatternGroups.has('vertical_pull')) score += 20;
+    if (pattern === 'vertical_pull' && usedPatternGroups.has('vertical_push')) score += 20;
+
+    // Quad/Hamstring balance
+    if (pattern === 'squat' && usedPatternGroups.has('hinge')) score += 15;
+    if (pattern === 'hinge' && usedPatternGroups.has('squat')) score += 15;
+
+    // Angle variety
+    if (profile.primaryFocuses.includes('chest')) {
+      if (pattern === 'vertical_push' && usedPatternGroups.has('horizontal_push')) {
+        score += 18;
+      }
+    }
+    if (profile.primaryFocuses.includes('back')) {
+      if (pattern === 'vertical_pull' && usedPatternGroups.has('horizontal_pull')) {
+        score += 18;
+      }
+    }
+  }
+
+  // OPTIMIZATION 6: Exercise Synergy
+  if (usedPatternGroups) {
+    const pattern = classification.movementPatternGroup;
+    const SYNERGY_RULES: Array<{ prime: string; accessories: string[]; bonus: number }> = [
+      { prime: 'horizontal_push', accessories: ['chest_accessory', 'triceps_accessory'], bonus: 15 },
+      { prime: 'vertical_pull', accessories: ['back_accessory', 'biceps_accessory'], bonus: 15 },
+      { prime: 'squat', accessories: ['quad_accessory', 'glute_accessory'], bonus: 12 },
+      { prime: 'hinge', accessories: ['hamstring_accessory', 'glute_accessory'], bonus: 12 },
+    ];
+
+    for (const rule of SYNERGY_RULES) {
+      if (rule.accessories.includes(pattern) && usedPatternGroups.has(rule.prime)) {
+        score += rule.bonus;
+        break;
+      }
+    }
+  }
+
   score += (stableHash(`${profile.day.key}::${bucket}::${exercise.id}`) % 1000) / 1000;
   return score;
 }
@@ -338,6 +416,8 @@ function pickBestCandidate(input: {
   usedExerciseIds: Set<string>;
   usedMovementFamilies: Set<string>;
   coverageTag?: WorkoutFocusTag | null;
+  slotIndex?: number;  // NEW
+  usedPatternGroups?: Set<string>;  // NEW
 }) {
   const available = input.candidates.filter((exercise) => !input.usedExerciseIds.has(exercise.id));
   if (!available.length) return null;
@@ -359,6 +439,8 @@ function pickBestCandidate(input: {
         input.profile,
         input.keepTerms,
         input.coverageTag || null,
+        input.slotIndex,  // NEW
+        input.usedPatternGroups,  // NEW
       ),
     }))
     .sort((a, b) => b.score - a.score)[0]?.exercise || null;
@@ -397,6 +479,13 @@ export function selectExercisesForGeneratedSplitDay(input: SelectionOptions): Ge
   const missingCoverage: WorkoutFocusTag[] = [];
   const usedExerciseIds = new Set<string>();
   const usedMovementFamilies = new Set<string>();
+  const usedPatternGroups = new Set<string>();  // NEW
+
+  // Helper function to track patterns
+  const trackPattern = (exercise: ProgramExercise) => {
+    const classification = classifyExercise(exercise);
+    usedPatternGroups.add(classification.movementPatternGroup);
+  };
 
   for (const coverageTag of profile.requiredCoverage) {
     const candidate = pickBestCandidate({
@@ -407,6 +496,8 @@ export function selectExercisesForGeneratedSplitDay(input: SelectionOptions): Ge
       usedExerciseIds,
       usedMovementFamilies,
       coverageTag,
+      slotIndex: selected.length,  // NEW
+      usedPatternGroups,  // NEW
     });
 
     if (!candidate) {
@@ -415,6 +506,7 @@ export function selectExercisesForGeneratedSplitDay(input: SelectionOptions): Ge
     }
 
     addSelection(candidate, selected, usedExerciseIds, usedMovementFamilies);
+    trackPattern(candidate);  // NEW
     primarySelections.push(candidate);
   }
 
@@ -426,9 +518,12 @@ export function selectExercisesForGeneratedSplitDay(input: SelectionOptions): Ge
       keepTerms,
       usedExerciseIds,
       usedMovementFamilies,
+      slotIndex: selected.length,  // NEW
+      usedPatternGroups,  // NEW
     });
     if (!candidate) break;
     addSelection(candidate, selected, usedExerciseIds, usedMovementFamilies);
+    trackPattern(candidate);  // NEW
     primarySelections.push(candidate);
   }
 
@@ -441,9 +536,12 @@ export function selectExercisesForGeneratedSplitDay(input: SelectionOptions): Ge
       keepTerms,
       usedExerciseIds,
       usedMovementFamilies,
+      slotIndex: selected.length,  // NEW
+      usedPatternGroups,  // NEW
     });
     if (!candidate) break;
     addSelection(candidate, selected, usedExerciseIds, usedMovementFamilies);
+    trackPattern(candidate);  // NEW
     primarySelections.push(candidate);
   }
 
@@ -455,9 +553,12 @@ export function selectExercisesForGeneratedSplitDay(input: SelectionOptions): Ge
       keepTerms,
       usedExerciseIds,
       usedMovementFamilies,
+      slotIndex: selected.length,  // NEW
+      usedPatternGroups,  // NEW
     });
     if (!candidate) break;
     addSelection(candidate, selected, usedExerciseIds, usedMovementFamilies);
+    trackPattern(candidate);  // NEW
     supportSelections.push(candidate);
   }
 
@@ -469,9 +570,12 @@ export function selectExercisesForGeneratedSplitDay(input: SelectionOptions): Ge
       keepTerms,
       usedExerciseIds,
       usedMovementFamilies,
+      slotIndex: selected.length,  // NEW
+      usedPatternGroups,  // NEW
     });
     if (!candidate) break;
     addSelection(candidate, selected, usedExerciseIds, usedMovementFamilies);
+    trackPattern(candidate);  // NEW
     primarySelections.push(candidate);
   }
 

@@ -139,7 +139,7 @@ function buildRecoveryHint(meals: HomeDashboardMealInput[], currentMeal: HomeDas
   return `Let ${currentMeal.label.toLowerCase()} go. Tighten the next habit instead of trying to catch everything at once.`;
 }
 
-export function toLocalDateKey(date: Date) {
+export function toLocalDateKey(date: Date = new Date()): string {
   const year = date.getFullYear();
   const month = String(date.getMonth() + 1).padStart(2, '0');
   const day = String(date.getDate()).padStart(2, '0');
@@ -304,15 +304,15 @@ export function buildHomeDashboardState(input: BuildHomeDashboardStateInput): Ho
         { label: 'Calories', value: `${Math.max(0, Math.round(input.caloriesRemaining))} kcal` },
       ],
     };
-  } else if (
-    input.workoutStatus === 'planned'
-    && dayPart !== 'morning'
-    && dayPart !== 'midday'
-    && activeMeal?.timingStatus === 'later_today'
-  ) {
+  } else if (input.workoutStatus === 'planned') {
+    // Show workout focus when there's a planned workout
     focus = {
-      title: 'Training needs to close today',
-      subtitle: 'Your next meal is still later tonight. Use this window to get the session finished before the day gets away from you.',
+      title: dayPart === 'morning' || dayPart === 'midday' 
+        ? 'Start the day with training'
+        : 'Training needs to close today',
+      subtitle: dayPart === 'morning' || dayPart === 'midday'
+        ? 'Get the session done early while energy is high. Knock it out before the day gets busy.'
+        : 'Your workout is still pending. Get it done before the day gets away from you.',
       icon: 'barbell-outline',
       action: 'workout',
       secondaryAction: 'meal_plan',

@@ -3,7 +3,15 @@ import { Session, User, AuthError } from '@supabase/supabase-js';
 import { AppState, Platform } from 'react-native';
 import * as Linking from 'expo-linking';
 import { supabase, isSupabaseConfigured } from '../supabase';
-import { initializeRevenueCat } from '../../services/subscriptionService';
+import {
+  initializeRevenueCat,
+  syncSubscriptionFromRevenueCat,
+} from '../../services/subscriptionService';
+import {
+  addRevenueCatCustomerInfoUpdateListener,
+  logoutRevenueCat,
+} from '../../services/revenuecatClient';
+import { queryClient } from '../queryClient';
 
 type OAuthProvider = 'google' | 'apple';
 
@@ -80,6 +88,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       .then(({ data: { session } }) => {
         setSession(session);
         setUser(session?.user ?? null);
+        console.log('👤 ACTIVE USER ID:', session?.user?.id, 'EMAIL:', session?.user?.email);
+        console.log('📝 USER METADATA:', JSON.stringify(session?.user?.user_metadata, null, 2));
 
         if (session?.user?.id) {
           initializeRevenueCat(session.user.id).catch((error) => {
@@ -115,6 +125,18 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   useEffect(() => {
     if (!user?.id) return;
 
+    const removeRevenueCatListener = addRevenueCatCustomerInfoUpdateListener(() => {
+      syncSubscriptionFromRevenueCat(user.id)
+        .catch((error) => {
+          console.warn('[RevenueCat] Customer info sync failed:', error);
+        })
+        .finally(() => {
+          queryClient.invalidateQueries({
+            queryKey: ['subscription'],
+          });
+        });
+    });
+
     const appStateSubscription = AppState.addEventListener('change', (state) => {
       if (state === 'active') {
         if (Platform.OS !== 'web') {
@@ -131,7 +153,10 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       }
     });
 
-    return () => appStateSubscription.remove();
+    return () => {
+      removeRevenueCatListener();
+      appStateSubscription.remove();
+    };
   }, [user?.id]);
 
   const signUp = useCallback(async (email: string, password: string) => {
@@ -239,6 +264,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     }
 
     try {
+      await logoutRevenueCat();
       await supabase.auth.signOut();
     } catch (err: any) {
       console.error('Error signing out:', err);

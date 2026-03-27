@@ -50,11 +50,13 @@ export function TodayMealPlanList({
           borderColor: c.border,
           padding: s.md,
           gap: s.sm,
+          overflow: 'hidden',
+          width: '100%',
         },
       ]}
     >
       <View style={styles.headerRow}>
-        <View>
+        <View style={{ flex: 1, maxWidth: '75%', marginRight: 8 }}>
           <Text
             style={{
               color: c.text,
@@ -82,6 +84,7 @@ export function TodayMealPlanList({
               backgroundColor: c.surface2,
               borderColor: c.border,
               borderRadius: r.pill,
+              flexShrink: 0,
             },
           ]}
         >
@@ -285,11 +288,15 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
+    width: '100%',
   },
   headerBadge: {
     borderWidth: 1,
-    paddingHorizontal: 10,
+    paddingHorizontal: 12,
     paddingVertical: 6,
+    minWidth: 44,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   mealRow: {
     flexDirection: 'row',

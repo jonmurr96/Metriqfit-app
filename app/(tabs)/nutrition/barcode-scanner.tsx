@@ -106,10 +106,11 @@ export default function BarcodeScannerScreen() {
       }
     } catch (error) {
       console.error('Barcode scan error:', error);
-      if (error instanceof Error && error.message === 'ELITE_REQUIRED') {
+      if (error instanceof Error && (error.message === 'PREMIUM_REQUIRED' || error.message === 'ELITE_REQUIRED')) {
+        const tierLabel = barcodeAccess.upgradeTier === 'elite' ? 'Elite' : 'Premium';
         Alert.alert(
-          'MetriqFit Elite Required',
-          'Barcode scanning is available for Elite members.',
+          `MetriqFit ${tierLabel} Required`,
+          `Barcode scanning is available on ${tierLabel} and above.`,
           [
             { text: 'Not now', style: 'cancel' },
             { text: 'Upgrade', onPress: () => router.push('/settings/subscription') },
@@ -138,6 +139,8 @@ export default function BarcodeScannerScreen() {
   }
 
   if (!barcodeAccess.hasAccess) {
+    const tierLabel = barcodeAccess.upgradeTier === 'elite' ? 'Elite' : 'Premium';
+
     return (
       <View style={[styles.container, { backgroundColor: c.bg, paddingTop: insets.top }]}>
         <View style={[styles.header, { paddingHorizontal: s.lg }]}>
@@ -185,7 +188,7 @@ export default function BarcodeScannerScreen() {
                 marginTop: s.lg,
               }}
             >
-              Elite Feature
+              MetriqFit {tierLabel}
             </Text>
             <Text
               style={{
@@ -196,7 +199,7 @@ export default function BarcodeScannerScreen() {
                 marginTop: s.sm,
               }}
             >
-              Barcode scanning is available for Elite members.
+              Barcode scanning is available on {tierLabel} and above.
             </Text>
             <Pressable
               style={[
@@ -216,7 +219,7 @@ export default function BarcodeScannerScreen() {
                   fontSize: ty.sizes.md,
                 }}
               >
-                Upgrade to Elite
+                View Plans
               </Text>
             </Pressable>
           </View>
@@ -451,7 +454,7 @@ export default function BarcodeScannerScreen() {
               fontSize: ty.sizes.sm,
             }}
           >
-            ✨ Elite Feature
+            ✨ Premium convenience
           </Text>
         </View>
       </View>

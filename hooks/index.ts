@@ -173,6 +173,8 @@ export {
   useAvailablePackages,
   usePurchasePackage,
   useRestorePurchases,
+  useHostedPaywall,
+  useCustomerCenter,
   useFeatureAccess,
   useFeatureLimit,
   useSubscriptionUI,

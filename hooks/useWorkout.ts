@@ -5,6 +5,7 @@
 
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useAuth } from '../lib/auth/AuthProvider';
+import { progressMetricKeys } from './useProgressMetrics';
 import {
   getPrograms,
   getProgramWithDays,
@@ -121,6 +122,9 @@ export function useStartSession() {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: workoutKeys.all });
+      if (user?.id) {
+        queryClient.invalidateQueries({ queryKey: progressMetricKeys.home(user.id) });
+      }
     },
   });
 }
@@ -189,6 +193,7 @@ export function useLogSet() {
  */
 export function useFinishSession() {
   const queryClient = useQueryClient();
+  const { user } = useAuth();
 
   return useMutation({
     mutationFn: async ({ sessionId, notes }: { sessionId: string; notes?: string }) => {
@@ -196,6 +201,9 @@ export function useFinishSession() {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: workoutKeys.all });
+      if (user?.id) {
+        queryClient.invalidateQueries({ queryKey: progressMetricKeys.home(user.id) });
+      }
     },
   });
 }

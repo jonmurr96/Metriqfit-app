@@ -1,46 +1,134 @@
-// Analytics service for tracking user events and behavior
-// Currently a placeholder - integrate with your preferred analytics provider
+// Analytics service for tracking user events and behavior.
+// Persists events to Supabase for rollout validation and lifecycle analysis.
+
+import { Platform } from 'react-native';
+
+import { isSupabaseConfigured, supabase } from '../supabase';
 
 export type QuickAddActionId = 'food' | 'water' | 'weight' | 'workout';
 
+type AnalyticsProperties = Record<string, unknown>;
+
+const analyticsSessionId = `${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
+
+let analyticsUserId: string | null = null;
+let analyticsUserProperties: AnalyticsProperties = {};
+let analyticsInitialized = false;
+
+function sanitizeAnalyticsValue(value: unknown): unknown {
+  if (
+    value == null
+    || typeof value === 'string'
+    || typeof value === 'number'
+    || typeof value === 'boolean'
+  ) {
+    return value;
+  }
+
+  if (value instanceof Date) {
+    return value.toISOString();
+  }
+
+  if (Array.isArray(value)) {
+    return value.map(sanitizeAnalyticsValue);
+  }
+
+  if (typeof value === 'object') {
+    return Object.fromEntries(
+      Object.entries(value).map(([key, nestedValue]) => [key, sanitizeAnalyticsValue(nestedValue)]),
+    );
+  }
+
+  return String(value);
+}
+
+function sanitizeAnalyticsProperties(properties?: AnalyticsProperties): AnalyticsProperties {
+  if (!properties) return {};
+  return Object.fromEntries(
+    Object.entries(properties).map(([key, value]) => [key, sanitizeAnalyticsValue(value)]),
+  );
+}
+
+async function persistEvent(eventName: string, properties: AnalyticsProperties) {
+  if (!isSupabaseConfigured || !analyticsUserId) return;
+
+  try {
+    await (supabase as any)
+      .from('analytics_events')
+      .insert({
+        user_id: analyticsUserId,
+        event_name: eventName,
+        platform: Platform.OS,
+        session_id: analyticsSessionId,
+        properties,
+      });
+  } catch (error) {
+    if (__DEV__) {
+      console.warn('📊 Analytics persistence failed:', error);
+    }
+  }
+}
+
 export function initAnalytics() {
-  // Initialize analytics service here
-  // Example: Google Analytics, Mixpanel, Amplitude, etc.
+  if (analyticsInitialized) return;
+  analyticsInitialized = true;
+
+  if (isSupabaseConfigured) {
+    supabase.auth.getSession()
+      .then(({ data: { session } }) => {
+        analyticsUserId = session?.user?.id ?? null;
+      })
+      .catch((error) => {
+        if (__DEV__) {
+          console.warn('📊 Analytics session bootstrap failed:', error);
+        }
+      });
+  }
+
   if (__DEV__) {
     console.log('📊 Analytics initialized (development mode)');
   }
 }
 
-export function trackEvent(eventName: string, properties?: Record<string, any>) {
+export function trackEvent(eventName: string, properties?: AnalyticsProperties) {
+  const mergedProperties = sanitizeAnalyticsProperties({
+    ...analyticsUserProperties,
+    ...properties,
+  });
+
   if (__DEV__) {
-    console.log('📊 Track Event:', eventName, properties);
+    console.log('📊 Track Event:', eventName, mergedProperties);
   }
-  // Add your analytics tracking logic here
+
+  void persistEvent(eventName, mergedProperties);
 }
 
-export function trackScreen(screenName: string, properties?: Record<string, any>) {
+export function trackScreen(screenName: string, properties?: AnalyticsProperties) {
   if (__DEV__) {
     console.log('📊 Track Screen:', screenName, properties);
   }
-  // Add your screen tracking logic here
+  trackEvent('screen_view', {
+    screen_name: screenName,
+    ...properties,
+  });
 }
 
-export function trackScreenView(screenName: string, properties?: Record<string, any>) {
+export function trackScreenView(screenName: string, properties?: AnalyticsProperties) {
   trackScreen(screenName, properties);
 }
 
-export function setUserId(userId: string) {
+export function setUserId(userId: string | null) {
+  analyticsUserId = userId;
   if (__DEV__) {
     console.log('📊 Set User ID:', userId);
   }
-  // Add your user identification logic here
 }
 
-export function setUserProperties(properties: Record<string, any>) {
+export function setUserProperties(properties: AnalyticsProperties) {
+  analyticsUserProperties = sanitizeAnalyticsProperties(properties);
   if (__DEV__) {
-    console.log('📊 Set User Properties:', properties);
+    console.log('📊 Set User Properties:', analyticsUserProperties);
   }
-  // Add your user properties logic here
 }
 
 // Quick Add Sheet Analytics

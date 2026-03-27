@@ -25,7 +25,7 @@ export function EliteFeatureGrid({
     { icon: 'restaurant-outline', label: 'Custom Meal Plans' },
     { icon: 'time-outline', label: 'Unlimited History' },
     { icon: 'people-outline', label: 'Elite Community' },
-    { icon: 'phone-portrait-outline', label: 'Multi-device Sync' },
+    { icon: 'scan-outline', label: 'Smart Nutrition Tools' },
   ];
 
   return (

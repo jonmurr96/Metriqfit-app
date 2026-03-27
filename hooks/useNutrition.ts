@@ -3,8 +3,10 @@
  * Handles food search, logging, and daily nutrition tracking
  */
 
+import React from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useAuth } from '../lib/auth/AuthProvider';
+import { toLocalDateKey } from '../lib/home/dashboard-state';
 import {
   searchFoods,
   searchFoodCatalog,
@@ -44,6 +46,51 @@ export const nutritionKeys = {
   dailyTotals: (userId: string, date: string) => [...nutritionKeys.all, 'totals', userId, date] as const,
   dailyMeals: (userId: string, date: string) => [...nutritionKeys.all, 'meals', userId, date] as const,
 };
+
+function useResolvedNutritionDate(date?: string) {
+  const [resolvedDate, setResolvedDate] = React.useState(() => {
+    const initial = date || toLocalDateKey(new Date());
+    if (__DEV__) {
+      console.log('[useResolvedNutritionDate] Initial:', initial);
+    }
+    return initial;
+  });
+
+  React.useEffect(() => {
+    if (date) {
+      setResolvedDate(date);
+      return;
+    }
+
+    const syncDate = () => {
+      setResolvedDate((current) => {
+        const next = toLocalDateKey(new Date());
+        if (__DEV__ && current !== next) {
+          console.log('[useResolvedNutritionDate] Date changed:', current, '→', next);
+        }
+        return current === next ? current : next;
+      });
+    };
+
+    syncDate();
+
+    const now = new Date();
+    const nextDay = new Date(now);
+    nextDay.setDate(nextDay.getDate() + 1); // Advance to next calendar day
+    nextDay.setHours(0, 0, 1, 0); // Set to 00:00:01 (1 second after midnight)
+    const timeoutMs = nextDay.getTime() - now.getTime();
+
+    if (__DEV__) {
+      console.log('[useResolvedNutritionDate] Next sync in:', Math.round(timeoutMs / 1000 / 60), 'min');
+    }
+
+    const timeoutId = setTimeout(syncDate, Math.max(1000, timeoutMs));
+
+    return () => clearTimeout(timeoutId);
+  }, [date]);
+
+  return resolvedDate;
+}
 
 /**
  * Search foods by query string
@@ -127,7 +174,7 @@ export function useFavoriteFoodIds(foodIds?: string[], options?: { enabled?: boo
  */
 export function useDailyTotals(date?: string) {
   const { user } = useAuth();
-  const targetDate = date || new Date().toISOString().split('T')[0];
+  const targetDate = useResolvedNutritionDate(date);
 
   return useQuery({
     queryKey: nutritionKeys.dailyTotals(user?.id || '', targetDate),
@@ -142,7 +189,7 @@ export function useDailyTotals(date?: string) {
  */
 export function useDailyMeals(date?: string) {
   const { user } = useAuth();
-  const targetDate = date || new Date().toISOString().split('T')[0];
+  const targetDate = useResolvedNutritionDate(date);
 
   return useQuery({
     queryKey: nutritionKeys.dailyMeals(user?.id || '', targetDate),
@@ -178,7 +225,7 @@ export function useLogFood() {
       date ? new Date(`${date}T12:00:00`) : undefined,
     ),
     onSuccess: (_, variables) => {
-      const targetDate = variables.date || new Date().toISOString().split('T')[0];
+      const targetDate = variables.date || toLocalDateKey(new Date());
       // Invalidate daily totals and meals
       queryClient.invalidateQueries({
         queryKey: nutritionKeys.dailyTotals(user!.id, targetDate),
@@ -279,7 +326,7 @@ export function useLogPlannedMeal() {
         date,
       }),
     onSuccess: (_, variables) => {
-      const targetDate = variables.date || new Date().toISOString().split('T')[0];
+      const targetDate = variables.date || toLocalDateKey(new Date());
       queryClient.invalidateQueries({
         queryKey: nutritionKeys.dailyTotals(user!.id, targetDate),
       });

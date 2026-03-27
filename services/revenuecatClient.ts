@@ -1,19 +1,30 @@
 import Purchases from 'react-native-purchases';
+import {
+  inferPlanTypeFromProductId,
+  type BillingPeriod,
+  type SubscriptionPlanType,
+  type SubscriptionTier,
+} from '../lib/subscription/plans';
 
-export type RevenueCatPeriod = 'monthly' | 'annual' | 'lifetime';
+export type RevenueCatPeriod = BillingPeriod;
 
 export interface RevenueCatPackageSummary {
-  id: 'elite_monthly' | 'elite_annual' | 'elite_lifetime';
+  id: SubscriptionPlanType;
   identifier: string;
   product_id: string;
   price: number;
   price_string: string;
   period: RevenueCatPeriod;
   trial_days: number | null;
+  tier: SubscriptionTier;
+  tagline?: string;
+  badge?: string;
   nativePackage: any;
 }
 
 export interface RevenueCatEntitlementSnapshot {
+  tier: SubscriptionTier;
+  isPremium: boolean;
   isElite: boolean;
   isTrialing: boolean;
   expiresAt?: string;
@@ -61,11 +72,13 @@ function parseTrialDays(product: any): number | null {
 
 function mapPeriodFromPackage(pkg: any): RevenueCatPeriod | null {
   const packageType = String(pkg?.packageType || pkg?.package_type || '').toUpperCase();
+  if (packageType.includes('WEEK')) return 'weekly';
   if (packageType.includes('MONTH')) return 'monthly';
   if (packageType.includes('ANNUAL') || packageType.includes('YEAR')) return 'annual';
   if (packageType.includes('LIFETIME')) return 'lifetime';
 
   const productId = String(pkg?.product?.identifier || pkg?.product?.productIdentifier || '').toLowerCase();
+  if (productId.includes('week')) return 'weekly';
   if (productId.includes('month')) return 'monthly';
   if (productId.includes('year') || productId.includes('annual')) return 'annual';
   if (productId.includes('life')) return 'lifetime';
@@ -73,30 +86,35 @@ function mapPeriodFromPackage(pkg: any): RevenueCatPeriod | null {
   return null;
 }
 
-function mapPackageId(period: RevenueCatPeriod): RevenueCatPackageSummary['id'] {
-  if (period === 'monthly') return 'elite_monthly';
-  if (period === 'annual') return 'elite_annual';
-  return 'elite_lifetime';
-}
-
 function normalizePackage(pkg: any): RevenueCatPackageSummary | null {
   const period = mapPeriodFromPackage(pkg);
   if (!period) return null;
 
   const product = pkg?.product || {};
-  const identifier = String(pkg?.identifier || '').trim() || mapPackageId(period);
   const productId = String(product?.identifier || product?.productIdentifier || '').trim();
+  const inferredPlanType = inferPlanTypeFromProductId(productId);
+  const tier = inferredPlanType.startsWith('premium') ? 'premium' : 'elite';
+  const identifier = String(pkg?.identifier || '').trim() || inferredPlanType;
   const price = Number(product?.price || 0);
   const priceString = String(product?.priceString || '').trim();
 
   return {
-    id: mapPackageId(period),
+    id: inferredPlanType,
     identifier,
     product_id: productId,
     price: Number.isFinite(price) ? price : 0,
     price_string: priceString,
     period,
     trial_days: parseTrialDays(product),
+    tier,
+    tagline: tier === 'premium'
+      ? 'More power, deeper analytics, higher daily limits'
+      : 'Unlimited AI coaching, automation, and smart nutrition tools',
+    badge: period === 'annual'
+      ? tier === 'premium'
+        ? 'Best value for consistent tracking'
+        : 'Best value for daily AI coaching'
+      : undefined,
     nativePackage: pkg,
   };
 }
@@ -117,8 +135,15 @@ function normalizeEntitlement(customerInfo: any): RevenueCatEntitlementSnapshot 
     || activeSubscriptions[0]
     || undefined;
 
-  const entitlementLooksElite = String(activeEntitlementId || '').toLowerCase().includes('elite');
-  const productLooksElite = String(activeProductId || '').toLowerCase().includes('elite');
+  const entitlementName = String(activeEntitlementId || '').toLowerCase();
+  const planType = activeProductId ? inferPlanTypeFromProductId(activeProductId) : 'free';
+  const tier = activeEntries.length > 0
+    ? planType.startsWith('premium')
+      ? 'premium'
+      : entitlementName.includes('premium')
+        ? 'premium'
+        : 'elite'
+    : 'free';
   const hasActiveEntitlement = activeEntries.length > 0;
 
   const periodType = String(activeEntitlementRaw?.periodType || activeEntitlementRaw?.period_type || '').toUpperCase();
@@ -129,7 +154,9 @@ function normalizeEntitlement(customerInfo: any): RevenueCatEntitlementSnapshot 
     || undefined;
 
   return {
-    isElite: hasActiveEntitlement && (entitlementLooksElite || productLooksElite),
+    tier,
+    isPremium: tier === 'premium' || tier === 'elite',
+    isElite: tier === 'elite' && hasActiveEntitlement,
     isTrialing,
     expiresAt: expiration,
     trialEndsAt: isTrialing ? expiration : undefined,
@@ -145,7 +172,7 @@ export async function configureRevenueCat(apiKey: string, userId: string): Promi
   }
 
   try {
-    if (configuredApiKey !== apiKey || configuredUserId !== userId) {
+    if (!configuredApiKey || configuredApiKey !== apiKey) {
       await Purchases.configure({
         apiKey,
         appUserID: userId,
@@ -158,6 +185,7 @@ export async function configureRevenueCat(apiKey: string, userId: string): Promi
     if (typeof Purchases.logIn === 'function' && configuredUserId !== userId) {
       await Purchases.logIn(userId);
       configuredUserId = userId;
+      configuredApiKey = apiKey;
     }
 
     return { ok: true };
@@ -166,6 +194,33 @@ export async function configureRevenueCat(apiKey: string, userId: string): Promi
       ok: false,
       reason: error?.message || 'Failed to initialize RevenueCat SDK.',
     };
+  }
+}
+
+export type RevenueCatCustomerInfoListener = (snapshot: RevenueCatEntitlementSnapshot) => void;
+
+export function addRevenueCatCustomerInfoUpdateListener(
+  listener: RevenueCatCustomerInfoListener,
+): () => void {
+  const wrappedListener = (customerInfo: any) => {
+    listener(normalizeEntitlement(customerInfo));
+  };
+
+  Purchases.addCustomerInfoUpdateListener(wrappedListener);
+
+  return () => {
+    Purchases.removeCustomerInfoUpdateListener(wrappedListener);
+  };
+}
+
+export async function logoutRevenueCat(): Promise<void> {
+  try {
+    if (typeof Purchases.logOut === 'function' && configuredApiKey) {
+      await Purchases.logOut();
+    }
+  } finally {
+    configuredUserId = null;
+    configuredApiKey = null;
   }
 }
 

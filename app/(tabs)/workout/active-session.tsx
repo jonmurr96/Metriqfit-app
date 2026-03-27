@@ -1,7 +1,8 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   ActivityIndicator,
   Alert,
+  AppState,
   KeyboardAvoidingView,
   Platform,
   Pressable,
@@ -11,7 +12,7 @@ import {
   TextInput,
   View,
 } from 'react-native';
-import { useRouter } from 'expo-router';
+import { useFocusEffect, useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { AnimatePresence, MotiView } from 'moti';
@@ -19,6 +20,7 @@ import { LinearGradient } from 'expo-linear-gradient';
 import * as Haptics from 'expo-haptics';
 import { Ionicons } from '@expo/vector-icons';
 import { activateKeepAwakeAsync, deactivateKeepAwake } from 'expo-keep-awake';
+import { useQueryClient } from '@tanstack/react-query';
 
 import { useTokens } from '../../../lib/theme';
 import { GlassCard } from '../../../components/premium/GlassCard';
@@ -31,6 +33,12 @@ import { RestTimerDock } from '../../../components/workout/session/RestTimerDock
 import { FinishWorkoutSheet } from '../../../components/workout/session/FinishWorkoutSheet';
 import { ExerciseMediaHero } from '../../../components/workout/media/ExerciseMediaHero';
 import { ExerciseMediaPreview } from '../../../components/workout/media/ExerciseMediaPreview';
+import { WorkoutProgressionSuggestionCard } from '../../../components/workout/session/WorkoutProgressionSuggestionCard';
+import { SmartSubstitutionPicker } from '../../../components/workout/session/SmartSubstitutionPicker';
+import { SupersetPairDisplay } from '../../../components/workout/session/SupersetPairDisplay';
+import { DropSetPrompt } from '../../../components/workout/session/DropSetPrompt';
+import { TempoCoach } from '../../../components/workout/session/TempoCoach';
+import { RIRTargetDisplay } from '../../../components/workout/session/RIRTargetDisplay';
 import {
   buildExerciseSetRows,
   buildFinishWorkoutViewModel,
@@ -39,7 +47,26 @@ import {
   type LoggingSet,
   type WorkoutSetDraft,
 } from '../../../lib/workout/logging-state';
-import { useWorkoutLoggingDrafts } from '../../../hooks/useWorkoutLoggingDrafts';
+import {
+  hasAdvancedTechnique,
+  getPrimaryTechnique,
+  hasRIRRPETarget,
+  getRIRRPEConfig,
+  detectSuperset,
+  initializeDropSet,
+  initializeTempo,
+  advanceDropPhase,
+  startTempoSet,
+  advanceTempoRep,
+  completeTempoSet,
+  type SupersetState,
+  type DropSetState,
+  type TempoState,
+} from '../../../lib/workout/technique-execution';
+import {
+  clearWorkoutLoggingDraftsForSession,
+  useWorkoutLoggingDrafts,
+} from '../../../hooks/useWorkoutLoggingDrafts';
 import { useSessionRestTimer } from '../../../hooks/useSessionRestTimer';
 import {
   useActiveSession,
@@ -52,9 +79,17 @@ import {
   useSwapExercise,
   useUpdateSessionExerciseNote,
   useUpdateSessionNotes,
+  workoutKeys,
 } from '../../../hooks/useWorkout';
 import { useMarkDayCompleted } from '../../../hooks/usePlan';
 import { useAuth } from '../../../lib/auth/AuthProvider';
+import { getActiveSession } from '../../../services/workoutService';
+import {
+  useGenerateSuggestionsForWorkout,
+  useApplySuggestion,
+  useDismissSuggestion,
+  type ProgressionRecommendation,
+} from '../../../hooks/useProgressiveOverload';
 import {
   trackActiveSessionMediaCollapsed,
   trackActiveSessionMediaExpanded,
@@ -151,8 +186,9 @@ export default function ActiveSessionScreen() {
   const { c, s, ty, r } = useTokens();
   const router = useRouter();
   const insets = useSafeAreaInsets();
+  const queryClient = useQueryClient();
   const bottomOverlayOffset = insets.bottom;
-  const { loading: authLoading } = useAuth();
+  const { user, loading: authLoading } = useAuth();
 
   const { data: session, isLoading } = useActiveSession();
   const logSetMutation = useLogSet();
@@ -163,6 +199,17 @@ export default function ActiveSessionScreen() {
   const markDayCompletedMutation = useMarkDayCompleted();
   const updateExerciseNoteMutation = useUpdateSessionExerciseNote();
   const updateSessionNoteMutation = useUpdateSessionNotes();
+
+  // Progressive Overload hooks
+  const generateSuggestionsMutation = useGenerateSuggestionsForWorkout();
+  const applySuggestionMutation = useApplySuggestion();
+  const dismissSuggestionMutation = useDismissSuggestion();
+  const [progressionRecommendations, setProgressionRecommendations] = useState<ProgressionRecommendation[]>([]);
+
+  // Advanced Technique state
+  const [supersetState, setSupersetState] = useState<SupersetState | null>(null);
+  const [dropSetState, setDropSetState] = useState<DropSetState | null>(null);
+  const [tempoState, setTempoState] = useState<TempoState | null>(null);
 
   const [elapsedTime, setElapsedTime] = useState(0);
   const [isPaused, setIsPaused] = useState(false);
@@ -178,6 +225,8 @@ export default function ActiveSessionScreen() {
   const [sessionNoteDraft, setSessionNoteDraft] = useState('');
   const [exerciseNoteSaving, setExerciseNoteSaving] = useState(false);
   const [sessionNoteSaving, setSessionNoteSaving] = useState(false);
+  const lastSessionIdRef = useRef<string | null>(null);
+  const hasHandledExpiryRef = useRef(false);
 
   const {
     isHydrated,
@@ -203,6 +252,122 @@ export default function ActiveSessionScreen() {
   });
 
   const exercises = useMemo(() => session?.exercises ?? [], [session?.exercises]);
+
+  useEffect(() => {
+    if (!session?.id) {
+      return;
+    }
+
+    lastSessionIdRef.current = session.id;
+    hasHandledExpiryRef.current = false;
+  }, [session?.id]);
+
+  // Generate progression suggestions when session starts
+  useEffect(() => {
+    if (!session?.id || exercises.length === 0 || !user) {
+      return;
+    }
+
+    // Generate suggestions once per session load
+    const exerciseList = exercises.map(ex => ({
+      id: ex.exercise.id,
+      name: ex.exercise.name,
+    }));
+
+    generateSuggestionsMutation.mutateAsync(exerciseList)
+      .then(recommendations => {
+        setProgressionRecommendations(recommendations);
+      })
+      .catch(error => {
+        console.error('[ActiveSession] Failed to generate progression suggestions:', error);
+        // Silently fail - suggestions are optional
+      });
+  }, [session?.id, exercises.length, user?.id]);
+
+  // Detect and initialize technique state when active exercise changes
+  useEffect(() => {
+    if (!exercises || exercises.length === 0 || activeExerciseIndex >= exercises.length) {
+      return;
+    }
+
+    const currentExercise = exercises[activeExerciseIndex];
+    if (!currentExercise) return;
+
+    // Check for superset (requires current + next exercise)
+    const nextExercise = exercises[activeExerciseIndex + 1];
+    const superset = detectSuperset(currentExercise, nextExercise);
+    setSupersetState(superset);
+
+    // Reset drop set state (will initialize after working set is logged)
+    setDropSetState(null);
+
+    // Check for tempo
+    if (currentExercise.tempo) {
+      // Get target reps from reps_target (e.g., "8-12" → use 10)
+      const repsTarget = currentExercise.reps_target || '8-12';
+      const targetReps = parseInt(repsTarget.split('-')[1] || repsTarget.split('-')[0] || '10');
+      const tempo = initializeTempo(currentExercise, targetReps);
+      setTempoState(tempo);
+    } else {
+      setTempoState(null);
+    }
+  }, [activeExerciseIndex, exercises]);
+
+  const handleExpiredSessionReset = useCallback(async () => {
+    if (hasHandledExpiryRef.current) {
+      return;
+    }
+
+    hasHandledExpiryRef.current = true;
+
+    if (lastSessionIdRef.current) {
+      await clearWorkoutLoggingDraftsForSession(lastSessionIdRef.current);
+    }
+
+    Alert.alert(
+      'Session expired',
+      'This workout stayed open past midnight and has been reset. Yesterday is now incomplete.',
+      [
+        {
+          text: 'Open Plan',
+          onPress: () => router.replace('/(tabs)/workout/my-plan'),
+        },
+      ],
+    );
+  }, [router]);
+
+  const revalidateSessionForDayBoundary = useCallback(async () => {
+    if (!user?.id || authLoading) {
+      return;
+    }
+
+    const latestSession = await queryClient.fetchQuery({
+      queryKey: workoutKeys.activeSession(),
+      queryFn: () => getActiveSession(user.id),
+    });
+
+    if (!latestSession && lastSessionIdRef.current) {
+      await handleExpiredSessionReset();
+    }
+  }, [authLoading, handleExpiredSessionReset, queryClient, user?.id]);
+
+  useFocusEffect(
+    useCallback(() => {
+      void revalidateSessionForDayBoundary();
+    }, [revalidateSessionForDayBoundary]),
+  );
+
+  useEffect(() => {
+    const subscription = AppState.addEventListener('change', (nextState) => {
+      if (nextState === 'active') {
+        void revalidateSessionForDayBoundary();
+      }
+    });
+
+    return () => {
+      subscription.remove();
+    };
+  }, [revalidateSessionForDayBoundary]);
 
   useEffect(() => {
     if (!session?.started_at) {
@@ -261,8 +426,8 @@ export default function ActiveSessionScreen() {
       return;
     }
 
-    if (activeExerciseIndex > exercises.length - 1) {
-      setActiveExerciseIndex(Math.max(0, exercises.length - 1));
+    if (activeExerciseIndex < 0 || activeExerciseIndex > exercises.length - 1) {
+      setActiveExerciseIndex(0);
     }
   }, [activeExerciseIndex, exercises.length, setActiveExerciseIndex]);
 
@@ -384,16 +549,43 @@ export default function ActiveSessionScreen() {
     );
   }
 
-  if (!session || !currentExercise || !currentExerciseModel || !currentExerciseRows) {
+  if (!session) {
     return (
       <View style={[styles.container, { backgroundColor: c.bg, justifyContent: 'center', alignItems: 'center' }]}>
-        <Text style={{ color: c.text, fontFamily: ty.body.family }}>No active session found</Text>
+        <Text style={{ color: c.text, fontFamily: ty.body.family }}>
+          This workout session is no longer active
+        </Text>
         <Pressable
-          onPress={() => router.back()}
+          onPress={() => router.replace('/(tabs)/workout/my-plan')}
           style={{ marginTop: 20, padding: 10, backgroundColor: c.surface, borderRadius: 8 }}
         >
-          <Text style={{ color: c.primary }}>Go Back</Text>
+          <Text style={{ color: c.primary }}>Open Plan</Text>
         </Pressable>
+      </View>
+    );
+  }
+
+  if (session && exercises.length === 0) {
+    return (
+      <View style={[styles.container, { backgroundColor: c.bg, justifyContent: 'center', alignItems: 'center' }]}>
+        <Text style={{ color: c.text, fontFamily: ty.body.family, textAlign: 'center', paddingHorizontal: s.xl }}>
+          This workout session has no exercises to resume
+        </Text>
+        <Pressable
+          onPress={() => router.replace('/(tabs)/workout/my-plan')}
+          style={{ marginTop: 20, padding: 10, backgroundColor: c.surface, borderRadius: 8 }}
+        >
+          <Text style={{ color: c.primary }}>Open Plan</Text>
+        </Pressable>
+      </View>
+    );
+  }
+
+  if (!currentExercise || !currentExerciseModel || !currentExerciseRows) {
+    return (
+      <View style={[styles.container, { backgroundColor: c.bg, justifyContent: 'center', alignItems: 'center' }]}>
+        <ActivityIndicator size="large" color={c.primary} />
+        <Text style={{ color: c.textMuted, marginTop: s.sm }}>Restoring session...</Text>
       </View>
     );
   }
@@ -436,6 +628,53 @@ export default function ActiveSessionScreen() {
     const draft = currentDraftForSet(setNumber);
     const nextValue = draft?.weight ? Number(draft.weight) : 135;
     setPlateCalcTarget(Number.isFinite(nextValue) ? nextValue : 135);
+  };
+
+  // Progressive Overload handlers
+  const handleApplyProgression = async (recommendation: ProgressionRecommendation) => {
+    try {
+      // Find the session exercise for this recommendation
+      const sessionExercise = exercises.find(ex => ex.exercise.id === recommendation.analysis.exerciseId);
+      if (!sessionExercise) {
+        Alert.alert('Error', 'Could not find exercise in current session');
+        return;
+      }
+
+      // Update drafts with suggested values
+      if (recommendation.suggestedWeight) {
+        // Apply to first set draft
+        handleDraftChange(sessionExercise.id, 1, 'weight', recommendation.suggestedWeight.toString());
+      }
+
+      if (recommendation.suggestedReps) {
+        handleDraftChange(sessionExercise.id, 1, 'reps', recommendation.suggestedReps.toString());
+      }
+
+      // Mark suggestion as applied (this is tracked in the database)
+      // The actual suggestion ID would come from the database version
+      // For now, just remove it from the local state
+      setProgressionRecommendations(prev =>
+        prev.filter(r => r.analysis.exerciseId !== recommendation.analysis.exerciseId)
+      );
+
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+      Alert.alert(
+        'Progression Applied',
+        `${recommendation.type === 'increase_weight' ? 'Weight increased' : 'Rep target increased'} for ${recommendation.analysis.exerciseName}. Good luck!`
+      );
+    } catch (error) {
+      console.error('[ActiveSession] Failed to apply progression:', error);
+      Alert.alert('Error', 'Failed to apply progression suggestion');
+    }
+  };
+
+  const handleDismissProgression = async (recommendation: ProgressionRecommendation) => {
+    // Remove from local state
+    setProgressionRecommendations(prev =>
+      prev.filter(r => r.analysis.exerciseId !== recommendation.analysis.exerciseId)
+    );
+
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
   };
 
   const moveToNextExercise = () => {
@@ -734,6 +973,10 @@ export default function ActiveSessionScreen() {
       });
     } catch (error) {
       console.error('Failed to finish workout', error);
+      if (error instanceof Error && error.message.includes('expired when the day rolled over')) {
+        await handleExpiredSessionReset();
+        return;
+      }
       Alert.alert('Error', 'Failed to finish workout');
     }
   };
@@ -780,6 +1023,145 @@ export default function ActiveSessionScreen() {
             onOpenInfo={() => setShowInfo(true)}
             onOpenSwap={() => setShowSwap(true)}
           />
+
+          {/* Progressive Overload Suggestions */}
+          {progressionRecommendations.length > 0 && (
+            <WorkoutProgressionSuggestionCard
+              recommendations={progressionRecommendations}
+              onApply={handleApplyProgression}
+              onDismiss={handleDismissProgression}
+              maxDisplay={3}
+            />
+          )}
+
+          {/* Advanced Techniques */}
+          {supersetState && (
+            <SupersetPairDisplay
+              exerciseA={{
+                id: supersetState.exerciseA.id,
+                name: supersetState.exerciseA.exercise.name,
+                setsTarget: supersetState.totalRounds,
+                repsTarget: supersetState.exerciseA.reps_target || '8-12',
+                setsCompleted: supersetState.exerciseA.sets?.length || 0,
+              }}
+              exerciseB={{
+                id: supersetState.exerciseB.id,
+                name: supersetState.exerciseB.exercise.name,
+                setsTarget: supersetState.totalRounds,
+                repsTarget: supersetState.exerciseB.reps_target || '8-12',
+                setsCompleted: supersetState.exerciseB.sets?.length || 0,
+              }}
+              config={supersetState.config}
+              currentRound={supersetState.currentRound}
+              totalRounds={supersetState.totalRounds}
+              activeExercise={supersetState.activeExercise}
+              onStartExercise={(exercise) => {
+                setSupersetState(prev => prev ? { ...prev, activeExercise: exercise } : null);
+              }}
+              onCompleteExercise={(exercise) => {
+                // Advance to next exercise or next round
+                setSupersetState(prev => {
+                  if (!prev) return null;
+
+                  if (exercise === 'A') {
+                    return { ...prev, activeExercise: 'B' };
+                  } else {
+                    // Both exercises complete, advance round
+                    const nextRound = prev.currentRound + 1;
+                    if (nextRound > prev.totalRounds) {
+                      return null; // Superset complete
+                    }
+                    return { ...prev, currentRound: nextRound, activeExercise: null };
+                  }
+                });
+              }}
+              onShowInfo={() => {
+                Alert.alert(
+                  'Superset',
+                  'Two exercises performed back-to-back with minimal rest. Increases workout density and efficiency.',
+                  [{ text: 'Got it' }]
+                );
+              }}
+            />
+          )}
+
+          {dropSetState && (
+            <DropSetPrompt
+              exerciseName={currentExercise.exercise.name}
+              workingSetWeight={dropSetState.workingSetWeight}
+              workingSetReps={dropSetState.workingSetReps}
+              config={dropSetState.config}
+              currentDropPhase={dropSetState.currentDropPhase}
+              onCompleteDropPhase={(weight, reps) => {
+                // Log the drop set and advance to next phase
+                setDropSetState(prev => prev ? advanceDropPhase(prev) : null);
+                Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+              }}
+              onSkipRemainingDrops={() => {
+                setDropSetState(null);
+                Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+              }}
+              onShowInfo={() => {
+                Alert.alert(
+                  'Drop Set',
+                  'After reaching failure, immediately reduce weight and continue without rest to maximize muscle fatigue and metabolic stress.',
+                  [{ text: 'Got it' }]
+                );
+              }}
+            />
+          )}
+
+          {tempoState && (
+            <TempoCoach
+              exerciseName={currentExercise.exercise.name}
+              config={tempoState.config}
+              isActive={tempoState.isActive}
+              currentRep={tempoState.currentRep}
+              targetReps={tempoState.targetReps}
+              onSetComplete={() => {
+                setTempoState(prev => prev ? completeTempoSet(prev) : null);
+                Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+              }}
+              onShowInfo={() => {
+                Alert.alert(
+                  'Tempo Training',
+                  'Control rep speed to increase time under tension (TUT), maximizing muscle fiber recruitment and hypertrophy.\n\nFormat: Eccentric-Pause-Concentric-Rest (in seconds)\nExample: "3-0-1-0" = 3s down, 0s pause, 1s up, 0s rest',
+                  [{ text: 'Got it' }]
+                );
+              }}
+            />
+          )}
+
+          {hasRIRRPETarget(currentExercise) && (
+            <RIRTargetDisplay
+              exerciseName={currentExercise.exercise.name}
+              setNumber={currentExerciseRows.activeSetNumber}
+              config={getRIRRPEConfig(currentExercise)}
+              previousValue={undefined} // TODO: fetch from previous session
+              historicalTrend={undefined} // TODO: fetch last 5 sessions
+              onLogValue={(value) => {
+                // Update current draft with RIR/RPE value
+                handleDraftChange(currentExercise.id, currentExerciseRows.activeSetNumber, 'rpe', value.toString());
+                Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+              }}
+              onShowInfo={() => {
+                const config = getRIRRPEConfig(currentExercise);
+                if (config.mode === 'RIR') {
+                  Alert.alert(
+                    'RIR (Reps In Reserve)',
+                    'How many more reps you could have done before failure.\n\nRIR 0 = Absolute failure\nRIR 1 = Could have done 1 more rep\nRIR 2-3 = Optimal hypertrophy zone',
+                    [{ text: 'Got it' }]
+                  );
+                } else {
+                  Alert.alert(
+                    'RPE (Rate of Perceived Exertion)',
+                    'How hard the set feels on a 1-10 scale.\n\nRPE 10 = Absolute max effort\nRPE 8 = Could do 2 more reps\nRPE 6-7 = Moderately hard',
+                    [{ text: 'Got it' }]
+                  );
+                }
+              }}
+            />
+          )}
 
           <GlassCard intensity="medium" style={{ marginTop: s.md }}>
             <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: showExercisePreview ? s.sm : 0 }}>
@@ -1131,71 +1513,51 @@ export default function ActiveSessionScreen() {
       <AnimatePresence>
         {showSwap ? (
           <MotiView
-            from={{ opacity: 0, translateY: 80 }}
-            animate={{ opacity: 1, translateY: 0 }}
-            exit={{ opacity: 0, translateY: 80 }}
+            from={{ opacity: 0, scale: 0.95 }}
+            animate={{ opacity: 1, scale: 1 }}
+            exit={{ opacity: 0, scale: 0.95 }}
             style={[
               StyleSheet.absoluteFill,
-              { backgroundColor: c.bg, zIndex: 100, paddingTop: insets.top + s.lg },
+              { backgroundColor: c.bg, zIndex: 100, paddingTop: insets.top },
             ]}
           >
-            <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingHorizontal: s.lg, marginBottom: s.lg }}>
-              <Text style={{ color: c.text, fontFamily: ty.heading.familySemibold, fontSize: ty.sizes.lg }}>
-                Swap Exercise
-              </Text>
-              <Pressable onPress={() => setShowSwap(false)}>
-                <Ionicons name="close" size={28} color={c.text} />
-              </Pressable>
-            </View>
-
-            <View style={{ paddingHorizontal: s.lg, marginBottom: s.md }}>
-              <TextInput
-                placeholder="Search replacement..."
-                placeholderTextColor={c.textMuted}
-                value={swapSearch}
-                onChangeText={setSwapSearch}
-                style={{
-                  backgroundColor: c.surface,
-                  color: c.text,
-                  padding: 12,
-                  borderRadius: 8,
-                  borderWidth: 1,
-                  borderColor: c.border,
-                }}
-              />
-            </View>
-
-            <ScrollView contentContainerStyle={{ paddingHorizontal: s.lg, paddingBottom: insets.bottom + s.xl, gap: s.sm }}>
-              {swapOptions.map((item) => (
-                <Pressable
-                  key={item.id}
-                  onPress={() => handleSwapExercise(item.id)}
-                  style={{
-                    borderRadius: r.lg,
-                    padding: s.md,
-                    backgroundColor: c.surface,
-                    borderWidth: 1,
-                    borderColor: c.border,
-                  }}
-                >
-                  <View style={{ flexDirection: 'row', alignItems: 'center' }}>
-                    <View style={{ flex: 1 }}>
-                      <Text style={{ color: c.text, fontFamily: ty.body.familySemibold }}>{item.name}</Text>
-                      <Text style={{ color: c.textMuted, fontSize: 12, marginTop: 4 }}>
-                        {item.primary_muscle} • {item.category}
-                      </Text>
-                    </View>
-                    <Ionicons name="swap-vertical" size={20} color={c.primary} />
-                  </View>
-                </Pressable>
-              ))}
-
-              {swapOptions.length === 0 ? (
-                <Text style={{ color: c.textMuted, textAlign: 'center', marginTop: 20 }}>
-                  No matching exercises found.
-                </Text>
-              ) : null}
-            </ScrollView>
+            <SmartSubstitutionPicker
+              originalExercise={{
+                id: currentExercise.exercise.id,
+                name: currentExercise.exercise.name,
+                category: currentExercise.exercise.category || null,
+                equipment_required: currentExercise.exercise.equipment_required || null,
+                primary_muscle: currentExercise.exercise.primary_muscle || null,
+                pattern: currentExercise.exercise.pattern || null,
+                difficulty: currentExercise.exercise.difficulty || null,
+                has_media: currentExercise.exercise.has_media,
+                video_url: currentExercise.exercise.video_url,
+                gif_url: currentExercise.exercise.gif_url,
+                image_url: currentExercise.exercise.image_url,
+              }}
+              userEquipment={[]} // Will be fetched inside the component
+              sessionExercises={exercises.map(ex => ({
+                id: ex.exercise.id,
+                name: ex.exercise.name,
+                category: ex.exercise.category || null,
+                equipment_required: ex.exercise.equipment_required || null,
+                primary_muscle: ex.exercise.primary_muscle || null,
+                pattern: ex.exercise.pattern || null,
+                difficulty: ex.exercise.difficulty || null,
+                has_media: ex.exercise.has_media,
+                video_url: ex.exercise.video_url,
+                gif_url: ex.exercise.gif_url,
+                image_url: ex.exercise.image_url,
+              }))}
+              dayFocus={session.plan_day?.focus || null}
+              slotIndex={activeExerciseIndex}
+              userId={user!.id}
+              onSelect={(exercise) => {
+                handleSwapExercise(exercise.id);
+                setShowSwap(false);
+              }}
+              onClose={() => setShowSwap(false)}
+            />
           </MotiView>
         ) : null}
       </AnimatePresence>

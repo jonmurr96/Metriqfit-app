@@ -3,8 +3,11 @@ import { ActivityIndicator, Pressable, ScrollView, StyleSheet, Text, useWindowDi
 import { useRouter } from 'expo-router';
 import { ProgressSectionShell, WeeklyReviewSummary } from '../../../components/progress';
 import { GlassCard } from '../../../components/premium/GlassCard';
+import { SubscriptionFeatureGate } from '../../../components/premium/SubscriptionFeatureGate';
+import { useFeatureAccess } from '../../../hooks/useSubscription';
 import { useProgressWeeklyReview } from '../../../hooks/useProgressReview';
 import {
+  trackEvent,
   trackProgressReviewCtaTapped,
   trackProgressWeeklyReviewViewed,
 } from '../../../lib/analytics';
@@ -21,6 +24,7 @@ export default function WeeklyReviewScreen() {
   const { c, s, ty, r } = useTokens();
   const router = useRouter();
   const { width } = useWindowDimensions();
+  const analyticsAccess = useFeatureAccess('advanced_analytics');
   const { data: snapshot, isLoading } = useProgressWeeklyReview();
   const useStackedMetricCards = width < 440;
 
@@ -30,11 +34,41 @@ export default function WeeklyReviewScreen() {
     }
   }, [snapshot]);
 
-  if (isLoading && !snapshot) {
+  useEffect(() => {
+    if (!analyticsAccess.isLoading && !analyticsAccess.hasAccess) {
+      trackEvent('feature_gate_viewed', {
+        feature: 'advanced_analytics',
+        source: 'progress_weekly_review',
+        required_tier: analyticsAccess.upgradeTier,
+      });
+    }
+  }, [analyticsAccess.hasAccess, analyticsAccess.isLoading, analyticsAccess.upgradeTier]);
+
+  if ((isLoading || analyticsAccess.isLoading) && !snapshot) {
     return (
       <View style={[styles.loadingContainer, { backgroundColor: c.bg }]}>
         <ActivityIndicator size="large" color={c.primary} />
       </View>
+    );
+  }
+
+  if (!analyticsAccess.hasAccess) {
+    return (
+      <ProgressSectionShell
+        title="Weekly Review"
+        primarySection="review"
+        secondarySection="review"
+        secondaryItem="weekly"
+      >
+        <View style={{ paddingHorizontal: s.lg, paddingBottom: 80 }}>
+          <SubscriptionFeatureGate
+            requiredTier={analyticsAccess.upgradeTier}
+            title="Unlock weekly review"
+            subtitle="Weekly review and coaching summaries are part of Premium analytics."
+            ctaLabel="See Premium Plans"
+          />
+        </View>
+      </ProgressSectionShell>
     );
   }
 

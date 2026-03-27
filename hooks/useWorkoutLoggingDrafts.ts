@@ -30,6 +30,14 @@ function createStorageKey(sessionId: string) {
   return `workout_session_${sessionId}`;
 }
 
+export async function clearWorkoutLoggingDraftsForSession(sessionId: string) {
+  if (!sessionId) {
+    return;
+  }
+
+  await AsyncStorage.removeItem(createStorageKey(sessionId));
+}
+
 export function useWorkoutLoggingDrafts(sessionId?: string) {
   const [state, setState] = useState<WorkoutLoggingDraftState>(EMPTY_STATE);
   const [isHydrated, setIsHydrated] = useState(false);
@@ -237,11 +245,11 @@ export function useWorkoutLoggingDrafts(sessionId?: string) {
   }, []);
 
   const clearAll = useCallback(async () => {
-    if (storageKey) {
-      await AsyncStorage.removeItem(storageKey);
+    if (storageKey && sessionId) {
+      await clearWorkoutLoggingDraftsForSession(sessionId);
     }
     setState(EMPTY_STATE);
-  }, [storageKey]);
+  }, [sessionId, storageKey]);
 
   return {
     isHydrated,

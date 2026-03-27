@@ -3,6 +3,9 @@
     "name": "MetriqFit",
     "slug": "metriqfit-elite",
     "version": "1.0.0",
+    "runtimeVersion": {
+      "policy": "appVersion"
+    },
     "orientation": "portrait",
     "icon": "./assets/icon.png",
     "scheme": "metriqfit",
@@ -17,13 +20,20 @@
     ],
     "ios": {
       "supportsTablet": true,
-      "bundleIdentifier": "com.metriqfit.elite"
+      "bundleIdentifier": "com.metriqfit.elite",
+      "buildNumber": "1",
+      "infoPlist": {
+        "NSMicrophoneUsageDescription": "MetriqFit uses the microphone for audio feedback during workouts.",
+        "NSCameraUsageDescription": "Allow MetriqFit to access your camera to scan barcodes and analyze meal photos.",
+        "NSPhotoLibraryUsageDescription": "Allow MetriqFit to access your photo library to analyze meal photos."
+      }
     },
     "android": {
       "adaptiveIcon": {
         "foregroundImage": "./assets/adaptive-icon.png",
         "backgroundColor": "#050505"
       },
+      "versionCode": 1,
       "package": "com.metriqfit.elite"
     },
     "web": {
@@ -34,6 +44,7 @@
     "plugins": [
       "expo-router",
       "expo-font",
+      "expo-notifications",
       "@react-native-community/datetimepicker",
       [
         "expo-camera",

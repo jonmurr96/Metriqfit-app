@@ -3,8 +3,11 @@ import { ActivityIndicator, Pressable, ScrollView, StyleSheet, Text, View } from
 import { useRouter } from 'expo-router';
 import { DailyReviewHero, ProgressSectionShell } from '../../../components/progress';
 import { GlassCard } from '../../../components/premium/GlassCard';
+import { SubscriptionFeatureGate } from '../../../components/premium/SubscriptionFeatureGate';
+import { useFeatureAccess } from '../../../hooks/useSubscription';
 import { useProgressDailyReview } from '../../../hooks/useProgressReview';
 import {
+  trackEvent,
   trackProgressDailyReviewViewed,
   trackProgressReviewCtaTapped,
 } from '../../../lib/analytics';
@@ -21,6 +24,7 @@ function workoutLabel(status: 'completed' | 'planned' | 'active' | 'rest' | 'non
 export default function DailySummaryScreen() {
   const { c, s, ty, r } = useTokens();
   const router = useRouter();
+  const analyticsAccess = useFeatureAccess('advanced_analytics');
   const { data: snapshot, isLoading } = useProgressDailyReview();
 
   useEffect(() => {
@@ -29,11 +33,40 @@ export default function DailySummaryScreen() {
     }
   }, [snapshot]);
 
-  if (isLoading && !snapshot) {
+  useEffect(() => {
+    if (!analyticsAccess.isLoading && !analyticsAccess.hasAccess) {
+      trackEvent('feature_gate_viewed', {
+        feature: 'advanced_analytics',
+        source: 'progress_daily_summary',
+        required_tier: analyticsAccess.upgradeTier,
+      });
+    }
+  }, [analyticsAccess.hasAccess, analyticsAccess.isLoading, analyticsAccess.upgradeTier]);
+
+  if ((isLoading || analyticsAccess.isLoading) && !snapshot) {
     return (
       <View style={[styles.loadingContainer, { backgroundColor: c.bg }]}>
         <ActivityIndicator size="large" color={c.primary} />
       </View>
+    );
+  }
+
+  if (!analyticsAccess.hasAccess) {
+    return (
+      <ProgressSectionShell
+        title="Daily Summary"
+        primarySection="review"
+        secondarySection="review"
+        secondaryItem="daily"
+      >
+        <View style={{ paddingHorizontal: s.lg, paddingTop: s.lg }}>
+          <SubscriptionFeatureGate
+            requiredTier={analyticsAccess.upgradeTier}
+            title="Daily review is on Premium"
+            subtitle="Upgrade for a structured daily accountability recap across nutrition, training, and next actions."
+          />
+        </View>
+      </ProgressSectionShell>
     );
   }
 

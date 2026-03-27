@@ -63,7 +63,7 @@ const hasRevenueCatPluginInDynamicConfig = fs.existsSync(appConfigPath)
 const hasRevenueCatPlugin = hasRevenueCatPluginInAppJson || hasRevenueCatPluginInDynamicConfig;
 const hasDependency = Boolean(packageJson?.dependencies?.['react-native-purchases']);
 
-const billingTestMode = parseBool(env.EXPO_PUBLIC_BILLING_TEST_MODE, true);
+const billingTestMode = parseBool(env.EXPO_PUBLIC_BILLING_TEST_MODE, false);
 const sandboxEnabled = parseBool(env.EXPO_PUBLIC_REVENUECAT_SANDBOX_ENABLED, false);
 const nativePluginEnabled = parseBool(env.EXPO_PUBLIC_REVENUECAT_NATIVE_PLUGIN_ENABLED, false);
 const iosKey = env.EXPO_PUBLIC_REVENUECAT_IOS_KEY || '';

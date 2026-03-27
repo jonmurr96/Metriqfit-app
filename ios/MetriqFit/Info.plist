@@ -47,6 +47,10 @@
     </dict>
     <key>NSCameraUsageDescription</key>
     <string>Allow MetriqFit to access your camera to scan barcodes and analyze meal photos.</string>
+    <key>NSMicrophoneUsageDescription</key>
+    <string>MetriqFit uses the microphone for audio feedback during workouts.</string>
+    <key>NSPhotoLibraryUsageDescription</key>
+    <string>Allow MetriqFit to access your photo library to analyze meal photos.</string>
     <key>NSUserActivityTypes</key>
     <array>
       <string>$(PRODUCT_BUNDLE_IDENTIFIER).expo.index_route</string>

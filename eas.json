@@ -13,7 +13,10 @@
         "buildType": "apk"
       },
       "env": {
-        "EXPO_PUBLIC_APP_ENV": "local"
+        "EXPO_PUBLIC_APP_ENV": "local",
+        "EXPO_PUBLIC_BILLING_TEST_MODE": "true",
+        "EXPO_PUBLIC_REVENUECAT_NATIVE_PLUGIN_ENABLED": "true",
+        "EXPO_PUBLIC_REVENUECAT_SANDBOX_ENABLED": "true"
       }
     },
     "preview": {
@@ -25,7 +28,10 @@
         "buildType": "apk"
       },
       "env": {
-        "EXPO_PUBLIC_APP_ENV": "staging"
+        "EXPO_PUBLIC_APP_ENV": "staging",
+        "EXPO_PUBLIC_BILLING_TEST_MODE": "false",
+        "EXPO_PUBLIC_REVENUECAT_NATIVE_PLUGIN_ENABLED": "true",
+        "EXPO_PUBLIC_REVENUECAT_SANDBOX_ENABLED": "true"
       }
     },
     "staging": {
@@ -37,7 +43,10 @@
         "buildType": "apk"
       },
       "env": {
-        "EXPO_PUBLIC_APP_ENV": "staging"
+        "EXPO_PUBLIC_APP_ENV": "staging",
+        "EXPO_PUBLIC_BILLING_TEST_MODE": "false",
+        "EXPO_PUBLIC_REVENUECAT_NATIVE_PLUGIN_ENABLED": "true",
+        "EXPO_PUBLIC_REVENUECAT_SANDBOX_ENABLED": "true"
       },
       "channel": "staging"
     },
@@ -50,7 +59,10 @@
         "buildType": "app-bundle"
       },
       "env": {
-        "EXPO_PUBLIC_APP_ENV": "prod"
+        "EXPO_PUBLIC_APP_ENV": "prod",
+        "EXPO_PUBLIC_BILLING_TEST_MODE": "false",
+        "EXPO_PUBLIC_REVENUECAT_NATIVE_PLUGIN_ENABLED": "true",
+        "EXPO_PUBLIC_REVENUECAT_SANDBOX_ENABLED": "false"
       },
       "channel": "production",
       "autoIncrement": true
@@ -59,9 +71,9 @@
   "submit": {
     "production": {
       "ios": {
-        "appleId": "your-apple-id@email.com",
-        "ascAppId": "YOUR_APP_STORE_CONNECT_APP_ID",
-        "appleTeamId": "YOUR_APPLE_TEAM_ID"
+        "appleId": "${EXPO_APPLE_ID}",
+        "ascAppId": "${EXPO_ASC_APP_ID}",
+        "appleTeamId": "${EXPO_APPLE_TEAM_ID}"
       },
       "android": {
         "serviceAccountKeyPath": "./google-services-key.json",

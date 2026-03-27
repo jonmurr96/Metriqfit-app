@@ -9,6 +9,7 @@ import {
   resolveDayFocusPolicy,
   stableHash,
 } from './programMappingRules.ts';
+import { classifyExercise } from './exerciseClassification.ts';
 
 export type MappingViolationType =
   | 'focus_mismatch'
@@ -105,9 +106,12 @@ function scoreReplacementCandidate(input: {
   dayId: string;
   rowId: string;
   dayFocusSeed: string;
+  slotIndex?: number;  // NEW: track exercise position (0-6)
+  usedPatternGroups?: Set<string>;  // NEW: track used patterns
 }) {
   let score = 0;
 
+  // Existing scoring (keep for backward compatibility)
   if ((input.candidate.category || '').toLowerCase() === (input.original.category || '').toLowerCase()) {
     score += 5;
   }
@@ -134,6 +138,101 @@ function scoreReplacementCandidate(input: {
     score -= 4;
   }
 
+  // OPTIMIZATION 1: Common Exercise Prioritization (+45 vs +0 before)
+  const candidateClassification = classifyExercise(input.candidate);
+  if (candidateClassification.isCommon) {
+    score += 45;  // 3.75x stronger than base scoring
+  }
+
+  // OPTIMIZATION 2: Compound Slot Ordering
+  if (input.slotIndex !== undefined) {
+    if (input.slotIndex <= 2 && candidateClassification.isCompound) {
+      score += 40;  // Early slots favor compounds
+    } else if (input.slotIndex <= 4 && candidateClassification.isCompound) {
+      score += 20;
+    } else if (input.slotIndex > 4 && !candidateClassification.isCompound) {
+      score += 10;  // Later slots favor isolation
+    }
+  }
+
+  // OPTIMIZATION 3: Muscle Growth Stimulus
+  let growthScore = 0;
+  if (candidateClassification.isCompound) growthScore += 30;
+  if (candidateClassification.equipmentTier === 'common_gym') growthScore += 15;
+
+  const highGrowthPatterns = ['horizontal_push', 'vertical_push', 'horizontal_pull', 'vertical_pull', 'squat', 'hinge'];
+  if (highGrowthPatterns.includes(candidateClassification.movementPatternGroup)) {
+    growthScore += 25;
+  }
+  score += growthScore;  // Max +70
+
+  // OPTIMIZATION 4: Exercise Complementarity
+  if (input.usedPatternGroups) {
+    const pattern = candidateClassification.movementPatternGroup;
+
+    // Antagonist pairing (push/pull balance)
+    if (pattern === 'horizontal_push' && input.usedPatternGroups.has('horizontal_pull')) score += 20;
+    if (pattern === 'horizontal_pull' && input.usedPatternGroups.has('horizontal_push')) score += 20;
+    if (pattern === 'vertical_push' && input.usedPatternGroups.has('vertical_pull')) score += 20;
+    if (pattern === 'vertical_pull' && input.usedPatternGroups.has('vertical_push')) score += 20;
+
+    // Quad/Hamstring balance
+    if (pattern === 'squat' && input.usedPatternGroups.has('hinge')) score += 15;
+    if (pattern === 'hinge' && input.usedPatternGroups.has('squat')) score += 15;
+
+    // Angle variety
+    if (input.policy.primaryFocusTags.includes('chest')) {
+      if (pattern === 'vertical_push' && input.usedPatternGroups.has('horizontal_push')) {
+        score += 18;  // Incline after flat bench
+      }
+    }
+    if (input.policy.primaryFocusTags.includes('back')) {
+      if (pattern === 'vertical_pull' && input.usedPatternGroups.has('horizontal_pull')) {
+        score += 18;  // Pulldown after row
+      }
+    }
+  }
+
+  // OPTIMIZATION 5: Strict Muscle Group Enforcement
+  const primaryFocus = input.policy.primaryFocusTags[0];
+  if (primaryFocus && candidateFocus) {
+    const strictMap: Record<string, string[]> = {
+      'chest': ['chest'],
+      'back': ['back'],
+      'legs': ['legs'],
+      'shoulders': ['shoulders'],
+      'arms': ['arms'],
+      'hamstrings': ['hamstrings'],
+      'glutes': ['glutes'],
+    };
+
+    const allowedForPrimary = strictMap[primaryFocus];
+    if (allowedForPrimary && !allowedForPrimary.includes(candidateFocus)) {
+      score -= 500;  // Heavy penalty for wrong muscle group
+    }
+  }
+
+  // OPTIMIZATION 6: Exercise Synergy (priming effects)
+  if (input.usedPatternGroups) {
+    const pattern = candidateClassification.movementPatternGroup;
+
+    // Accessories after compounds get synergy bonus
+    const SYNERGY_RULES: Array<{ prime: string; accessories: string[]; bonus: number }> = [
+      { prime: 'horizontal_push', accessories: ['chest_accessory', 'triceps_accessory'], bonus: 15 },
+      { prime: 'vertical_pull', accessories: ['back_accessory', 'biceps_accessory'], bonus: 15 },
+      { prime: 'squat', accessories: ['quad_accessory', 'glute_accessory'], bonus: 12 },
+      { prime: 'hinge', accessories: ['hamstring_accessory', 'glute_accessory'], bonus: 12 },
+    ];
+
+    for (const rule of SYNERGY_RULES) {
+      if (rule.accessories.includes(pattern) && input.usedPatternGroups.has(rule.prime)) {
+        score += rule.bonus;
+        break;
+      }
+    }
+  }
+
+  // Deterministic hash (keep existing)
   const seed = `${input.dayId}::${input.rowId}::${input.dayFocusSeed}::${input.candidate.id}`;
   score += (stableHash(seed) % 1000) / 1000;
 
@@ -148,6 +247,8 @@ export function selectDeterministicReplacement(input: {
   originalExercise: ProgramExercise;
   exercisePool: ProgramExercise[];
   avoidExerciseIds?: string[];
+  slotIndex?: number;  // NEW: exercise position (0-6)
+  usedPatternGroups?: Set<string>;  // NEW: already used patterns
 }): ProgramExercise | null {
   const avoid = new Set((input.avoidExerciseIds || []).filter(Boolean));
 
@@ -178,6 +279,8 @@ export function selectDeterministicReplacement(input: {
         dayId: input.dayId,
         rowId: input.rowId,
         dayFocusSeed: focusSeed,
+        slotIndex: input.slotIndex,  // Pass through
+        usedPatternGroups: input.usedPatternGroups,  // Pass through
       }),
     }))
     .sort((a, b) => b.score - a.score);
@@ -269,6 +372,7 @@ export function remediateDayExerciseMappings(input: DayAuditInput): DayRemediati
   const audit = auditDayExerciseMappings(input);
   const rowsById = new Map(input.rows.map((row) => [row.rowId, row]));
   const usedExerciseIds = new Set<string>();
+  const usedPatternGroups = new Set<string>();  // NEW: track patterns
   const replacementByRowId: Record<string, string> = {};
   const changedRows: DayRemediationChange[] = [];
   const unresolvedRows: {
@@ -282,11 +386,13 @@ export function remediateDayExerciseMappings(input: DayAuditInput): DayRemediati
   const violationsByRowId = new Map(audit.violations.map((violation) => [violation.rowId, violation]));
 
   for (const row of sortedRows) {
+    const classification = classifyExercise(row.exercise);  // NEW
     const violation = violationsByRowId.get(row.rowId);
 
     if (!violation) {
       if (!usedExerciseIds.has(row.exerciseId)) {
         usedExerciseIds.add(row.exerciseId);
+        usedPatternGroups.add(classification.movementPatternGroup);  // NEW
         replacementByRowId[row.rowId] = row.exerciseId;
       } else {
         unresolvedRows.push({
@@ -304,6 +410,7 @@ export function remediateDayExerciseMappings(input: DayAuditInput): DayRemediati
 
     if (!shouldReplace && !usedExerciseIds.has(row.exerciseId)) {
       usedExerciseIds.add(row.exerciseId);
+      usedPatternGroups.add(classification.movementPatternGroup);  // NEW
       replacementByRowId[row.rowId] = row.exerciseId;
       continue;
     }
@@ -316,6 +423,8 @@ export function remediateDayExerciseMappings(input: DayAuditInput): DayRemediati
       originalExercise: row.exercise,
       exercisePool: input.exercisePool,
       avoidExerciseIds: [...usedExerciseIds],
+      slotIndex: row.orderIndex,  // NEW: pass slot index
+      usedPatternGroups,  // NEW: pass used patterns
     });
 
     if (!replacement) {
@@ -327,6 +436,10 @@ export function remediateDayExerciseMappings(input: DayAuditInput): DayRemediati
       });
       continue;
     }
+
+    // Track replacement pattern
+    const replacementClassification = classifyExercise(replacement);  // NEW
+    usedPatternGroups.add(replacementClassification.movementPatternGroup);  // NEW
 
     replacementByRowId[row.rowId] = replacement.id;
     usedExerciseIds.add(replacement.id);

@@ -3,7 +3,7 @@ import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { useTokens } from '../../lib/theme';
 import { TabBarIcon } from '../navigation/TabBarIcon';
 
-export type NutritionToolAccessState = 'available' | 'elite_required';
+export type NutritionToolAccessState = 'available' | 'premium_required' | 'elite_required';
 
 export interface NutritionToolHubCardProps {
   title: string;
@@ -23,6 +23,12 @@ export function NutritionToolHubCard({
   onPress,
 }: NutritionToolHubCardProps) {
   const { c, s, ty, r } = useTokens();
+  const gated = accessState !== 'available';
+  const badgeLabel = accessState === 'premium_required'
+    ? 'Premium'
+    : accessState === 'elite_required'
+      ? 'Elite'
+      : 'Ready';
 
   return (
     <Pressable
@@ -55,18 +61,18 @@ export function NutritionToolHubCard({
             styles.badge,
             {
               borderRadius: r.pill,
-              backgroundColor: accessState === 'elite_required' ? `${c.warning}16` : `${c.primary}14`,
+              backgroundColor: gated ? `${c.warning}16` : `${c.primary}14`,
             },
           ]}
         >
           <Text
             style={{
-              color: accessState === 'elite_required' ? c.warning : c.primary,
+              color: gated ? c.warning : c.primary,
               fontFamily: ty.body.familySemibold,
               fontSize: ty.sizes.xs,
             }}
           >
-            {accessState === 'elite_required' ? 'Elite' : 'Ready'}
+            {badgeLabel}
           </Text>
         </View>
       </View>

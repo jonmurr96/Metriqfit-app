@@ -20,6 +20,7 @@ import { usePrepCoachState } from '../../../hooks/usePrepCoach';
 import { buildHomeMealPreviewItems } from '../../../lib/nutrition/home-meal-preview';
 import { getMealSlotLabel, MEAL_SLOT_ORDER } from '../../../lib/nutrition/meal-slots';
 import type { MealSlot } from '../../../services/nutritionService';
+import { toLocalDateKey } from '../../../lib/home/dashboard-state';
 
 import { VoiceInput } from '../../../components/ai/VoiceInput';
 
@@ -34,7 +35,7 @@ export default function NutritionHomeScreen() {
   const { mutate: copyMeals } = useCopyMeals();
   const logPlannedMealMutation = useLogPlannedMeal();
 
-  const today = new Date().toISOString().split('T')[0];
+  const today = toLocalDateKey(new Date());
   const todayDayOfWeek = new Date().getDay();
   const { data: waterSummary } = useDailyWaterSummary(today);
   
@@ -197,14 +198,17 @@ export default function NutritionHomeScreen() {
   return (
     <ScrollView
       style={{ flex: 1, backgroundColor: c.bg }}
-      contentContainerStyle={{ paddingTop: insets.top + s.sm, paddingBottom: insets.bottom + 180 }}
+      contentContainerStyle={{ 
+        paddingTop: insets.top + s.sm, 
+        paddingBottom: insets.bottom + 180,
+      }}
     >
       {/* Header with ring-style Search button */}
       <MotiView
         from={{ opacity: 0, translateY: -10 }}
         animate={{ opacity: 1, translateY: 0 }}
         transition={{ type: 'timing', duration: animation.duration.normal }}
-        style={[styles.header, { paddingHorizontal: s.xl }]}
+        style={[styles.header, { paddingHorizontal: s.lg }]}
       >
         <View>
           <Text
@@ -336,7 +340,7 @@ export default function NutritionHomeScreen() {
         </View>
       </MotiView>
 
-      <View style={{ paddingHorizontal: s.lg, marginTop: s.lg }}>
+      <View style={{ width: '100%', paddingHorizontal: s.lg, marginTop: s.lg }}>
         <NutritionSummaryCard
           calories={consumed?.calories || 0}
           calorieGoal={targets?.calories || 2400}
@@ -349,7 +353,7 @@ export default function NutritionHomeScreen() {
         />
       </View>
 
-      <View style={{ paddingHorizontal: s.lg, marginTop: s.lg }}>
+      <View style={{ width: '100%', paddingHorizontal: s.lg, marginTop: s.lg }}>
         <TodayMealPlanList
           meals={todayMeals}
           pendingPlanMealId={logPlannedMealMutation.isPending ? logPlannedMealMutation.variables?.planMealId || null : null}
@@ -365,7 +369,7 @@ export default function NutritionHomeScreen() {
         />
       </View>
 
-      <View style={{ paddingHorizontal: s.lg, marginTop: s.lg }}>
+      <View style={{ width: '100%', paddingHorizontal: s.lg, marginTop: s.lg }}>
         <HydrationCard
           onAdd={handleAddWater}
           current={waterSummary?.totalMl || 0}
@@ -374,7 +378,7 @@ export default function NutritionHomeScreen() {
       </View>
 
       {prepState?.enabled && (
-        <View style={{ paddingHorizontal: s.lg, marginTop: s.lg }}>
+        <View style={{ width: '100%', paddingHorizontal: s.lg, marginTop: s.lg }}>
           <View
             style={{
               backgroundColor: c.surface,
