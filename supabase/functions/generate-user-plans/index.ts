@@ -4581,13 +4581,32 @@ serve(async (req) => {
             };
           };
 
+          // Defensive: validate onboarding data before V1 mapping
+          if (!workoutContext.onboarding) {
+            throw new Error("V1: workoutContext.onboarding is missing");
+          }
+          
           const profile = mapOnboardingToV1(workoutContext.onboarding);
+          console.log('[V1] Mapped profile:', JSON.stringify(profile));
+          
           const recommendation = routeUserToPlan(profile);
+          console.log('[V1] Router recommendation:', JSON.stringify(recommendation));
+          
+          if (!recommendation?.familyIdRef) {
+            throw new Error("V1: routeUserToPlan returned invalid recommendation: " + JSON.stringify(recommendation));
+          }
+          
           const family = planFamilies.find(f => f.external_id === recommendation.familyIdRef);
-          if (!family) throw new Error("V1 Family Reference not found: " + recommendation.familyIdRef);
+          if (!family) {
+            console.error('[V1] Available families:', planFamilies.map(f => f.external_id));
+            throw new Error("V1 Family Reference not found: " + recommendation.familyIdRef);
+          }
           
           const template = coreTemplates.find(t => t.external_id === family.template_id);
-          if (!template) throw new Error("V1 Template not found: " + family.template_id);
+          if (!template) {
+            console.error('[V1] Available templates:', coreTemplates.map(t => t.external_id));
+            throw new Error("V1 Template not found: " + family.template_id);
+          }
 
           const hydratorPersona = {
             goal: profile.primaryGoal,
@@ -4635,8 +4654,10 @@ serve(async (req) => {
           }
 
           // V1 Activation: Finalize activation after successful storage
+          console.log('[V1] Starting activation block:', { activationMode, hasPlanId: !!workoutResult?.planId });
           if (activationMode !== 'preview' && workoutResult?.planId) {
             try {
+              console.log('[V1] Calling finalizeStoredWorkoutPlanActivation...');
               await finalizeStoredWorkoutPlanActivation(supabase, {
                 userId,
                 planId: workoutResult.planId,
@@ -4646,9 +4667,12 @@ serve(async (req) => {
               console.log('\n7. V1 Activation Success: TRUE');
               console.log('   Activated Plan ID:', workoutResult.planId);
             } catch (e: any) {
-              console.log('\n7. V1 Activation Success: FALSE', e.message);
+              console.error('\n7. V1 Activation Success: FALSE', e.message);
+              console.error('[V1] Activation error stack:', e.stack);
               warnings.push(`V1 activation warning: ${e.message}`);
             }
+          } else {
+            console.log('[V1] Skipping activation:', { activationMode, planId: workoutResult?.planId });
           }
           
           console.log('=============================================\n');
