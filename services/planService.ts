@@ -127,6 +127,7 @@ export interface PlanGenerationOptions {
   activation_mode?: 'preview' | 'activate';
   workout_regeneration?: WorkoutRegenerationRequest;
   nutrition_regeneration?: NutritionRegenerationRequest;
+  generation_version?: 'v1' | 'v2';
 }
 
 export type WorkoutRegenerationReason =
@@ -1617,17 +1618,6 @@ export async function getPlanRegenerationUsage(
   const regenerationsLimit = getFeatureLimit('plan_regenerations', tier);
   const isUnlimited = !Number.isFinite(regenerationsLimit);
 
-  if (isUnlimited) {
-    return {
-      regenerationsToday: 0,
-      regenerationsLimit: -1,
-      tier,
-      isUnlimited: true,
-      isElite: tier === 'elite',
-      remainingRegenerations: -1,
-    };
-  }
-
   const todayStart = new Date();
   todayStart.setHours(0, 0, 0, 0);
 
@@ -1638,6 +1628,17 @@ export async function getPlanRegenerationUsage(
     .gte('created_at', todayStart.toISOString());
 
   const regenerationsToday = recentRuns?.length || 0;
+
+  if (isUnlimited) {
+    return {
+      regenerationsToday,
+      regenerationsLimit: -1,
+      tier,
+      isUnlimited: true,
+      isElite: tier === 'elite',
+      remainingRegenerations: -1,
+    };
+  }
 
   return {
     regenerationsToday,
@@ -1654,7 +1655,7 @@ export async function getPlanRegenerationUsage(
  */
 export async function canRegeneratePlans(userId: string): Promise<boolean> {
   const usage = await getPlanRegenerationUsage(userId);
-  return usage.remainingRegenerations > 0;
+  return usage.isUnlimited || usage.remainingRegenerations > 0;
 }
 
 /**
@@ -1870,7 +1871,8 @@ export async function triggerPlanGeneration(
   planType: 'workout' | 'nutrition' | 'both',
   options: PlanGenerationOptions = {},
 ): Promise<{ runId: string; workoutPlanId?: string; nutritionPlanId?: string; warnings?: string[] }> {
-  const canRegenerate = await canRegeneratePlans(userId);
+  const shouldBypassRegenerationLimit = options.generation_mode === 'initial';
+  const canRegenerate = shouldBypassRegenerationLimit ? true : await canRegeneratePlans(userId);
   if (!canRegenerate) {
     const usage = await getPlanRegenerationUsage(userId);
     throw new Error(
@@ -1894,6 +1896,7 @@ export async function triggerPlanGeneration(
       body: {
         user_id: userId,
         plan_type: planType,
+        generation_version: options.generation_version || 'v1',
         ...options,
       },
     });
@@ -3005,6 +3008,49 @@ export async function getWorkoutSchedule(
 
   if (error) {
     console.error('Failed to fetch workout schedule:', error);
+    return [];
+  }
+
+  const entries = (data || []) as WorkoutScheduleEntry[];
+  const dayIds = entries.map((entry) => entry.plan_day_id).filter(Boolean) as string[];
+
+  const dayMap = new Map<string, { id: string; day_number: number; name: string; focus: string | null }>();
+  if (dayIds.length) {
+    const { data: dayRows } = await supabase
+      .from('user_workout_plan_days')
+      .select('id, day_number, name, focus, day_type, estimated_duration_min')
+      .in('id', dayIds);
+
+    for (const day of dayRows || []) {
+      dayMap.set(day.id, day);
+    }
+  }
+
+  return entries.map((entry) => ({
+    ...entry,
+    plan_day: entry.plan_day_id ? dayMap.get(entry.plan_day_id) || null : null,
+  }));
+}
+
+/**
+ * Get workout schedule entries for a date range by specific plan ID.
+ * This allows fetching schedule for preview or non-active plans.
+ */
+export async function getWorkoutScheduleByPlanId(
+  planId: string,
+  startDate: string,
+  endDate: string,
+): Promise<WorkoutScheduleEntry[]> {
+  const { data, error } = await db
+    .from('user_workout_plan_schedule')
+    .select('id, plan_id, plan_day_id, scheduled_date, session_type, status, original_date, completed_session_id, notes')
+    .eq('plan_id', planId)
+    .gte('scheduled_date', startDate)
+    .lte('scheduled_date', endDate)
+    .order('scheduled_date', { ascending: true });
+
+  if (error) {
+    console.error('Failed to fetch workout schedule by plan ID:', error);
     return [];
   }
 

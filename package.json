@@ -12,7 +12,9 @@
     "lint": "eslint app components hooks lib services --ext .js,.jsx,.ts,.tsx",
     "validate:exercises": "node scripts/validate-exercise-catalog.mjs",
     "validate:billing": "node scripts/validate-billing-sandbox.mjs",
-    "validate:release": "node scripts/validate-release-readiness.mjs"
+    "validate:release": "node scripts/validate-release-readiness.mjs",
+    "test:v1-activation": "node lib/workout/v1-activation-regression.test.mjs",
+    "test": "node --test lib/workout/*.test.mjs"
   },
   "dependencies": {
     "@expo-google-fonts/inter": "^0.2.3",
@@ -21,6 +23,7 @@
     "@expo-google-fonts/unbounded": "^0.4.1",
     "@expo/vector-icons": "^15.0.3",
     "@gorhom/bottom-sheet": "^5.0.6",
+    "@nozbe/watermelondb": "^0.28.0",
     "@react-native-async-storage/async-storage": "2.2.0",
     "@react-native-community/datetimepicker": "8.4.4",
     "@supabase/supabase-js": "^2.47.14",
@@ -61,9 +64,11 @@
   },
   "devDependencies": {
     "@babel/core": "^7.26.0",
+    "@babel/plugin-proposal-decorators": "^7.29.0",
     "@types/react": "~19.1.10",
     "eslint": "^9.0.0",
     "eslint-config-expo": "~10.0.0",
+    "supabase": "^2.84.4",
     "typescript": "^5.7.2"
   },
   "private": true

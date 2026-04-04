@@ -30,7 +30,8 @@ import {
   useActiveWorkoutPlan,
   useEditableNutritionPlanContext,
   useNutritionPlanDay,
-  useWorkoutSchedule,
+  useWorkoutScheduleByPlanId,
+  useWorkoutPlanPreview,
 } from '../../hooks/usePlan';
 import { useOnboardingAnswers, useProfile, useUserTargets } from '../../hooks/useUser';
 import { useOnboardingReviewState, useSetReviewSectionAccepted } from '../../hooks/useOnboardingReview';
@@ -116,7 +117,10 @@ export default function PlanReviewScreen() {
   const { data: generationHistory } = useGenerationHistory();
   const { data: onboardingAnswers } = useOnboardingAnswers();
   const { data: targetData, isLoading: targetsLoading } = useUserTargets();
-  const { data: workoutPlan, isLoading: workoutLoading } = useActiveWorkoutPlan();
+  const activeWorkoutQuery = useActiveWorkoutPlan();
+  const previewWorkoutQuery = useWorkoutPlanPreview(null, { enabled: !activeWorkoutQuery.data });
+  const workoutPlan = activeWorkoutQuery.data || previewWorkoutQuery.data || null;
+  const workoutLoading = activeWorkoutQuery.isLoading || previewWorkoutQuery.isLoading;
   const nutritionContextQuery = useEditableNutritionPlanContext();
   const nutritionPlan = nutritionContextQuery.data?.editablePlan || null;
   const nutritionPlanSource = nutritionContextQuery.data?.source || 'none';
@@ -146,10 +150,11 @@ export default function PlanReviewScreen() {
   const answerPayload = (onboardingAnswers?.answers || {}) as Record<string, any>;
 
   const weekRange = useMemo(() => getWeekRange(workoutPlan?.start_date), [workoutPlan?.start_date]);
-  const { data: weekSchedule, isLoading: weekScheduleLoading } = useWorkoutSchedule(
+  const { data: weekSchedule, isLoading: weekScheduleLoading } = useWorkoutScheduleByPlanId(
+    workoutPlan?.id || null,
     weekRange.startDate,
     weekRange.endDate,
-    { enabled: Boolean(workoutPlan) },
+    { enabled: Boolean(workoutPlan?.id) },
   );
 
   const todayDay = new Date().getDay();
@@ -240,7 +245,7 @@ export default function PlanReviewScreen() {
   };
 
   const handleClose = () => {
-    router.replace('/(onboarding)/nutrition-prefs');
+    router.replace('/(onboarding)/nutrition');
   };
 
   const handleRedoOnboarding = () => {

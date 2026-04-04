@@ -31,6 +31,7 @@ import {
   applyMealPlanChange,
   applyMealPlanBatchChange,
   getWorkoutSchedule,
+  getWorkoutScheduleByPlanId,
   getTodayWorkoutScheduleEntry,
   rescheduleWorkoutDay,
   computePlanConsistency,
@@ -231,6 +232,24 @@ export function useWorkoutSchedule(startDate: string, endDate: string, options?:
     queryKey: planKeys.workoutSchedule(user?.id || '', startDate, endDate),
     queryFn: () => getWorkoutSchedule(user!.id, startDate, endDate),
     enabled: !!user && !!startDate && !!endDate && (options?.enabled ?? true),
+    staleTime: 60 * 1000,
+  });
+}
+
+/**
+ * Get workout schedule entries for a specific plan ID within date range.
+ * This allows fetching schedule for preview or non-active plans.
+ */
+export function useWorkoutScheduleByPlanId(
+  planId: string | null,
+  startDate: string,
+  endDate: string,
+  options?: { enabled?: boolean }
+) {
+  return useQuery({
+    queryKey: [...planKeys.workoutSchedule('by-plan', startDate, endDate), planId],
+    queryFn: () => planId ? getWorkoutScheduleByPlanId(planId, startDate, endDate) : Promise.resolve([]),
+    enabled: !!planId && !!startDate && !!endDate && (options?.enabled ?? true),
     staleTime: 60 * 1000,
   });
 }

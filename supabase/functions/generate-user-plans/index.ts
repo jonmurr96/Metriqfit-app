@@ -21,6 +21,32 @@ import {
   selectExercisesForGeneratedSplitDay,
   type GeneratedSplitDayDefinition,
 } from "../../../lib/workout/generated-split-selection.ts";
+import {
+  generateDailyMeals,
+  getSlotTemplate,
+  type FoodWithMetadata,
+  type UserNutritionSelections,
+} from "./scientificMealEngine.ts";
+import { routeUserToPlan, type OnboardingProfileInput } from "../../../lib/workout/v1_librarian_router.ts";
+import { hydrateTemplate } from "../../../lib/workout/v1_architect.ts";
+import { planFamilies } from "../../../loaders/seeds/families.ts";
+import { coreTemplates } from "../../../loaders/seeds/templates.ts";
+import {
+  LiftComfort,
+  SessionEnvironment,
+  ExperienceLevel,
+  GoalBucket,
+  TrainingStyle,
+  ProgressionModel,
+  ReplacementGroup,
+  SlotArchetype,
+  DayType,
+  MovementPattern,
+  EquipmentCategory,
+  SetupComplexity,
+  FatigueCost,
+  ExerciseTier
+} from "../../../types/v1_engine.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -36,6 +62,149 @@ function jsonResponse(body: unknown, status = 200) {
       ...corsHeaders,
     },
   });
+}
+
+async function storeV1WorkoutPlan(
+  supabase: SupabaseClient,
+  userId: string,
+  runId: string,
+  context: any,
+  v1Plan: any,
+  horizonDays: number,
+  config: any,
+) {
+  const warnings: string[] = [];
+
+  const { data: maxVersionData } = await supabase
+    .from("user_workout_plans")
+    .select("version")
+    .eq("user_id", userId)
+    .order("version", { ascending: false })
+    .limit(1)
+    .maybeSingle();
+
+  const version = (maxVersionData?.version || 0) + 1;
+
+  const workoutPlan = await insertWorkoutPlanWithFallback(supabase, {
+    user_id: userId,
+    generation_run_id: runId,
+    version,
+    is_active: false,
+    lifecycle_state: config.activationMode === "preview" ? "preview" : "live",
+    replaces_plan_id: config.currentPlanContext?.planId || null,
+    source_model: "v1_architect",
+    program_template_v2_id: null,
+    program_family_key: v1Plan.family_id,
+    progression_model: context.onboarding.progression_preference || null,
+    training_style_tags: [],
+    goal_tags: [],
+    weekly_layout_json: null,
+    name: `${config.activationMode === "preview" ? WORKOUT_PREVIEW_NAME_PREFIX : ""}MetriqFit V1 Architect Plan`,
+    description: "Personalized plan generated using the new V1 Architect and Librarian Engine.",
+    start_date: formatDate(new Date()),
+    total_weeks: Math.max(4, Math.ceil(horizonDays / 7)),
+    days_per_week: v1Plan.days.filter((d: any) => d.day_type !== DayType.Recovery && d.day_type !== DayType.Conditioning).length,
+  });
+
+  const planId = workoutPlan.id;
+  let scheduleCount = 0;
+  const dayRecords: Array<{ id: string; day_type: string }> = [];
+
+  // Resolve V1 exercise names → public.exercises UUIDs (required by FK constraint).
+  // coreExercises use string external_ids; public.exercises uses UUIDs. Bridge by name.
+  const allExerciseNames = [...new Set(
+    v1Plan.days.flatMap((d: any) =>
+      d.exercises.map((ex: any) => ex.name as string)
+    )
+  )];
+  const { data: pubExercises, error: exerciseLookupError } = await supabase
+    .from("exercises")
+    .select("id, name")
+    .in("name", allExerciseNames);
+  if (exerciseLookupError) {
+    throw new Error(`V1 exercise name lookup failed: ${exerciseLookupError.message}`);
+  }
+  const exerciseIdByName: Record<string, string> = {};
+  for (const ex of (pubExercises || [])) {
+    if (!exerciseIdByName[ex.name]) exerciseIdByName[ex.name] = ex.id; // first match wins on duplicates
+  }
+
+  for (const day of v1Plan.days) {
+    if (day.day_type === DayType.Recovery) continue;
+
+    const dayInsert = await insertWorkoutPlanDayWithFallback(supabase, {
+      plan_id: planId,
+      day_number: day.day_number,
+      name: day.day_type,
+      focus: day.day_type,
+      day_type: "workout",
+      estimated_duration_min: Math.max(30, Math.floor(day.exercises.reduce((acc: number, ex: any) => acc + (ex.estimated_duration_seconds / 60), 0))),
+    });
+
+    dayRecords.push({ id: dayInsert.id, day_type: day.day_type });
+
+    if (day.exercises.length > 0) {
+      scheduleCount++;
+      const { data: blockInsert, error: blockError } = await supabase
+        .from("user_workout_plan_blocks")
+        .insert({
+          plan_day_id: dayInsert.id,
+          order_index: 1,
+          block_type: "normal",
+          title: "Main Workout",
+          config_json: {},
+        })
+        .select("id")
+        .single();
+
+      if (blockError || !blockInsert) {
+        throw new Error(`Failed to create workout block: ${blockError?.message || "unknown"}`);
+      }
+
+      for (const [exerciseIndex, exercise] of day.exercises.entries()) {
+        const publicExerciseId = exerciseIdByName[exercise.name];
+        if (!publicExerciseId) {
+          warnings.push(`V1 exercise "${exercise.name}" (${exercise.external_id}) not found in public.exercises — skipped`);
+          continue;
+        }
+        const { error: exerciseError } = await supabase
+          .from("user_workout_plan_exercises")
+          .insert({
+            plan_day_id: dayInsert.id,
+            block_id: blockInsert.id,
+            exercise_id: publicExerciseId,
+            order_index: exerciseIndex + 1,
+            sets_target: exercise.sets,
+            reps_min: exercise.reps_min,
+            reps_max: exercise.reps_max,
+            rest_seconds: exercise.rest_seconds,
+            user_notes: `Progression: ${exercise.progression_model}`,
+          });
+
+        if (exerciseError) {
+          throw new Error(`Failed to insert exercise ${exercise.external_id}: ${exerciseError.message}`);
+        }
+      }
+    }
+  }
+
+  // Seed weekly schedule entries so the frontend can display day-by-day workout schedule.
+  // V2 paths do this via seedWorkoutScheduleFromLayout; V1 must do the same.
+  const weeklyLayout = await seedWorkoutScheduleFromLayout(supabase, {
+    planId,
+    planDays: dayRecords.map((d) => ({ id: d.id, dayType: d.day_type })),
+    daysPerWeek: dayRecords.length,
+    preferredDaysOff: context.onboarding.preferred_days_off || [],
+    horizonDays,
+  });
+
+  await updateWorkoutPlanMetadataWithFallback(supabase, planId, {
+    weekly_layout_json: weeklyLayout,
+  });
+
+  await syncLegacyPlanDayScheduledDates(supabase, dayRecords, weeklyLayout);
+
+  return { planId, warnings, scheduleCount };
 }
 
 type PlanType = "workout" | "nutrition" | "both";
@@ -92,6 +261,7 @@ type NutritionRegenerationRequest = {
   dietary_preference_override?: string | null;
   allergies?: string[];
   refused_foods?: string[];
+  preferred_proteins?: string[];
   prep_time_target_min?: number | null;
   budget_limit?: number | null;
   keep_meal_slots?: boolean;
@@ -171,6 +341,11 @@ type UserContext = {
     dietary_preference: string;
     allergies_exclusions: string[];
     refused_foods: string[];
+    preferred_proteins: string[];
+    preferred_carbs: string[];
+    preferred_fats: string[];
+    traditional_meals: boolean;
+    training_time: string | null;
   };
   targets: {
     calories: number;
@@ -197,6 +372,19 @@ type UserContext = {
     fat_per_100g: number;
     fiber_per_100g: number | null;
     category: string | null;
+    // Food metadata for scientific meal generation
+    breakfast_score?: number;
+    lunch_dinner_score?: number;
+    preworkout_score?: number;
+    postworkout_score?: number;
+    evening_score?: number;
+    digestion_speed?: string;
+    fat_load?: string;
+    carb_speed?: string;
+    protein_leanness?: string;
+    formality?: string;
+    goal_form?: string;
+    variety_family?: string;
   }>;
 };
 
@@ -767,17 +955,49 @@ function scoreFoodForMacro(food: FoodCandidate, required: "protein" | "carb" | "
   return food.fat100 - food.carbs100 * 0.7 - food.protein100 * 0.4;
 }
 
+function foodMatchesProteinPreference(food: FoodCandidate, preferredProteins: string[]): boolean {
+  if (!preferredProteins || !preferredProteins.length) return false;
+  if (!food || !food.name) return false;
+  const name = food.name.toLowerCase();
+  const tags = (food.tags || []).map((t) => t.toLowerCase());
+  
+  for (const pref of preferredProteins) {
+    if (!pref) continue;
+    const p = pref.toLowerCase();
+    if (name.includes(p)) return true;
+    if (p === "chicken" && (name.includes("chicken") || tags.includes("poultry"))) return true;
+    if (p === "turkey" && name.includes("turkey")) return true;
+    if (p === "beef" && (name.includes("beef") || name.includes("steak") || name.includes("ground"))) return true;
+    if (p === "pork" && (name.includes("pork") || name.includes("bacon") || name.includes("ham"))) return true;
+    if (p === "fish" && (name.includes("fish") || name.includes("salmon") || name.includes("tuna") || name.includes("cod"))) return true;
+    if (p === "shellfish" && (name.includes("shrimp") || name.includes("prawn") || name.includes("crab") || name.includes("lobster"))) return true;
+    if (p === "eggs" && (name.includes("egg") || tags.includes("eggs"))) return true;
+    if (p === "dairy" && (name.includes("cheese") || name.includes("yogurt") || name.includes("milk") || tags.includes("dairy"))) return true;
+    if (p === "tofu_tempeh" && (name.includes("tofu") || name.includes("tempeh"))) return true;
+    if (p === "legumes" && (name.includes("beans") || name.includes("lentil") || name.includes("chickpea"))) return true;
+    if (p === "protein_powder" && (name.includes("whey") || name.includes("protein") || name.includes("shake"))) return true;
+  }
+  return false;
+}
+
 function buildMacroRotationPool(
   foods: FoodCandidate[],
   macro: "protein" | "carb" | "fat",
   varietyProfile: VarietyProfile,
+  preferredProteins?: string[],
 ) {
   const poolSize = varietyProfile === "high" ? 6 : varietyProfile === "minimal" ? 3 : 5;
   const tagged = foods.filter((food) => food.tags.includes(macro));
   if (!tagged.length) return foods.slice(0, Math.max(1, Math.min(poolSize, foods.length)));
 
   return tagged
-    .map((food) => ({ food, score: scoreFoodForMacro(food, macro) }))
+    .map((food) => {
+      let score = scoreFoodForMacro(food, macro);
+      if (macro === "protein" && preferredProteins?.length && foodMatchesProteinPreference(food, preferredProteins)) {
+        score *= 3.0;
+      }
+      return { food, score };
+    })
     .sort((a, b) => b.score - a.score)
     .slice(0, Math.max(1, Math.min(poolSize, tagged.length)))
     .map((entry) => entry.food);
@@ -1580,7 +1800,7 @@ async function fetchUserContext(supabase: SupabaseClient, userId: string): Promi
     supabase.from("onboarding_answers").select("answers").eq("user_id", userId).single(),
     supabase.from("user_targets").select("calories, protein_g, carbs_g, fat_g, water_ml").eq("user_id", userId).single(),
     supabase.from("exercises").select("id, name, category, equipment_required, primary_muscle, pattern, difficulty").limit(2000),
-    supabase.from("food_items").select("id, name, calories_per_100g, protein_per_100g, carbs_per_100g, fat_per_100g, fiber_per_100g, category").limit(400),
+    supabase.from("food_items").select("id, name, calories_per_100g, protein_per_100g, carbs_per_100g, fat_per_100g, fiber_per_100g, category, breakfast_score, lunch_dinner_score, preworkout_score, postworkout_score, evening_score, digestion_speed, fat_load, carb_speed, protein_leanness, formality, goal_form, variety_family").limit(400),
   ]);
 
   if (profileRes.error || !profileRes.data) throw new Error(profileRes.error?.message || "Profile not found");
@@ -1611,6 +1831,11 @@ async function fetchUserContext(supabase: SupabaseClient, userId: string): Promi
       dietary_preference: answers.dietary_preference || "anything",
       allergies_exclusions: answers.allergies_exclusions || [],
       refused_foods: answers.refused_foods || [],
+      preferred_proteins: answers.preferred_proteins || [],
+      preferred_carbs: answers.preferred_carbs || [],
+      preferred_fats: answers.preferred_fats || [],
+      traditional_meals: answers.traditional_meals !== false, // default true
+      training_time: answers.training_time || null,
     },
     targets: targetsRes.data,
     exercises: exercisesRes.data || [],
@@ -1936,6 +2161,9 @@ function applyNutritionRegenerationToContext(
   }
   if (nutritionRegeneration.refused_foods?.length) {
     nextContext.onboarding.refused_foods = nutritionRegeneration.refused_foods;
+  }
+  if (nutritionRegeneration.preferred_proteins?.length) {
+    nextContext.onboarding.preferred_proteins = nutritionRegeneration.preferred_proteins;
   }
 
   return nextContext;
@@ -3289,6 +3517,307 @@ async function storeWorkoutPlan(
   };
 }
 
+/**
+ * Convert database food records to scientific engine format
+ */
+function convertFoodsToScientificFormat(foods: UserContext["foods"]): FoodWithMetadata[] {
+  return foods.map((food) => ({
+    id: food.id,
+    name: food.name,
+    calories_per_100g: food.calories_per_100g,
+    protein_per_100g: food.protein_per_100g,
+    carbs_per_100g: food.carbs_per_100g,
+    fat_per_100g: food.fat_per_100g,
+    fiber_per_100g: food.fiber_per_100g,
+    category: food.category,
+    breakfast_score: food.breakfast_score || 0,
+    lunch_dinner_score: food.lunch_dinner_score || 0,
+    preworkout_score: food.preworkout_score || 0,
+    postworkout_score: food.postworkout_score || 0,
+    evening_score: food.evening_score || 0,
+    digestion_speed: food.digestion_speed || "moderate",
+    fat_load: food.fat_load || "medium",
+    carb_speed: food.carb_speed || "moderate",
+    protein_leanness: food.protein_leanness || "medium",
+    formality: food.formality || "neutral",
+    goal_form: food.goal_form || "both",
+    variety_family: food.variety_family || "",
+  }));
+}
+
+/**
+ * Generate meals using the scientific meal engine
+ * Used when user has preferred proteins, carbs, and fats selected
+ */
+async function generateScientificMealPlan(
+  supabase: SupabaseClient,
+  userId: string,
+  runId: string,
+  context: UserContext,
+  activationMode: ActivationMode,
+  horizonDays: number,
+  currentPlanId: string | null,
+  workoutSchedule: Array<{ day: number; hasWorkout: boolean; time: string | null }>,
+): Promise<{ planId: string; variantCount: number; warnings: string[] }> {
+  const warnings: string[] = [];
+  const nutritionDays = Math.max(7, Math.min(14, horizonDays));
+
+  // Get user selections
+  const selections: UserNutritionSelections = {
+    proteins: context.onboarding.preferred_proteins,
+    carbs: context.onboarding.preferred_carbs,
+    fats: context.onboarding.preferred_fats,
+    traditional_meals: context.onboarding.traditional_meals,
+  };
+
+  // Validate selections
+  if (!selections.proteins.length || !selections.carbs.length || !selections.fats.length) {
+    throw new Error("User must select proteins, carbs, and fats for scientific meal generation");
+  }
+
+  // Convert foods to scientific format
+  const scientificFoods = convertFoodsToScientificFormat(context.foods);
+
+  // Determine goal
+  const goal: "muscle_gain" | "fat_loss" | "maintenance" =
+    context.onboarding.goal_type === "gain_weight" ? "muscle_gain" :
+    context.onboarding.goal_type === "lose_weight" ? "fat_loss" :
+    "maintenance";
+
+  // Create plan
+  const { data: maxVersionData } = await supabase
+    .from("user_nutrition_plans")
+    .select("version")
+    .eq("user_id", userId)
+    .order("version", { ascending: false })
+    .limit(1)
+    .maybeSingle();
+
+  const version = (maxVersionData?.version || 0) + 1;
+
+  if (activationMode === "activate") {
+    await supabase
+      .from("user_nutrition_plans")
+      .update({ is_active: false, lifecycle_state: "archived" })
+      .eq("user_id", userId)
+      .eq("is_active", true);
+  }
+
+  const { data: nutritionPlan, error: planError } = await supabase
+    .from("user_nutrition_plans")
+    .insert({
+      user_id: userId,
+      generation_run_id: runId,
+      version,
+      is_active: activationMode === "activate",
+      lifecycle_state: activationMode === "preview" ? "preview" : "live",
+      replaces_plan_id: activationMode === "preview" ? currentPlanId : null,
+      name: activationMode === "preview"
+        ? `${NUTRITION_PREVIEW_NAME_PREFIX}Scientific Precision Plan`
+        : "Scientific Precision Nutrition Plan",
+      description: "7-day precision meal plan using your selected proteins, carbs, and fats with workout-optimized timing.",
+      meal_structure: {
+        slots: ["breakfast", "lunch", "dinner", "snack"],
+      },
+      dietary_preferences: {
+        preference: context.onboarding.dietary_preference,
+        allergies: context.onboarding.allergies_exclusions,
+        refused_foods: context.onboarding.refused_foods,
+        preferred_proteins: selections.proteins,
+        preferred_carbs: selections.carbs,
+        preferred_fats: selections.fats,
+        traditional_meals: selections.traditional_meals,
+      },
+    })
+    .select("id")
+    .single();
+
+  if (planError || !nutritionPlan) {
+    throw new Error(`Failed to create nutrition plan: ${planError?.message || "unknown"}`);
+  }
+
+  // Generate meals for each day
+  let variantCount = 0;
+  const groceryMap = new Map<string, { grams: number; calories: number; protein: number; carbs: number; fat: number; unit: string }>();
+
+  for (let dayIndex = 0; dayIndex < nutritionDays; dayIndex++) {
+    const dayWorkout = workoutSchedule[dayIndex % workoutSchedule.length];
+    const hasWorkout = dayWorkout?.hasWorkout || false;
+    const workoutTime = dayWorkout?.time || null;
+
+    // Get slot template based on workout
+    const slots = getSlotTemplate(hasWorkout, workoutTime);
+
+    // Generate daily meals using scientific engine
+    const dailyMeals = generateDailyMeals(
+      scientificFoods,
+      selections,
+      slots,
+      {
+        calories: context.targets.calories,
+        protein_g: context.targets.protein_g,
+        carbs_g: context.targets.carbs_g,
+        fat_g: context.targets.fat_g,
+      },
+      goal,
+    );
+
+    // Store meals in database
+    for (const meal of dailyMeals) {
+      const { data: mealRow, error: mealError } = await supabase
+        .from("user_nutrition_plan_meals")
+        .insert({
+          plan_id: nutritionPlan.id,
+          meal_slot: meal.slot as NutritionMealSlot,
+          day_of_week: dayIndex,
+          name: `${meal.name}: ${meal.items.protein.food.name} + ${meal.items.carb.food.name}`,
+          description: meal.rationale,
+          target_calories: Math.round(meal.macros.calories),
+          target_protein: round1(meal.macros.protein),
+          target_carbs: round1(meal.macros.carbs),
+          target_fat: round1(meal.macros.fat),
+          prep_time_min: 15,
+        })
+        .select("id")
+        .single();
+
+      if (mealError || !mealRow) {
+        throw new Error(`Failed to insert nutrition meal: ${mealError?.message || "unknown"}`);
+      }
+
+      // Create variant
+      const { data: variantRow, error: variantError } = await supabase
+        .from("user_nutrition_plan_meal_variants")
+        .insert({
+          plan_meal_id: mealRow.id,
+          variant_type: "default",
+          name: meal.name,
+          description: meal.rationale,
+          target_calories: Math.round(meal.macros.calories),
+          target_protein: round1(meal.macros.protein),
+          target_carbs: round1(meal.macros.carbs),
+          target_fat: round1(meal.macros.fat),
+          prep_time_min: 15,
+          source: "rule",
+          is_active: true,
+        })
+        .select("id")
+        .single();
+
+      if (variantError || !variantRow) {
+        throw new Error(`Failed to insert meal variant: ${variantError?.message || "unknown"}`);
+      }
+
+      variantCount++;
+
+      // Insert items
+      const itemsPayload = [
+        {
+          variant_id: variantRow.id,
+          food_item_id: meal.items.protein.food.id,
+          item_name: meal.items.protein.food.name,
+          quantity_value: Math.round(meal.items.protein.grams),
+          quantity_unit: "g",
+          grams: Math.round(meal.items.protein.grams),
+          calories: Math.round((meal.items.protein.food.calories_per_100g / 100) * meal.items.protein.grams),
+          protein: round1((meal.items.protein.food.protein_per_100g / 100) * meal.items.protein.grams),
+          carbs: round1((meal.items.protein.food.carbs_per_100g / 100) * meal.items.protein.grams),
+          fat: round1((meal.items.protein.food.fat_per_100g / 100) * meal.items.protein.grams),
+          fiber: 0,
+          order_index: 0,
+        },
+        {
+          variant_id: variantRow.id,
+          food_item_id: meal.items.carb.food.id,
+          item_name: meal.items.carb.food.name,
+          quantity_value: Math.round(meal.items.carb.grams),
+          quantity_unit: "g",
+          grams: Math.round(meal.items.carb.grams),
+          calories: Math.round((meal.items.carb.food.calories_per_100g / 100) * meal.items.carb.grams),
+          protein: round1((meal.items.carb.food.protein_per_100g / 100) * meal.items.carb.grams),
+          carbs: round1((meal.items.carb.food.carbs_per_100g / 100) * meal.items.carb.grams),
+          fat: round1((meal.items.carb.food.fat_per_100g / 100) * meal.items.carb.grams),
+          fiber: 0,
+          order_index: 1,
+        },
+        {
+          variant_id: variantRow.id,
+          food_item_id: meal.items.fat.food.id,
+          item_name: meal.items.fat.food.name,
+          quantity_value: Math.round(meal.items.fat.grams),
+          quantity_unit: "g",
+          grams: Math.round(meal.items.fat.grams),
+          calories: Math.round((meal.items.fat.food.calories_per_100g / 100) * meal.items.fat.grams),
+          protein: round1((meal.items.fat.food.protein_per_100g / 100) * meal.items.fat.grams),
+          carbs: round1((meal.items.fat.food.carbs_per_100g / 100) * meal.items.fat.grams),
+          fat: round1((meal.items.fat.food.fat_per_100g / 100) * meal.items.fat.grams),
+          fiber: 0,
+          order_index: 2,
+        },
+      ];
+
+      const { error: itemsError } = await supabase
+        .from("user_nutrition_plan_meal_variant_items")
+        .insert(itemsPayload);
+
+      if (itemsError) {
+        throw new Error(`Failed to insert meal variant items: ${itemsError.message}`);
+      }
+
+      // Update selected variant
+      await supabase
+        .from("user_nutrition_plan_meals")
+        .update({ selected_variant_id: variantRow.id })
+        .eq("id", mealRow.id);
+
+      // Add to grocery map
+      for (const item of itemsPayload) {
+        const existing = groceryMap.get(item.item_name) || {
+          grams: 0,
+          calories: 0,
+          protein: 0,
+          carbs: 0,
+          fat: 0,
+          unit: item.quantity_unit,
+        };
+        existing.grams += item.grams;
+        existing.calories += item.calories;
+        existing.protein += item.protein;
+        existing.carbs += item.carbs;
+        existing.fat += item.fat;
+        groceryMap.set(item.item_name, existing);
+      }
+    }
+  }
+
+  // Insert grocery items
+  const groceryItems = Array.from(groceryMap.entries()).map(([name, totals]) => ({
+    plan_id: nutritionPlan.id,
+    item_name: name,
+    quantity_g: Math.round(totals.grams),
+    unit: totals.unit,
+    calories: Math.round(totals.calories),
+    protein: round1(totals.protein),
+    carbs: round1(totals.carbs),
+    fat: round1(totals.fat),
+  }));
+
+  if (groceryItems.length) {
+    const { error: groceryError } = await supabase
+      .from("user_nutrition_plan_grocery_items")
+      .insert(groceryItems);
+    if (groceryError) {
+      warnings.push("Grocery list generation partially failed.");
+    }
+  }
+
+  return {
+    planId: nutritionPlan.id,
+    variantCount,
+    warnings: Array.from(new Set(warnings)),
+  };
+}
+
 async function storeNutritionPlan(
   supabase: SupabaseClient,
   userId: string,
@@ -3351,6 +3880,7 @@ async function storeNutritionPlan(
         preference: context.onboarding.dietary_preference,
         allergies: context.onboarding.allergies_exclusions,
         refused_foods: context.onboarding.refused_foods,
+        preferred_proteins: context.onboarding.preferred_proteins,
       },
     })
     .select("id")
@@ -3388,7 +3918,7 @@ async function storeNutritionPlan(
     throw new Error("No mapped foods are available to build a loggable nutrition plan.");
   }
 
-  const proteinPool = buildMacroRotationPool(workingFoods, "protein", varietyProfile);
+  const proteinPool = buildMacroRotationPool(workingFoods, "protein", varietyProfile, context.onboarding.preferred_proteins || []);
   const carbPool = buildMacroRotationPool(workingFoods, "carb", varietyProfile);
   const fatPool = buildMacroRotationPool(workingFoods, "fat", varietyProfile);
   const producePool = workingFoods.filter((food) =>
@@ -3770,6 +4300,7 @@ serve(async (req) => {
       strict_template_source?: boolean;
       workout_regeneration?: WorkoutRegenerationRequest | null;
       nutrition_regeneration?: NutritionRegenerationRequest | null;
+      generation_version?: 'v1' | 'v2';
     };
 
     const userId = body.user_id || authData.user.id;
@@ -3795,6 +4326,16 @@ serve(async (req) => {
     const strictTemplateSource = body.strict_template_source === true;
     const generationMode: GenerationMode = body.generation_mode === "regenerate" ? "regenerate" : "initial";
     const activationMode: ActivationMode = body.activation_mode === "preview" ? "preview" : "activate";
+    const generationVersion = body.generation_version || "v1";
+
+    // 🔍 BRANCH INTEGRITY: Log resolved generation branch so deployment drift is immediately visible
+    console.log('[generate-user-plans] Branch decision:', {
+      requested_generation_version: body.generation_version ?? '(not set — defaulting to v1)',
+      resolved_generation_version: generationVersion,
+      resolved_planner_mode: generationVersion === 'v1' ? 'deterministic' : 'hybrid',
+      resolved_source_model: generationVersion === 'v1' ? 'v1_architect' : 'v2_template',
+    });
+
     const programFamilyPreference = body.program_family_preference || null;
     const trainingStylePreferences = (body.training_style_preferences || []).filter(Boolean);
     const progressionPreference = body.progression_preference || null;
@@ -3851,8 +4392,8 @@ serve(async (req) => {
         user_id: userId,
         plan_type: planType,
         status: "pending",
-        planner_mode: "hybrid",
-        generation_version: 4,
+        planner_mode: generationVersion === 'v1' ? 'deterministic' : 'hybrid',
+        generation_version: generationVersion === 'v1' ? 1 : 4,
         input_context: {
           generation_mode: generationMode,
           activation_mode: activationMode,
@@ -4009,95 +4550,233 @@ serve(async (req) => {
       };
 
       if (planType === "workout" || planType === "both") {
-        workoutResult = await generateWorkoutCandidate(workoutConfig);
+        if (generationVersion === 'v1') {
+          const mapOnboardingToV1 = (onboarding: any): OnboardingProfileInput => {
+            let env = SessionEnvironment.Commercial;
+            if (onboarding.equipment_access === 'bodyweight_only') env = SessionEnvironment.Bodyweight;
+            else if (onboarding.equipment_access === 'dumbbells_only' || onboarding.equipment_access === 'bands_only') env = SessionEnvironment.AptHotel;
+            else if (onboarding.equipment_access === 'dumbbells_plus_bench') env = SessionEnvironment.Home;
 
-        if (
-          generationMode === "regenerate"
-          && activationMode === "preview"
-          && currentPlanContext
-          && workoutResult?.planId
-        ) {
-          let previewComparable = await fetchStoredWorkoutPlanComparable(supabase, userId, workoutResult.planId);
-          if (!previewComparable) {
-            throw new Error("Generated workout preview could not be compared");
+            let exp = ExperienceLevel.Beginner;
+            if (onboarding.experience_level === 'intermediate') exp = ExperienceLevel.Intermediate;
+            else if (onboarding.experience_level === 'advanced') exp = ExperienceLevel.Advanced;
+
+            let goal = GoalBucket.GenFitness;
+            if (onboarding.goal_type === 'lose_weight') goal = GoalBucket.FatLoss;
+            else if (onboarding.goal_type === 'gain_weight') goal = GoalBucket.Hypertrophy;
+            else if (onboarding.goal_type === 'recomp') goal = GoalBucket.Recomp;
+            else if (onboarding.goal_type === 'increase_endurance') goal = GoalBucket.Athletic;
+
+            let comfort = LiftComfort.BarbellBasic;
+            if (env === SessionEnvironment.Bodyweight) comfort = LiftComfort.NoBarbell;
+            else if (env === SessionEnvironment.AptHotel) comfort = LiftComfort.MachineDB;
+            else if (exp === ExperienceLevel.Advanced && onboarding.session_emphasis === 'strength') comfort = LiftComfort.BarbellAdv;
+
+            return {
+              experienceLevel: exp,
+              primaryGoal: goal,
+              daysPerWeek: onboarding.training_days_per_week || 3,
+              liftComfort: comfort,
+              environment: env
+            };
+          };
+
+          const profile = mapOnboardingToV1(workoutContext.onboarding);
+          const recommendation = routeUserToPlan(profile);
+          const family = planFamilies.find(f => f.external_id === recommendation.familyIdRef);
+          if (!family) throw new Error("V1 Family Reference not found: " + recommendation.familyIdRef);
+          
+          const template = coreTemplates.find(t => t.external_id === family.template_id);
+          if (!template) throw new Error("V1 Template not found: " + family.template_id);
+
+          const hydratorPersona = {
+            goal: profile.primaryGoal,
+            environment: profile.environment,
+            comfort: profile.liftComfort,
+            injuries: workoutContext.onboarding.injuries || []
+          };
+          
+          // 🔍 DIAGNOSTIC: V1 Backend Verification Logging
+          console.log('\n=============================================');
+          console.log('🔄 V1 PLAN GENERATION: END-TO-END VERIFICATION');
+          console.log('---------------------------------------------');
+          console.log('1. Raw Onboarding Answers:');
+          console.log(JSON.stringify(workoutContext.onboarding, null, 2));
+          console.log('\n2. Mapped V1 Profile:');
+          console.log(JSON.stringify(profile, null, 2));
+          console.log('\n3. Routed Family ID:', recommendation.familyIdRef);
+          console.log('4. Resolved Template ID:', family.template_id);
+          
+          let v1Plan;
+          try {
+            v1Plan = hydrateTemplate(template as any, family.external_id, hydratorPersona);
+            console.log('\n5. Hydration Success: TRUE');
+          } catch (e: any) {
+            console.log('\n5. Hydration Success: FALSE', e.message);
+            throw e;
           }
 
-          let previewDiff = buildWorkoutPlanDiff({
-            currentPlan: currentPlanContext.comparablePlan,
-            previewPlan: previewComparable,
-            minorRefinement: workoutConfig.minorRefinement,
-          });
+          try {
+            workoutResult = (await storeV1WorkoutPlan(
+              supabase,
+              userId,
+              runId,
+              workoutContext,
+              v1Plan,
+              workoutHorizon,
+              workoutConfig
+            )) as any;
+            
+            console.log('\n6. DB Writes Success: TRUE');
+            console.log('   Stored Plan ID:', workoutResult!.planId);
+          } catch (e: any) {
+            console.log('\n6. DB Writes Success: FALSE', e.message);
+            throw e;
+          }
 
-          if (!previewDiff.isMateriallyDifferent) {
-            await deleteWorkoutPlanTree(supabase, workoutResult.planId);
+          // V1 Activation: Finalize activation after successful storage
+          if (activationMode !== 'preview' && workoutResult?.planId) {
+            try {
+              await finalizeStoredWorkoutPlanActivation(supabase, {
+                userId,
+                planId: workoutResult.planId,
+                activationMode,
+                currentPlanId: currentPlanContext?.planId || null,
+              });
+              console.log('\n7. V1 Activation Success: TRUE');
+              console.log('   Activated Plan ID:', workoutResult.planId);
+            } catch (e: any) {
+              console.log('\n7. V1 Activation Success: FALSE', e.message);
+              warnings.push(`V1 activation warning: ${e.message}`);
+            }
+          }
+          
+          console.log('=============================================\n');
 
-            const retryExcludeFamily = currentPlanContext.familyKey
-              || workoutConfig.excludeFamilyKey
-              || null;
-            const retryConfig: WorkoutGenerationConfig = {
-              ...workoutConfig,
-              excludeFamilyKey: retryExcludeFamily,
-            };
+          warnings.push(...workoutResult!.warnings);
 
-            workoutResult = await generateWorkoutCandidate(retryConfig);
-            previewComparable = await fetchStoredWorkoutPlanComparable(supabase, userId, workoutResult.planId);
+        } else {
+          workoutResult = await generateWorkoutCandidate(workoutConfig);
+
+          if (
+            generationMode === "regenerate"
+            && activationMode === "preview"
+            && currentPlanContext
+            && workoutResult?.planId
+          ) {
+            let previewComparable = await fetchStoredWorkoutPlanComparable(supabase, userId, workoutResult.planId);
             if (!previewComparable) {
-              throw new Error("Regenerated workout preview could not be compared");
+              throw new Error("Generated workout preview could not be compared");
             }
 
-            previewDiff = buildWorkoutPlanDiff({
+            let previewDiff = buildWorkoutPlanDiff({
               currentPlan: currentPlanContext.comparablePlan,
               previewPlan: previewComparable,
-              minorRefinement: retryConfig.minorRefinement,
+              minorRefinement: workoutConfig.minorRefinement,
             });
 
             if (!previewDiff.isMateriallyDifferent) {
               await deleteWorkoutPlanTree(supabase, workoutResult.planId);
-              const validationMessage = "We need more direction to build a meaningfully different plan.";
 
-              await supabase
-                .from("plan_generation_runs")
-                .update({
-                  status: "validation_failed",
-                  completed_at: new Date().toISOString(),
-                  validation_errors: [validationMessage],
-                  warnings_json: warnings,
-                  ai_response: {
-                    current_plan_id: currentPlanContext.planId,
-                    no_op_blocked: true,
-                  },
-                })
-                .eq("id", runId);
+              const retryExcludeFamily = currentPlanContext.familyKey
+                || workoutConfig.excludeFamilyKey
+                || null;
+              const retryConfig: WorkoutGenerationConfig = {
+                ...workoutConfig,
+                excludeFamilyKey: retryExcludeFamily,
+              };
 
-              return jsonResponse({
-                success: false,
-                status: "validation_failed",
-                run_id: runId,
-                runId,
-                message: validationMessage,
-                warnings,
+              workoutResult = await generateWorkoutCandidate(retryConfig);
+              previewComparable = await fetchStoredWorkoutPlanComparable(supabase, userId, workoutResult.planId);
+              if (!previewComparable) {
+                throw new Error("Regenerated workout preview could not be compared");
+              }
+
+              previewDiff = buildWorkoutPlanDiff({
+                currentPlan: currentPlanContext.comparablePlan,
+                previewPlan: previewComparable,
+                minorRefinement: retryConfig.minorRefinement,
               });
+
+              if (!previewDiff.isMateriallyDifferent) {
+                await deleteWorkoutPlanTree(supabase, workoutResult.planId);
+                const validationMessage = "We need more direction to build a meaningfully different plan.";
+
+                await supabase
+                  .from("plan_generation_runs")
+                  .update({
+                    status: "validation_failed",
+                    completed_at: new Date().toISOString(),
+                    validation_errors: [validationMessage],
+                    warnings_json: warnings,
+                    ai_response: {
+                      current_plan_id: currentPlanContext.planId,
+                      no_op_blocked: true,
+                    },
+                  })
+                  .eq("id", runId);
+
+                return jsonResponse({
+                  success: false,
+                  status: "validation_failed",
+                  run_id: runId,
+                  runId,
+                  message: validationMessage,
+                  warnings,
+                });
+              }
             }
           }
         }
       }
 
       if (planType === "nutrition" || planType === "both") {
-        const nutritionMealSlots = resolveNutritionMealSlots(nutritionRegeneration, currentNutritionPlanContext);
-        nutritionResult = await storeNutritionPlan(
-          supabase,
-          userId,
-          runId,
-          nutritionContext,
-          macroTolerancePercent,
-          includeVariants,
-          nutritionHorizon,
-          strictMacroMode,
-          varietyProfile,
-          activationMode,
-          currentNutritionPlanContext?.planId || null,
-          nutritionMealSlots,
-        );
+        // Check if user has scientific nutrition preferences (proteins, carbs, fats)
+        const hasScientificPreferences =
+          nutritionContext.onboarding.preferred_proteins?.length > 0 &&
+          nutritionContext.onboarding.preferred_carbs?.length > 0 &&
+          nutritionContext.onboarding.preferred_fats?.length > 0;
+
+        if (hasScientificPreferences) {
+          // Build workout schedule for meal timing
+          const workoutSchedule = Array.from({ length: 7 }, (_, i) => ({
+            day: i,
+            hasWorkout: i < (nutritionContext.onboarding.training_days_per_week || 3),
+            time: nutritionContext.onboarding.training_time === "evening" ? "18:00" :
+                  nutritionContext.onboarding.training_time === "afternoon" ? "15:00" :
+                  nutritionContext.onboarding.training_time === "midday" ? "12:00" :
+                  nutritionContext.onboarding.training_time === "early_morning" ? "06:00" :
+                  "07:00",
+          }));
+
+          nutritionResult = await generateScientificMealPlan(
+            supabase,
+            userId,
+            runId,
+            nutritionContext,
+            activationMode,
+            nutritionHorizon,
+            currentNutritionPlanContext?.planId || null,
+            workoutSchedule,
+          );
+        } else {
+          // Fallback to legacy meal generation
+          const nutritionMealSlots = resolveNutritionMealSlots(nutritionRegeneration, currentNutritionPlanContext);
+          nutritionResult = await storeNutritionPlan(
+            supabase,
+            userId,
+            runId,
+            nutritionContext,
+            macroTolerancePercent,
+            includeVariants,
+            nutritionHorizon,
+            strictMacroMode,
+            varietyProfile,
+            activationMode,
+            currentNutritionPlanContext?.planId || null,
+            nutritionMealSlots,
+          );
+        }
 
         warnings.push(...nutritionResult.warnings);
       }
