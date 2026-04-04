@@ -4550,7 +4550,12 @@ serve(async (req) => {
       };
 
       if (planType === "workout" || planType === "both") {
+        console.log('[V1] Workout generation block entered:', { generationVersion, planType });
+        
         if (generationVersion === 'v1') {
+          console.log('[V1] Using V1 generation path');
+          
+          try {
           const mapOnboardingToV1 = (onboarding: any): OnboardingProfileInput => {
             let env = SessionEnvironment.Commercial;
             if (onboarding.equipment_access === 'bodyweight_only') env = SessionEnvironment.Bodyweight;
@@ -4678,6 +4683,32 @@ serve(async (req) => {
           console.log('=============================================\n');
 
           warnings.push(...workoutResult!.warnings);
+          
+          } catch (v1Error: any) {
+            console.error('[V1] CRITICAL ERROR in V1 generation:', v1Error.message);
+            console.error('[V1] Error stack:', v1Error.stack);
+            
+            // Update run status to failed
+            await supabase
+              .from("plan_generation_runs")
+              .update({
+                status: "failed",
+                completed_at: new Date().toISOString(),
+                validation_errors: [`V1 Generation Failed: ${v1Error.message}`],
+                warnings_json: warnings,
+              })
+              .eq("id", runId);
+            
+            return jsonResponse({
+              success: false,
+              error: `V1 Generation Failed: ${v1Error.message}`,
+              run_id: runId,
+              details: {
+                step: 'v1_generation',
+                message: v1Error.message,
+              }
+            }, 500);
+          }
 
         } else {
           workoutResult = await generateWorkoutCandidate(workoutConfig);
