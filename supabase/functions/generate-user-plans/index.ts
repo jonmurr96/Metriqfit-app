@@ -4252,6 +4252,8 @@ async function seedConsistency(supabase: SupabaseClient, userId: string) {
 }
 
 serve(async (req) => {
+  console.log('[generate-user-plans] Function invoked:', req.method);
+  
   if (req.method === "OPTIONS") {
     return new Response("ok", { headers: corsHeaders });
   }
@@ -4261,28 +4263,59 @@ serve(async (req) => {
   }
 
   try {
+    console.log('[generate-user-plans] Starting request processing...');
+    
     const supabaseUrl = Deno.env.get("SUPABASE_URL");
     const serviceRoleKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
+
+    console.log('[generate-user-plans] Environment check:', { 
+      hasSupabaseUrl: !!supabaseUrl, 
+      hasServiceRoleKey: !!serviceRoleKey 
+    });
 
     if (!supabaseUrl || !serviceRoleKey) {
       return jsonResponse({ success: false, error: "Missing Supabase config" }, 500);
     }
 
     const authHeader = req.headers.get("Authorization") || "";
+    console.log('[generate-user-plans] Auth header present:', !!authHeader);
+    
     if (!authHeader) {
       return jsonResponse({ success: false, error: "Missing authorization header" }, 401);
     }
 
+    console.log('[generate-user-plans] Creating auth client...');
     const authClient = createClient(supabaseUrl, serviceRoleKey, {
       global: { headers: { Authorization: authHeader } },
     });
 
+    console.log('[generate-user-plans] Getting user...');
     const { data: authData, error: authError } = await authClient.auth.getUser();
+    console.log('[generate-user-plans] Auth result:', { 
+      hasUser: !!authData?.user, 
+      authError: authError?.message 
+    });
+    
     if (authError || !authData?.user) {
       return jsonResponse({ success: false, error: "Unauthorized" }, 401);
     }
 
-    const body = await req.json() as {
+    console.log('[generate-user-plans] Parsing request body...');
+    let body: any;
+    try {
+      body = await req.json();
+      console.log('[generate-user-plans] Body parsed successfully:', { 
+        hasUserId: !!body.user_id,
+        planType: body.plan_type,
+        generationMode: body.generation_mode,
+        generationVersion: body.generation_version
+      });
+    } catch (parseError: any) {
+      console.error('[generate-user-plans] Failed to parse body:', parseError.message);
+      return jsonResponse({ success: false, error: "Invalid request body" }, 400);
+    }
+    
+    const typedBody = body as {
       user_id?: string;
       plan_type?: PlanType;
       generation_mode?: GenerationMode;
@@ -4303,44 +4336,44 @@ serve(async (req) => {
       generation_version?: 'v1' | 'v2';
     };
 
-    const userId = body.user_id || authData.user.id;
+    const userId = typedBody.user_id || authData.user.id;
     if (!userId || userId !== authData.user.id) {
       return jsonResponse({ success: false, error: "Invalid user context" }, 403);
     }
 
-    const planType = body.plan_type || "both";
+    const planType = typedBody.plan_type || "both";
     if (!["workout", "nutrition", "both"].includes(planType)) {
       return jsonResponse({ success: false, error: "Invalid plan_type" }, 400);
     }
 
-    const workoutHorizon = typeof body.generation_horizon_days === "number"
+    const workoutHorizon = typeof typedBody.generation_horizon_days === "number"
       ? Math.max(7, Math.min(56, body.generation_horizon_days))
       : Math.max(7, Math.min(56, body.generation_horizon_days?.workout ?? 28));
 
-    const nutritionHorizon = typeof body.generation_horizon_days === "number"
+    const nutritionHorizon = typeof typedBody.generation_horizon_days === "number"
       ? Math.max(7, Math.min(14, body.generation_horizon_days))
       : Math.max(7, Math.min(14, body.generation_horizon_days?.nutrition ?? 7));
 
-    const strictDaysMatch = body.strict_days_match !== false;
-    const strictMacroMode = body.strict_macro_mode !== false;
-    const strictTemplateSource = body.strict_template_source === true;
-    const generationMode: GenerationMode = body.generation_mode === "regenerate" ? "regenerate" : "initial";
-    const activationMode: ActivationMode = body.activation_mode === "preview" ? "preview" : "activate";
-    const generationVersion = body.generation_version || "v1";
+    const strictDaysMatch = typedBody.strict_days_match !== false;
+    const strictMacroMode = typedBody.strict_macro_mode !== false;
+    const strictTemplateSource = typedBody.strict_template_source === true;
+    const generationMode: GenerationMode = typedBody.generation_mode === "regenerate" ? "regenerate" : "initial";
+    const activationMode: ActivationMode = typedBody.activation_mode === "preview" ? "preview" : "activate";
+    const generationVersion = typedBody.generation_version || "v1";
 
     // 🔍 BRANCH INTEGRITY: Log resolved generation branch so deployment drift is immediately visible
     console.log('[generate-user-plans] Branch decision:', {
-      requested_generation_version: body.generation_version ?? '(not set — defaulting to v1)',
+      requested_generation_version: typedBody.generation_version ?? '(not set — defaulting to v1)',
       resolved_generation_version: generationVersion,
       resolved_planner_mode: generationVersion === 'v1' ? 'deterministic' : 'hybrid',
       resolved_source_model: generationVersion === 'v1' ? 'v1_architect' : 'v2_template',
     });
 
-    const programFamilyPreference = body.program_family_preference || null;
-    const trainingStylePreferences = (body.training_style_preferences || []).filter(Boolean);
-    const progressionPreference = body.progression_preference || null;
+    const programFamilyPreference = typedBody.program_family_preference || null;
+    const trainingStylePreferences = (typedBody.training_style_preferences || []).filter(Boolean);
+    const progressionPreference = typedBody.progression_preference || null;
     const workoutRegeneration = generationMode === "regenerate" && planType !== "nutrition"
-      ? (body.workout_regeneration || null)
+      ? (typedBody.workout_regeneration || null)
       : null;
 
     // 🔍 DIAGNOSTIC: Log regeneration request
@@ -4357,14 +4390,14 @@ serve(async (req) => {
       });
     }
     const nutritionRegeneration = generationMode === "regenerate" && planType !== "workout"
-      ? (body.nutrition_regeneration || null)
+      ? (typedBody.nutrition_regeneration || null)
       : null;
-    const varietyProfile: VarietyProfile = body.variety_profile === "minimal" || body.variety_profile === "high"
-      ? body.variety_profile
+    const varietyProfile: VarietyProfile = typedBody.variety_profile === "minimal" || typedBody.variety_profile === "high"
+      ? typedBody.variety_profile
       : "moderate_rotation_4_5";
     const defaultTolerance = strictMacroMode ? 5 : 10;
-    const macroTolerancePercent = clamp(Number(body.macro_tolerance_percent ?? defaultTolerance), 5, 20);
-    const includeVariants = body.include_variants !== false;
+    const macroTolerancePercent = clamp(Number(typedBody.macro_tolerance_percent ?? defaultTolerance), 5, 20);
+    const includeVariants = typedBody.include_variants !== false;
 
     const supabase = createClient(supabaseUrl, serviceRoleKey, {
       global: { headers: { Authorization: authHeader } },
@@ -4402,7 +4435,7 @@ serve(async (req) => {
           nutrition_horizon_days: nutritionHorizon,
           include_variants: includeVariants,
           macro_tolerance_percent: macroTolerancePercent,
-          split_override: body.split_override || null,
+          split_override: typedBody.split_override || null,
           program_family_preference: programFamilyPreference,
           training_style_preferences: trainingStylePreferences,
           progression_preference: progressionPreference,
@@ -4441,12 +4474,26 @@ serve(async (req) => {
     const warnings: string[] = [];
 
     try {
+      console.log('[generate-user-plans] Fetching user context...');
       const context = await fetchUserContext(supabase, userId);
+      console.log('[generate-user-plans] User context fetched:', { 
+        hasProfile: !!context.profile,
+        hasOnboarding: !!context.onboarding,
+        hasTargets: !!context.targets,
+        exerciseCount: context.exercises?.length,
+        foodCount: context.foods?.length
+      });
+      
+      console.log('[generate-user-plans] Applying workout regeneration...');
       const workoutContext = applyWorkoutRegenerationToContext(
         context,
         workoutRegeneration,
         currentPlanContext,
       );
+      console.log('[generate-user-plans] Workout context ready:', {
+        hasOnboarding: !!workoutContext.onboarding,
+        trainingDays: workoutContext.onboarding?.training_days_per_week
+      });
 
       // 🔍 DIAGNOSTIC: Log context after regeneration
       if (workoutRegeneration) {
@@ -4483,7 +4530,7 @@ serve(async (req) => {
           programFamily: effectiveProgramFamilyPreference,
           progression: effectiveProgressionPreference,
           trainingStyles: trainingStylePreferences,
-          splitOverride: body.split_override,
+          splitOverride: typedBody.split_override,
           currentPlanFamily: currentPlanContext?.familyKey,
         });
       }
@@ -4500,7 +4547,7 @@ serve(async (req) => {
           workoutContext,
           {
             strictDaysMatch,
-            splitOverride: body.split_override || null,
+            splitOverride: typedBody.split_override || null,
             programFamilyPreference: effectiveProgramFamilyPreference,
             trainingStylePreferences,
             progressionPreference: effectiveProgressionPreference,
@@ -4530,7 +4577,7 @@ serve(async (req) => {
 
         const split = chooseSplit(
           workoutContext,
-          body.split_override,
+          typedBody.split_override,
           strictDaysMatch,
           attemptConfig.excludeFamilyKey,
         );
