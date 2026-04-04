@@ -20,5 +20,15 @@ export type {
   SessionEmphasis,
   PrepDiscipline,
   PrepPhase,
+  // NEW: Enhanced Nutrition Types
+  ProteinSource,
+  CarbSource,
+  FatSource,
+  WakeTime,
+  FirstMealDelay,
+  LastMealBeforeBed,
+  TrainingTime,
+  CarbTolerance,
+  CookingLevel,
 } from './OnboardingContext';
 export type { NormalizedWeekday, PreferredDaysOffResolution } from './schedule';

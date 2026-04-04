@@ -262,7 +262,7 @@ function RecommendationItem({
                   ? c.primary
                   : c.warning,
               fontFamily: ty.body.familySemibold,
-              fontSize: ty.sizes.xxs,
+              fontSize: 11,
               textTransform: 'uppercase',
             }}
           >
@@ -281,7 +281,7 @@ function RecommendationItem({
             style={{
               color: c.primary,
               fontFamily: ty.mono.family,
-              fontSize: ty.sizes.xxs,
+              fontSize: 11,
             }}
           >
             {analysis.readinessScore}/100

@@ -419,12 +419,12 @@ export default function WorkoutHomeScreen() {
 
               <View style={{ flexDirection: 'row', gap: s.sm }}>
                 <WorkoutUtilityTile
-                  state={dashboard.state.compact.coachInsightTile}
-                  onPress={() => runAction(dashboard.state.compact.coachInsightTile.action)}
-                />
-                <WorkoutUtilityTile
                   state={dashboard.state.compact.myPlanTile}
                   onPress={() => runAction(dashboard.state.compact.myPlanTile.action)}
+                />
+                <WorkoutUtilityTile
+                  state={dashboard.state.compact.changeProgramTile}
+                  onPress={() => runAction(dashboard.state.compact.changeProgramTile.action)}
                 />
               </View>
 

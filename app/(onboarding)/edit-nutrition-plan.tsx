@@ -245,11 +245,11 @@ export default function EditNutritionPlanScreen() {
   };
 
   const openMealEditor = (mealId: string) => {
+    // Use local onboarding route to stay within onboarding navigation group
     router.push({
-      pathname: '/(tabs)/nutrition/plan-meal-editor',
+      pathname: '/(onboarding)/plan-meal-editor',
       params: {
         mealId,
-        returnTo: 'onboarding-edit-nutrition',
         ...(runId ? { runId } : {}),
         dayOfWeek: String(selectedDay),
       },

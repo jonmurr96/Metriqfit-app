@@ -224,7 +224,7 @@ export function RIRTargetDisplay({
         <Text
           style={{
             color: c.text,
-            fontFamily: ty.mono.familySemibold,
+            fontFamily: ty.mono.family,
             fontSize: ty.sizes.xl,
           }}
         >
@@ -234,7 +234,7 @@ export function RIRTargetDisplay({
           style={{
             color: c.textMuted,
             fontFamily: ty.body.family,
-            fontSize: ty.sizes.xxs,
+            fontSize: 11,
             marginTop: 4,
           }}
         >
@@ -270,7 +270,7 @@ export function RIRTargetDisplay({
             <Text
               style={{
                 color: c.text,
-                fontFamily: ty.mono.familySemibold,
+                fontFamily: ty.mono.family,
                 fontSize: ty.sizes.sm,
               }}
             >
@@ -354,7 +354,7 @@ export function RIRTargetDisplay({
                 <Text
                   style={{
                     color: isSelected ? c.bg : c.text,
-                    fontFamily: ty.mono.familySemibold,
+                    fontFamily: ty.mono.family,
                     fontSize: ty.sizes.sm,
                   }}
                 >
@@ -408,7 +408,7 @@ export function RIRTargetDisplay({
                       style={{
                         color: c.bg,
                         fontFamily: ty.mono.family,
-                        fontSize: ty.sizes.xxs,
+                        fontSize: 11,
                         textAlign: 'center',
                       }}
                     >

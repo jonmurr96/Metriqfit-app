@@ -25,6 +25,7 @@ export default function WorkoutLayout() {
       <Stack.Screen name="program-browser" />
       <Stack.Screen name="program-detail" />
       <Stack.Screen name="day-preview" />
+      <Stack.Screen name="day-detail" />
       <Stack.Screen name="summary" />
       <Stack.Screen name="workout-history" />
       <Stack.Screen name="workout-notes" />

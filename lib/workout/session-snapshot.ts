@@ -28,21 +28,41 @@ export function buildSessionExerciseSnapshots(input: {
   sessionId: string;
   source: 'plan' | 'template';
   exercises: SessionSnapshotSourceExercise[];
+  /**
+   * Deload volume multiplier (0 < x ≤ 1). When provided (e.g. 0.80 for a
+   * 20% deload), sets_target is scaled down and rounded to a minimum of 1.
+   * Does not permanently mutate plan data — only affects this session's copy.
+   */
+  volumeMultiplier?: number;
 }): SessionExerciseSnapshotInsert[] {
-  return input.exercises.map((exercise) => ({
-    session_id: input.sessionId,
-    exercise_id: exercise.exercise_id,
-    order_index: exercise.order_index,
-    notes:
-      input.source === 'plan'
-        ? exercise.user_notes ?? exercise.notes ?? null
-        : exercise.notes ?? null,
-    sets_target: exercise.sets_target ?? DEFAULT_SESSION_SETS_TARGET,
-    reps_min: exercise.reps_min ?? null,
-    reps_max: exercise.reps_max ?? null,
-    rest_seconds: exercise.rest_seconds ?? null,
-    plan_exercise_id: input.source === 'plan' ? exercise.id : null,
-  }));
+  const multiplier =
+    typeof input.volumeMultiplier === 'number' &&
+    input.volumeMultiplier > 0 &&
+    input.volumeMultiplier < 1
+      ? input.volumeMultiplier
+      : 1;
+
+  return input.exercises.map((exercise) => {
+    const rawSets = exercise.sets_target ?? DEFAULT_SESSION_SETS_TARGET;
+    const sets_target = multiplier < 1
+      ? Math.max(1, Math.round(rawSets * multiplier))
+      : rawSets;
+
+    return {
+      session_id: input.sessionId,
+      exercise_id: exercise.exercise_id,
+      order_index: exercise.order_index,
+      notes:
+        input.source === 'plan'
+          ? exercise.user_notes ?? exercise.notes ?? null
+          : exercise.notes ?? null,
+      sets_target,
+      reps_min: exercise.reps_min ?? null,
+      reps_max: exercise.reps_max ?? null,
+      rest_seconds: exercise.rest_seconds ?? null,
+      plan_exercise_id: input.source === 'plan' ? exercise.id : null,
+    };
+  });
 }
 
 export function buildSessionExerciseSnapshotInsertAttempts(

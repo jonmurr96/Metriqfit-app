@@ -544,6 +544,8 @@ export default function HomeScreen() {
                 trackHomeCtaTapped({ cta_id: 'header_profile_settings' });
                 router.push('/settings');
               }}
+              accessibilityLabel="Settings"
+              accessibilityRole="button"
             >
               <TabBarIcon name="person-circle-outline" color={c.primary} size={22} />
             </Pressable>

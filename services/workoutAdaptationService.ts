@@ -72,26 +72,55 @@ export async function applyWorkoutAdaptationRecommendation(input: {
 
   if (recType === 'deload_microcycle') {
     const volumeDrop = Number(payload.reduce_volume_percent || 20);
-    const multiplier = Math.max(0.6, 1 - volumeDrop / 100);
+    const volumeMultiplier = Math.max(0.60, 1 - volumeDrop / 100);
 
-    const { data: days } = await (supabase as any)
-      .from('user_workout_plan_days')
+    // Non-destructive: flag the upcoming 7 days of planned workout schedule
+    // entries so startSession applies the multiplier at copy-time only.
+    // This preserves plan exercise sets_target for future non-deload sessions.
+    const today = new Date().toISOString().split('T')[0];
+    const nextWeek = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString().split('T')[0];
+
+    const { data: upcomingEntries } = await (supabase as any)
+      .from('user_workout_plan_schedule')
       .select('id')
-      .eq('plan_id', rec.plan_id);
+      .eq('plan_id', rec.plan_id)
+      .eq('session_type', 'workout')
+      .eq('status', 'planned')
+      .gte('scheduled_date', today)
+      .lte('scheduled_date', nextWeek);
 
-    const dayIds = (days || []).map((d: any) => d.id);
-    if (dayIds.length) {
-      const { data: exercises } = await (supabase as any)
-        .from('user_workout_plan_exercises')
-        .select('id, sets_target')
-        .in('plan_day_id', dayIds);
+    if (upcomingEntries && upcomingEntries.length > 0) {
+      const entryIds = upcomingEntries.map((e: any) => e.id);
+      await (supabase as any)
+        .from('user_workout_plan_schedule')
+        .update({
+          is_deload_week: true,
+          volume_multiplier: volumeMultiplier,
+          notes: `Deload week (week ${payload.trigger_week}) — volume at ${Math.round(volumeMultiplier * 100)}%`,
+        })
+        .in('id', entryIds);
+    } else {
+      // Fallback for plans without a generated schedule: modify sets directly.
+      // This path is legacy-only and will be removed once all users have schedules.
+      const { data: days } = await (supabase as any)
+        .from('user_workout_plan_days')
+        .select('id')
+        .eq('plan_id', rec.plan_id);
 
-      for (const ex of exercises || []) {
-        const nextSets = Math.max(1, Math.round(Number(ex.sets_target || 3) * multiplier));
-        await (supabase as any)
+      const dayIds = (days || []).map((d: any) => d.id);
+      if (dayIds.length) {
+        const { data: exercises } = await (supabase as any)
           .from('user_workout_plan_exercises')
-          .update({ sets_target: nextSets, is_user_modified: true })
-          .eq('id', ex.id);
+          .select('id, sets_target')
+          .in('plan_day_id', dayIds);
+
+        for (const ex of exercises || []) {
+          const nextSets = Math.max(1, Math.round(Number(ex.sets_target || 3) * volumeMultiplier));
+          await (supabase as any)
+            .from('user_workout_plan_exercises')
+            .update({ sets_target: nextSets, is_user_modified: true })
+            .eq('id', ex.id);
+        }
       }
     }
   }
@@ -131,6 +160,40 @@ export async function applyWorkoutAdaptationRecommendation(input: {
           is_user_modified: true,
         })
         .in('plan_day_id', dayIds);
+    }
+  }
+
+  if (recType === 'increase_weight') {
+    const exerciseId = payload.exercise_id as string | null;
+
+    // Mark ready_for_progression in exercise_progressions
+    if (exerciseId) {
+      await (supabase as any)
+        .from('exercise_progressions')
+        .update({ ready_for_progression: true, updated_at: new Date().toISOString() })
+        .eq('user_id', rec.user_id)
+        .eq('exercise_id', exerciseId);
+    }
+
+    // Add a coaching note on every plan exercise for this exercise_id
+    // so the user sees the cue on their next session
+    if (exerciseId && rec.plan_id) {
+      const { data: days } = await (supabase as any)
+        .from('user_workout_plan_days')
+        .select('id')
+        .eq('plan_id', rec.plan_id);
+
+      const dayIds = (days || []).map((d: any) => d.id);
+      if (dayIds.length) {
+        await (supabase as any)
+          .from('user_workout_plan_exercises')
+          .update({
+            user_notes: '💪 Ready to progress — increase weight by 5–10 lb next session.',
+            is_user_modified: true,
+          })
+          .in('plan_day_id', dayIds)
+          .eq('exercise_id', exerciseId);
+      }
     }
   }
 

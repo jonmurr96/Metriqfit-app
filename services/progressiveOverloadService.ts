@@ -140,9 +140,9 @@ function calculateAverageReps(sets: WorkoutSetData[]): number {
 /**
  * Get the top set (highest weight × reps) from a session
  */
-function getTopSet(sets: WorkoutSetData[]): { weight: number; reps: number } {
+function getTopSet(sets: WorkoutSetData[]): { topSetWeight: number; topSetReps: number } {
   const workingSets = sets.filter(s => !s.is_warmup && s.weight_lb !== null);
-  if (workingSets.length === 0) return { weight: 0, reps: 0 };
+  if (workingSets.length === 0) return { topSetWeight: 0, topSetReps: 0 };
 
   let topSet = workingSets[0];
   let topVolume = (topSet.weight_lb || 0) * topSet.reps;
@@ -155,7 +155,7 @@ function getTopSet(sets: WorkoutSetData[]): { weight: number; reps: number } {
     }
   }
 
-  return { weight: topSet.weight_lb || 0, reps: topSet.reps };
+  return { topSetWeight: topSet.weight_lb || 0, topSetReps: topSet.reps };
 }
 
 /**

@@ -37,7 +37,16 @@ export interface SessionExercise {
   rpe_target_min?: number | null;
   rpe_target_max?: number | null;
   sets: any[];
-  sets_target?: number;
+  sets_target?: number | null;
+  reps_target?: string | null;
+}
+
+export interface RIRRPEConfig {
+  mode: 'RIR' | 'RPE';
+  rir_target_min?: number;
+  rir_target_max?: number;
+  rpe_target_min?: number;
+  rpe_target_max?: number;
 }
 
 // ============================================================================
@@ -86,13 +95,7 @@ export function hasRIRRPETarget(exercise: SessionExercise): boolean {
 /**
  * Get RIR/RPE mode and config for an exercise
  */
-export function getRIRRPEConfig(exercise: SessionExercise): {
-  mode: 'RIR' | 'RPE' | null;
-  rir_target_min?: number;
-  rir_target_max?: number;
-  rpe_target_min?: number;
-  rpe_target_max?: number;
-} {
+export function getRIRRPEConfig(exercise: SessionExercise): RIRRPEConfig | null {
   const hasRIR = exercise.rir_target_min !== null && exercise.rir_target_min !== undefined;
   const hasRPE = exercise.rpe_target_min !== null && exercise.rpe_target_min !== undefined;
 
@@ -112,7 +115,7 @@ export function getRIRRPEConfig(exercise: SessionExercise): {
     };
   }
 
-  return { mode: null };
+  return null;
 }
 
 // ============================================================================

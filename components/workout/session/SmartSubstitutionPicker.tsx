@@ -18,98 +18,69 @@ import {
 } from 'react-native';
 import { TabBarIcon } from '../../navigation/TabBarIcon';
 import { useTokens } from '../../../lib/theme';
-import type { SubstitutionOption, Exercise } from '../../../services/exerciseSubstitutionService';
-import { getSmartSubstitutions } from '../../../services/exerciseSubstitutionService';
+import { 
+  getSwapAlternatives, 
+} from '../../../lib/workout/v1_swap_engine';
+import { 
+  Exercise as V1Exercise, 
+  SwapAlternative, 
+  ContinuityMethod,
+  GoalBucket,
+  SessionEnvironment,
+  LiftComfort
+} from '../../../types/v1_engine';
+import { coreExercises } from '../../../loaders/seeds/exercises';
 
 interface SmartSubstitutionPickerProps {
-  originalExercise: Exercise;
-  userEquipment: string[];
-  sessionExercises: Exercise[];
-  dayFocus: string | null;
-  slotIndex: number;
-  userId: string;
-  onSelect: (exercise: Exercise) => void;
+  originalExercise: V1Exercise;
+  userProfile: {
+    goal: GoalBucket;
+    environment: SessionEnvironment;
+    comfort: LiftComfort;
+    injuries: string[];
+  };
+  onSelect: (alternative: SwapAlternative) => void;
+  onManualSelect: (exercise: V1Exercise) => void;
   onClose: () => void;
 }
 
-type ActiveTab = 'perfect' | 'good' | 'all';
-
 export function SmartSubstitutionPicker({
   originalExercise,
-  userEquipment,
-  sessionExercises,
-  dayFocus,
-  slotIndex,
-  userId,
+  userProfile,
   onSelect,
+  onManualSelect,
   onClose,
 }: SmartSubstitutionPickerProps) {
   const { c, s, ty, r } = useTokens();
 
-  const [activeTab, setActiveTab] = useState<ActiveTab>('perfect');
   const [searchQuery, setSearchQuery] = useState('');
   const [isLoading, setIsLoading] = useState(true);
+  const [alternatives, setAlternatives] = useState<SwapAlternative[]>([]);
 
-  const [perfectMatches, setPerfectMatches] = useState<SubstitutionOption[]>([]);
-  const [goodAlternatives, setGoodAlternatives] = useState<SubstitutionOption[]>([]);
-  const [allExercises, setAllExercises] = useState<SubstitutionOption[]>([]);
-
-  // Load substitution options on mount
+  // Load alternatives on mount
   useEffect(() => {
-    const loadOptions = async () => {
-      try {
-        setIsLoading(true);
-        const result = await getSmartSubstitutions({
-          originalExerciseId: originalExercise.id,
-          userId,
-          sessionExercises,
-          dayFocus,
-          slotIndex,
-        });
-
-        setPerfectMatches(result.perfectMatches);
-        setGoodAlternatives(result.goodAlternatives);
-        setAllExercises(result.allExercises);
-
-        // Auto-select first non-empty tab
-        if (result.perfectMatches.length > 0) {
-          setActiveTab('perfect');
-        } else if (result.goodAlternatives.length > 0) {
-          setActiveTab('good');
-        } else {
-          setActiveTab('all');
-        }
-      } catch (error) {
-        console.error('[SmartSubstitutionPicker] Failed to load options:', error);
-      } finally {
-        setIsLoading(false);
-      }
+    const load = async () => {
+      setIsLoading(true);
+      // In a real app, this might be an API call, but our V1 engine is local/synchronous
+      const results = getSwapAlternatives(originalExercise, userProfile);
+      setAlternatives(results);
+      setIsLoading(false);
     };
+    load();
+  }, [originalExercise.external_id]);
 
-    loadOptions();
-  }, [originalExercise.id, userId]);
-
-  // Filter all exercises by search query
-  const filteredAllExercises = useMemo(() => {
-    if (!searchQuery.trim()) {
-      return allExercises;
-    }
-
+  // Filter all exercises for manual search fallback
+  const manualFlatList = useMemo(() => {
+    if (!searchQuery.trim()) return [];
+    
     const query = searchQuery.toLowerCase();
-    return allExercises.filter(opt =>
-      opt.exercise.name.toLowerCase().includes(query) ||
-      (opt.exercise.primary_muscle || '').toLowerCase().includes(query) ||
-      (opt.exercise.category || '').toLowerCase().includes(query)
-    );
-  }, [allExercises, searchQuery]);
-
-  // Get active list based on tab
-  const activeList =
-    activeTab === 'perfect'
-      ? perfectMatches
-      : activeTab === 'good'
-      ? goodAlternatives
-      : filteredAllExercises;
+    // Use coreExercises directly for manual fallback search
+    return coreExercises.filter(ex => 
+      ex.external_id !== originalExercise.external_id &&
+      (ex.name.toLowerCase().includes(query) || 
+       ex.movement_pattern.toLowerCase().includes(query))
+    ).slice(0, 15);
+  }, [searchQuery, originalExercise.external_id]);
 
   return (
     <View
@@ -155,144 +126,139 @@ export function SmartSubstitutionPicker({
         </View>
       </View>
 
-      {/* Tab Bar */}
-      <View
-        style={{
-          flexDirection: 'row',
+      {/* Main Alternative List */}
+      <ScrollView
+        style={{ flex: 1 }}
+        contentContainerStyle={{
           paddingHorizontal: s.lg,
           paddingTop: s.md,
-          gap: s.sm,
+          paddingBottom: s.xl,
         }}
       >
-        <TabButton
-          label="Perfect Matches"
-          count={perfectMatches.length}
-          active={activeTab === 'perfect'}
-          onPress={() => setActiveTab('perfect')}
-          color={c.success}
-        />
-        <TabButton
-          label="Good Alternatives"
-          count={goodAlternatives.length}
-          active={activeTab === 'good'}
-          onPress={() => setActiveTab('good')}
-          color={c.primary}
-        />
-        <TabButton
-          label="All Exercises"
-          count={allExercises.length}
-          active={activeTab === 'all'}
-          onPress={() => setActiveTab('all')}
-          color={c.textMuted}
-        />
-      </View>
-
-      {/* Search Bar (only for "All Exercises" tab) */}
-      {activeTab === 'all' && (
-        <View style={{ paddingHorizontal: s.lg, paddingTop: s.md }}>
-          <View
-            style={{
-              flexDirection: 'row',
-              alignItems: 'center',
-              backgroundColor: c.surface,
-              borderRadius: r.md,
-              borderWidth: 1,
-              borderColor: c.border,
-              paddingHorizontal: s.sm,
-              paddingVertical: s.xs,
-            }}
-          >
-            <TabBarIcon name="search" size={18} color={c.textMuted} />
-            <TextInput
-              value={searchQuery}
-              onChangeText={setSearchQuery}
-              placeholder="Search exercises..."
-              placeholderTextColor={c.textSubtle}
+        {isLoading ? (
+          <ActivityIndicator color={c.primary} style={{ marginTop: s.xl }} />
+        ) : (
+          <>
+            <Text
               style={{
-                flex: 1,
-                marginLeft: s.sm,
-                color: c.text,
-                fontFamily: ty.body.family,
-                fontSize: ty.sizes.sm,
-              }}
-            />
-            {searchQuery.length > 0 && (
-              <Pressable onPress={() => setSearchQuery('')} style={{ padding: 4 }}>
-                <TabBarIcon name="close-circle" size={18} color={c.textMuted} />
-              </Pressable>
-            )}
-          </View>
-        </View>
-      )}
-
-      {/* Exercise List */}
-      {isLoading ? (
-        <View
-          style={{
-            flex: 1,
-            alignItems: 'center',
-            justifyContent: 'center',
-            paddingVertical: s.xl,
-          }}
-        >
-          <ActivityIndicator size="large" color={c.primary} />
-          <Text
-            style={{
-              color: c.textMuted,
-              fontFamily: ty.body.family,
-              fontSize: ty.sizes.sm,
-              marginTop: s.md,
-            }}
-          >
-            Finding best matches...
-          </Text>
-        </View>
-      ) : (
-        <ScrollView
-          style={{ flex: 1 }}
-          contentContainerStyle={{
-            paddingHorizontal: s.lg,
-            paddingTop: s.md,
-            paddingBottom: s.xl,
-            gap: s.sm,
-          }}
-        >
-          {activeList.length === 0 ? (
-            <View
-              style={{
-                paddingVertical: s.xl,
-                alignItems: 'center',
+                color: c.textMuted,
+                fontFamily: ty.body.familySemibold,
+                fontSize: 11,
+                textTransform: 'uppercase',
+                letterSpacing: 1,
+                marginBottom: s.md,
               }}
             >
-              <TabBarIcon name="search-outline" size={48} color={c.textSubtle} />
+              Coach Recommendations
+            </Text>
+            
+            <View style={{ gap: s.sm, marginBottom: s.xl }}>
+              {alternatives.map((alt, index) => (
+                <V1SwapOptionCard
+                  key={alt.exercise.external_id}
+                  alternative={alt}
+                  rank={index + 1}
+                  onSelect={() => onSelect(alt)}
+                />
+              ))}
+            </View>
+
+            {/* Manual Search Section */}
+            <View
+              style={{
+                borderTopWidth: 1,
+                borderTopColor: c.border,
+                paddingTop: s.xl,
+                marginBottom: s.xl,
+              }}
+            >
+              <Text
+                style={{
+                  color: c.text,
+                  fontFamily: ty.body.familySemibold,
+                  fontSize: ty.sizes.sm,
+                  marginBottom: 4,
+                }}
+              >
+                Search more exercises
+              </Text>
               <Text
                 style={{
                   color: c.textMuted,
                   fontFamily: ty.body.family,
-                  fontSize: ty.sizes.sm,
-                  marginTop: s.md,
-                  textAlign: 'center',
+                  fontSize: 12,
+                  marginBottom: s.md,
                 }}
               >
-                {activeTab === 'all' && searchQuery
-                  ? 'No exercises found matching your search'
-                  : activeTab === 'perfect'
-                  ? 'No perfect matches found. Try "Good Alternatives"'
-                  : 'No alternatives found. Try "All Exercises"'}
+                Manual swap — may start a new track
               </Text>
+
+              <View
+                style={{
+                  flexDirection: 'row',
+                  alignItems: 'center',
+                  backgroundColor: c.surface,
+                  borderRadius: r.md,
+                  borderWidth: 1,
+                  borderColor: c.border,
+                  paddingHorizontal: s.sm,
+                  paddingVertical: s.xs,
+                }}
+              >
+                <TabBarIcon name="search" size={18} color={c.textMuted} />
+                <TextInput
+                  value={searchQuery}
+                  onChangeText={setSearchQuery}
+                  placeholder="Find something else..."
+                  placeholderTextColor={c.textSubtle}
+                  style={{
+                    flex: 1,
+                    marginLeft: s.sm,
+                    color: c.text,
+                    fontFamily: ty.body.family,
+                    fontSize: ty.sizes.sm,
+                  }}
+                />
+              </View>
+
+              {searchQuery.length > 0 && (
+                <View style={{ marginTop: s.md, gap: s.xs }}>
+                  {manualFlatList.map((ex) => (
+                    <Pressable
+                      key={ex.external_id}
+                      onPress={() => onManualSelect(ex)}
+                      style={{
+                        padding: s.md,
+                        backgroundColor: c.surface,
+                        borderRadius: r.md,
+                        borderWidth: 1,
+                        borderColor: c.border,
+                        flexDirection: 'row',
+                        alignItems: 'center',
+                      }}
+                    >
+                      <View style={{ flex: 1 }}>
+                        <Text style={{ color: c.text, fontFamily: ty.body.familySemibold, fontSize: ty.sizes.sm }}>
+                          {ex.name}
+                        </Text>
+                        <Text style={{ color: c.textMuted, fontFamily: ty.body.family, fontSize: 11 }}>
+                          {ex.movement_pattern} • {ex.equipment_category}
+                        </Text>
+                      </View>
+                      <TabBarIcon name="chevron-forward" size={16} color={c.textSubtle} />
+                    </Pressable>
+                  ))}
+                  {manualFlatList.length === 0 && (
+                    <Text style={{ color: c.textMuted, textAlign: 'center', marginTop: s.md }}>
+                      No specific match found for "{searchQuery}"
+                    </Text>
+                  )}
+                </View>
+              )}
             </View>
-          ) : (
-            activeList.map((option, index) => (
-              <ExerciseOptionCard
-                key={option.exercise.id}
-                option={option}
-                rank={index + 1}
-                onSelect={() => onSelect(option.exercise)}
-              />
-            ))
-          )}
-        </ScrollView>
-      )}
+          </>
+        )}
+      </ScrollView>
     </View>
   );
 }
@@ -301,85 +267,25 @@ export function SmartSubstitutionPicker({
 // Sub-components
 // ============================================================================
 
-interface TabButtonProps {
-  label: string;
-  count: number;
-  active: boolean;
-  onPress: () => void;
-  color: string;
-}
-
-function TabButton({ label, count, active, onPress, color }: TabButtonProps) {
-  const { c, s, ty, r } = useTokens();
-
-  return (
-    <Pressable
-      onPress={onPress}
-      style={{
-        flex: 1,
-        paddingVertical: s.sm,
-        paddingHorizontal: s.xs,
-        borderRadius: r.md,
-        backgroundColor: active ? color + '20' : 'transparent',
-        borderWidth: 1,
-        borderColor: active ? color : c.border,
-        alignItems: 'center',
-      }}
-    >
-      <Text
-        style={{
-          color: active ? color : c.textMuted,
-          fontFamily: active ? ty.body.familySemibold : ty.body.family,
-          fontSize: ty.sizes.xs,
-          marginBottom: 2,
-        }}
-      >
-        {label}
-      </Text>
-      <View
-        style={{
-          paddingHorizontal: s.xs,
-          paddingVertical: 2,
-          borderRadius: r.pill,
-          backgroundColor: active ? color : c.surface2,
-        }}
-      >
-        <Text
-          style={{
-            color: active ? c.bg : c.textMuted,
-            fontFamily: ty.mono.familySemibold,
-            fontSize: ty.sizes.xxs,
-          }}
-        >
-          {count}
-        </Text>
-      </View>
-    </Pressable>
-  );
-}
-
-interface ExerciseOptionCardProps {
-  option: SubstitutionOption;
+interface V1SwapOptionCardProps {
+  alternative: SwapAlternative;
   rank: number;
   onSelect: () => void;
 }
 
-function ExerciseOptionCard({ option, rank, onSelect }: ExerciseOptionCardProps) {
+function V1SwapOptionCard({ alternative, rank, onSelect }: V1SwapOptionCardProps) {
   const { c, s, ty, r } = useTokens();
+  const { exercise, match_label, benefit_tag, continuity_recommendation } = alternative;
 
-  const categoryColor =
-    option.category === 'perfect_match'
-      ? c.success
-      : option.category === 'good_alternative'
-      ? c.primary
-      : c.textMuted;
+  const continuityColor = 
+    continuity_recommendation === ContinuityMethod.Continue ? c.success :
+    continuity_recommendation === ContinuityMethod.Modified ? c.primary :
+    c.textMuted;
 
-  const categoryLabel =
-    option.category === 'perfect_match'
-      ? 'Perfect Match'
-      : option.category === 'good_alternative'
-      ? 'Good Alternative'
-      : 'Different Pattern';
+  const continuityLabel = 
+    continuity_recommendation === ContinuityMethod.Continue ? 'Continue Progress' :
+    continuity_recommendation === ContinuityMethod.Modified ? 'Modified Carryover' :
+    'Start New Track';
 
   return (
     <Pressable
@@ -388,36 +294,28 @@ function ExerciseOptionCard({ option, rank, onSelect }: ExerciseOptionCardProps)
         backgroundColor: c.surface,
         borderRadius: r.md,
         borderWidth: 1,
-        borderColor: option.equipmentCompatible ? c.border : c.warning + '40',
+        borderColor: c.border,
         padding: s.md,
       }}
     >
-      {/* Header Row */}
       <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: s.xs }}>
         {/* Rank Badge */}
         <View
           style={{
-            width: 28,
-            height: 28,
-            borderRadius: 14,
-            backgroundColor: categoryColor + '20',
+            width: 24,
+            height: 24,
+            borderRadius: 12,
+            backgroundColor: c.surface2,
             alignItems: 'center',
             justifyContent: 'center',
             marginRight: s.sm,
           }}
         >
-          <Text
-            style={{
-              color: categoryColor,
-              fontFamily: ty.mono.familySemibold,
-              fontSize: ty.sizes.xs,
-            }}
-          >
+          <Text style={{ color: c.text, fontFamily: ty.mono.family, fontSize: 10 }}>
             {rank}
           </Text>
         </View>
 
-        {/* Exercise Name */}
         <Text
           style={{
             flex: 1,
@@ -427,110 +325,61 @@ function ExerciseOptionCard({ option, rank, onSelect }: ExerciseOptionCardProps)
           }}
           numberOfLines={1}
         >
-          {option.exercise.name}
+          {exercise.name}
         </Text>
 
-        {/* Category Badge */}
+        {/* Match Label */}
         <View
           style={{
             paddingHorizontal: s.xs,
             paddingVertical: 2,
             borderRadius: r.sm,
-            backgroundColor: categoryColor + '20',
+            backgroundColor: c.primary + '15',
           }}
         >
           <Text
             style={{
-              color: categoryColor,
+              color: c.primary,
               fontFamily: ty.body.familySemibold,
-              fontSize: ty.sizes.xxs,
+              fontSize: 10,
               textTransform: 'uppercase',
             }}
           >
-            {categoryLabel}
+            {match_label}
           </Text>
         </View>
       </View>
 
-      {/* Exercise Details */}
-      <View style={{ marginBottom: s.xs }}>
-        <Text
-          style={{
-            color: c.textMuted,
-            fontFamily: ty.body.family,
-            fontSize: ty.sizes.xs,
-          }}
-        >
-          {option.exercise.primary_muscle || 'Unknown muscle'} •{' '}
-          {option.exercise.category || 'General'} •{' '}
-          {option.exercise.difficulty || 'Unknown difficulty'}
+      {/* Benefit Tag & Equipment */}
+      <View style={{ flexDirection: 'row', alignItems: 'center', gap: s.xs, marginBottom: s.sm }}>
+        <Text style={{ color: c.text, fontFamily: ty.body.family, fontSize: 12 }}>
+          {benefit_tag}
+        </Text>
+        <Text style={{ color: c.textSubtle }}>•</Text>
+        <Text style={{ color: c.textMuted, fontFamily: ty.body.family, fontSize: 11 }}>
+          {exercise.equipment_category}
         </Text>
       </View>
 
-      {/* Match Reasons */}
-      {option.matchReasons.length > 0 && (
-        <View style={{ marginBottom: s.xs }}>
-          {option.matchReasons.slice(0, 2).map((reason, idx) => (
-            <View key={idx} style={{ flexDirection: 'row', alignItems: 'center', marginTop: 2 }}>
-              <View
-                style={{
-                  width: 4,
-                  height: 4,
-                  borderRadius: 2,
-                  backgroundColor: c.success,
-                  marginRight: s.xs,
-                }}
-              />
-              <Text
-                style={{
-                  color: c.text,
-                  fontFamily: ty.body.family,
-                  fontSize: ty.sizes.xs,
-                  flex: 1,
-                }}
-                numberOfLines={1}
-              >
-                {reason}
-              </Text>
-            </View>
-          ))}
-        </View>
-      )}
-
-      {/* Warnings */}
-      {option.warnings.length > 0 && (
+      {/* Continuity Badge */}
+      <View style={{ flexDirection: 'row', alignItems: 'center' }}>
         <View
           style={{
-            marginTop: s.xs,
-            paddingTop: s.xs,
-            borderTopWidth: 1,
-            borderTopColor: c.border,
+            flexDirection: 'row',
+            alignItems: 'center',
+            paddingHorizontal: s.sm,
+            paddingVertical: 4,
+            borderRadius: r.pill,
+            backgroundColor: continuityColor + '15',
+            gap: 6,
           }}
         >
-          {option.warnings.slice(0, 2).map((warning, idx) => (
-            <View key={idx} style={{ flexDirection: 'row', alignItems: 'center', marginTop: 2 }}>
-              <TabBarIcon name="alert-circle-outline" size={14} color={c.warning} />
-              <Text
-                style={{
-                  color: c.warning,
-                  fontFamily: ty.body.family,
-                  fontSize: ty.sizes.xs,
-                  marginLeft: s.xs,
-                  flex: 1,
-                }}
-                numberOfLines={1}
-              >
-                {warning}
-              </Text>
-            </View>
-          ))}
+          <View style={{ width: 6, height: 6, borderRadius: 3, backgroundColor: continuityColor }} />
+          <Text style={{ color: continuityColor, fontFamily: ty.body.familySemibold, fontSize: 10 }}>
+            {continuityLabel}
+          </Text>
         </View>
-      )}
-
-      {/* Score (debug - can be removed) */}
-      {/* <Text style={{ color: c.textSubtle, fontFamily: ty.mono.family, fontSize: ty.sizes.xxs, marginTop: 4 }}>
-        Score: {option.score}
-      </Text> */}
+      </View>
     </Pressable>
   );
 }

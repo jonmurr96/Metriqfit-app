@@ -1,3 +1,10 @@
-export { NutritionSummaryCard } from './NutritionSummaryCard';
-export { HydrationCard } from './HydrationCard';
-export { MealTimeline } from './MealTimeline';
+/**
+ * Nutrition Components
+ * 
+ * UI components for displaying intelligent meal plans
+ */
+
+export { MealCard } from './MealCard';
+export { FoodItemRow } from './FoodItemRow';
+export { MacroSummary } from './MacroSummary';
+export { MealPlanDayView } from './MealPlanDayView';

@@ -40,6 +40,21 @@ import { DropSetPrompt } from '../../../components/workout/session/DropSetPrompt
 import { TempoCoach } from '../../../components/workout/session/TempoCoach';
 import { RIRTargetDisplay } from '../../../components/workout/session/RIRTargetDisplay';
 import {
+  ExerciseTier,
+  GoalBucket,
+  LiftComfort,
+  SessionEnvironment,
+  ContinuityMethod,
+  MovementPattern,
+  ReplacementGroup,
+  EquipmentCategory,
+  SetupComplexity,
+  FatigueCost,
+  type Exercise as V1Exercise,
+  type SwapAlternative,
+} from '../../../types/v1_engine';
+import { SwapConfirmationSheet } from '../../../components/workout/session/SwapConfirmationSheet';
+import {
   buildExerciseSetRows,
   buildFinishWorkoutViewModel,
   getNextExerciseIndex,
@@ -50,7 +65,6 @@ import {
 import {
   hasAdvancedTechnique,
   getPrimaryTechnique,
-  hasRIRRPETarget,
   getRIRRPEConfig,
   detectSuperset,
   initializeDropSet,
@@ -153,6 +167,23 @@ function toLoggingSet(set: {
   };
 }
 
+function toV1Exercise(ex: any): V1Exercise {
+  return {
+    external_id: ex.id,
+    name: ex.name,
+    movement_pattern: (ex.pattern as any) || MovementPattern.Squat,
+    architectural_group: (ex.category as any) || ReplacementGroup.Primary_Bilateral_Squat,
+    equipment_category: (ex.equipment_required as any) || EquipmentCategory.Misc,
+    tier: (ex.difficulty as any) || ExerciseTier.T1,
+    is_unilateral: false,
+    setup_complexity: SetupComplexity.Low,
+    fatigue_cost: FatigueCost.Low,
+    progression_types: [],
+    contraindications: [],
+    estimated_duration_seconds: 60,
+  };
+}
+
 function toWorkoutSetDraft(set: LoggingSet): WorkoutSetDraft {
   return {
     weight: set.weight_lb === null || set.weight_lb === undefined ? '' : String(set.weight_lb),
@@ -221,6 +252,8 @@ export default function ActiveSessionScreen() {
   const [showFinishSheet, setShowFinishSheet] = useState(false);
   const [showExercisePreview, setShowExercisePreview] = useState(true);
   const [swapSearch, setSwapSearch] = useState('');
+  const [pendingSwap, setPendingSwap] = useState<SwapAlternative | null>(null);
+  const [showSwapSuccess, setShowSwapSuccess] = useState(false);
   const [exerciseNoteDraft, setExerciseNoteDraft] = useState('');
   const [sessionNoteDraft, setSessionNoteDraft] = useState('');
   const [exerciseNoteSaving, setExerciseNoteSaving] = useState(false);
@@ -462,31 +495,40 @@ export default function ActiveSessionScreen() {
       reps_max: currentExercise.reps_max,
       rest_seconds: currentExercise.rest_seconds,
       sets: currentExercise.sets.map(toLoggingSet),
+      isModifiedCarryover: currentExercise.is_modified_carryover,
+      isReset: currentExercise.is_reset,
     };
   }, [currentExercise]);
 
   const currentExerciseRows = useMemo(
-    () =>
-      currentExerciseModel
-        ? buildExerciseSetRows({
-            exercise: currentExerciseModel,
-            draftsBySet: draftsByExerciseId[currentExerciseModel.id],
-            extraSetCount: extraSetCountByExerciseId[currentExerciseModel.id],
-            activeSetNumber: activeSetByExerciseId[currentExerciseModel.id],
-            previousSession: previousSession
-              ? {
-                  sessionId: previousSession.sessionId,
-                  sets: (previousSession.sets ?? []).map(toLoggingSet),
-                }
-              : null,
-          })
-        : null,
+    () => {
+      if (!currentExerciseModel) return null;
+
+      const recommendation = progressionRecommendations.find(
+        (r) => r.analysis.exerciseId === currentExercise?.exercise?.id,
+      );
+
+      return buildExerciseSetRows({
+        exercise: currentExerciseModel,
+        draftsBySet: draftsByExerciseId[currentExerciseModel.id],
+        extraSetCount: extraSetCountByExerciseId[currentExerciseModel.id],
+        activeSetNumber: activeSetByExerciseId[currentExerciseModel.id],
+        previousSession: previousSession
+          ? {
+              sessionId: previousSession.sessionId,
+              sets: (previousSession.sets ?? []).map(toLoggingSet),
+            }
+          : null,
+        recommendation,
+      });
+    },
     [
       activeSetByExerciseId,
       currentExerciseModel,
       draftsByExerciseId,
       extraSetCountByExerciseId,
       previousSession,
+      progressionRecommendations,
     ],
   );
 
@@ -593,29 +635,67 @@ export default function ActiveSessionScreen() {
   const currentDraftForSet = (setNumber: number) =>
     currentExerciseRows.rows.find((row) => row.setNumber === setNumber)?.draft;
 
+  const handleExerciseDraftChange = (
+    exerciseId: string,
+    setNumber: number,
+    field: 'weight' | 'reps' | 'rpe' | 'isWarmup',
+    value: string | boolean,
+  ) => {
+    const currentDraft = exerciseId === currentExercise.id ? currentDraftForSet(setNumber) : undefined;
+    mergeExerciseDrafts(exerciseId, setNumber, {
+      ...currentDraft,
+      [field]: value,
+    });
+  };
+
   const handleDraftChange = (
     setNumber: number,
     field: 'weight' | 'reps' | 'rpe' | 'isWarmup',
     value: string | boolean,
   ) => {
-    mergeExerciseDrafts(currentExercise.id, setNumber, {
-      ...currentDraftForSet(setNumber),
-      [field]: value,
-    });
+    handleExerciseDraftChange(currentExercise.id, setNumber, field, value);
   };
 
-  const handleSwapExercise = async (newExerciseId: string) => {
+  const currentRIRRPEConfig = getRIRRPEConfig(currentExercise);
+
+  const handleSwapExercise = async (newExerciseId: string, alternative?: SwapAlternative, source: 'coach' | 'manual' = 'coach') => {
     try {
+      const originalExId = currentExercise.exercise.id;
+      const continuity = alternative?.continuity_recommendation || ContinuityMethod.Reset;
+
+      // 1. Log the swap (simulated for V1.1)
+      console.log(`[SWAP_LOG] User swapped exercise:`, {
+        original: originalExId,
+        new: newExerciseId,
+        continuityMethod: continuity,
+        timestamp: new Date().toISOString(),
+        source: source
+      });
+
+      // 2. Perform the swap mutation
       await swapExerciseMutation.mutateAsync({
         sessionExerciseId: currentExercise.id,
         newExerciseId,
       });
-      clearExerciseState(currentExercise.id);
+
+      // 3. Optional: Prepopulate/Adjust Progress (V1.1 UI Logic)
+      if (continuity === ContinuityMethod.Modified) {
+        // In a real app, we'd adjust the drafts here or in the service.
+        // For now, we clear the state so it starts fresh or uses the service's default.
+        clearExerciseState(currentExercise.id);
+      }
+
+      // 4. Feedback & Cleanup
+      setPendingSwap(null);
       setShowSwap(false);
+      setShowSwapSuccess(true);
+      setTimeout(() => setShowSwapSuccess(false), 2500);
+
       if (Platform.OS !== 'web') {
         Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
       }
-    } catch {
+    } catch (err) {
+      console.error('Swap failed:', err);
       Alert.alert('Error', 'Failed to swap exercise');
     }
   };
@@ -643,11 +723,11 @@ export default function ActiveSessionScreen() {
       // Update drafts with suggested values
       if (recommendation.suggestedWeight) {
         // Apply to first set draft
-        handleDraftChange(sessionExercise.id, 1, 'weight', recommendation.suggestedWeight.toString());
+        handleExerciseDraftChange(sessionExercise.id, 1, 'weight', recommendation.suggestedWeight.toString());
       }
 
       if (recommendation.suggestedReps) {
-        handleDraftChange(sessionExercise.id, 1, 'reps', recommendation.suggestedReps.toString());
+        handleExerciseDraftChange(sessionExercise.id, 1, 'reps', recommendation.suggestedReps.toString());
       }
 
       // Mark suggestion as applied (this is tracked in the database)
@@ -1132,21 +1212,20 @@ export default function ActiveSessionScreen() {
             />
           )}
 
-          {hasRIRRPETarget(currentExercise) && (
+          {currentRIRRPEConfig && currentExerciseRows.activeSetNumber !== null && (
             <RIRTargetDisplay
               exerciseName={currentExercise.exercise.name}
               setNumber={currentExerciseRows.activeSetNumber}
-              config={getRIRRPEConfig(currentExercise)}
+              config={currentRIRRPEConfig}
               previousValue={undefined} // TODO: fetch from previous session
               historicalTrend={undefined} // TODO: fetch last 5 sessions
               onLogValue={(value) => {
                 // Update current draft with RIR/RPE value
-                handleDraftChange(currentExercise.id, currentExerciseRows.activeSetNumber, 'rpe', value.toString());
+                handleDraftChange(currentExerciseRows.activeSetNumber!, 'rpe', value.toString());
                 Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
               }}
               onShowInfo={() => {
-                const config = getRIRRPEConfig(currentExercise);
-                if (config.mode === 'RIR') {
+                if (currentRIRRPEConfig.mode === 'RIR') {
                   Alert.alert(
                     'RIR (Reps In Reserve)',
                     'How many more reps you could have done before failure.\n\nRIR 0 = Absolute failure\nRIR 1 = Could have done 1 more rep\nRIR 2-3 = Optimal hypertrophy zone',
@@ -1522,42 +1601,60 @@ export default function ActiveSessionScreen() {
             ]}
           >
             <SmartSubstitutionPicker
-              originalExercise={{
-                id: currentExercise.exercise.id,
-                name: currentExercise.exercise.name,
-                category: currentExercise.exercise.category || null,
-                equipment_required: currentExercise.exercise.equipment_required || null,
-                primary_muscle: currentExercise.exercise.primary_muscle || null,
-                pattern: currentExercise.exercise.pattern || null,
-                difficulty: currentExercise.exercise.difficulty || null,
-                has_media: currentExercise.exercise.has_media,
-                video_url: currentExercise.exercise.video_url,
-                gif_url: currentExercise.exercise.gif_url,
-                image_url: currentExercise.exercise.image_url,
+              originalExercise={toV1Exercise(currentExercise.exercise)}
+              userProfile={{
+                goal: GoalBucket.Hypertrophy,
+                environment: SessionEnvironment.Commercial,
+                comfort: LiftComfort.BarbellAdv,
+                injuries: [],
               }}
-              userEquipment={[]} // Will be fetched inside the component
-              sessionExercises={exercises.map(ex => ({
-                id: ex.exercise.id,
-                name: ex.exercise.name,
-                category: ex.exercise.category || null,
-                equipment_required: ex.exercise.equipment_required || null,
-                primary_muscle: ex.exercise.primary_muscle || null,
-                pattern: ex.exercise.pattern || null,
-                difficulty: ex.exercise.difficulty || null,
-                has_media: ex.exercise.has_media,
-                video_url: ex.exercise.video_url,
-                gif_url: ex.exercise.gif_url,
-                image_url: ex.exercise.image_url,
-              }))}
-              dayFocus={session.plan_day?.focus || null}
-              slotIndex={activeExerciseIndex}
-              userId={user!.id}
-              onSelect={(exercise) => {
-                handleSwapExercise(exercise.id);
-                setShowSwap(false);
+              onSelect={(alternative) => {
+                setPendingSwap(alternative);
+              }}
+              onManualSelect={(v1ex) => {
+                handleSwapExercise(v1ex.external_id, undefined, 'manual');
               }}
               onClose={() => setShowSwap(false)}
             />
+
+            {/* V1 Mandatory Confirmation Sheet */}
+            {pendingSwap && (
+              <SwapConfirmationSheet
+                originalExercise={toV1Exercise(currentExercise.exercise)}
+                alternative={pendingSwap}
+                onConfirm={() => handleSwapExercise(pendingSwap.exercise.external_id, pendingSwap, 'coach')}
+                onCancel={() => setPendingSwap(null)}
+              />
+            )}
+          </MotiView>
+        ) : null}
+      </AnimatePresence>
+
+      {/* Modern Success Toast */}
+      <AnimatePresence>
+        {showSwapSuccess ? (
+          <MotiView
+            from={{ opacity: 0, translateY: 20 }}
+            animate={{ opacity: 1, translateY: 0 }}
+            exit={{ opacity: 0, translateY: 20 }}
+            style={{
+              position: 'absolute',
+              bottom: insets.bottom + 100,
+              alignSelf: 'center',
+              backgroundColor: 'rgba(16, 185, 129, 0.9)', // Success Green
+              paddingHorizontal: s.lg,
+              paddingVertical: s.md,
+              borderRadius: r.pill || r.lg || 100,
+              flexDirection: 'row',
+              alignItems: 'center',
+              gap: s.sm,
+              zIndex: 200,
+            }}
+          >
+            <Ionicons name="checkmark-circle" size={20} color="white" />
+            <Text style={{ color: 'white', fontFamily: ty.body.familySemibold }}>
+              Swap applied — Progress adjusted
+            </Text>
           </MotiView>
         ) : null}
       </AnimatePresence>

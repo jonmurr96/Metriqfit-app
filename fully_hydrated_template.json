@@ -1,0 +1,308 @@
+{
+  "external_id": "fam_hyp_ul",
+  "name": "Hypertrophy Upper/Lower",
+  "goal_bucket": "Hypertrophy",
+  "training_style": "UpperLower",
+  "days_per_week": 4,
+  "lift_comfort": "BarbellAdv",
+  "environment": "Commercial",
+  "progression_model": "Double_Progression",
+  "templates": [
+    {
+      "external_id": "tmp_hyp_ul_v1",
+      "name": "Hypertrophy Upper/Lower v1",
+      "block_number": 1,
+      "difficulty_score": 7,
+      "days": [
+        {
+          "day_number": 1,
+          "day_type": "UpperHypertrophy",
+          "slots": [
+            {
+              "order_index": 0,
+              "architectural_group": "Primary_Horizontal_Press",
+              "is_required": true,
+              "archetype": "PrimeCompound",
+              "progression_model": "Double_Progression",
+              "sets": 4,
+              "reps_min": 6,
+              "reps_max": 8,
+              "target_rpe": 8,
+              "rest_seconds": 180
+            },
+            {
+              "order_index": 1,
+              "architectural_group": "Primary_Vertical_Pull",
+              "is_required": true,
+              "archetype": "SecondaryCompound",
+              "progression_model": "Double_Progression",
+              "sets": 4,
+              "reps_min": 8,
+              "reps_max": 10,
+              "target_rpe": 8,
+              "rest_seconds": 120
+            },
+            {
+              "order_index": 2,
+              "architectural_group": "Primary_Horizontal_Press",
+              "is_required": true,
+              "archetype": "SecondaryCompound",
+              "progression_model": "Double_Progression",
+              "sets": 3,
+              "reps_min": 10,
+              "reps_max": 12,
+              "target_rpe": 8,
+              "rest_seconds": 90
+            },
+            {
+              "order_index": 3,
+              "architectural_group": "Primary_Horizontal_Pull",
+              "is_required": true,
+              "archetype": "SecondaryCompound",
+              "progression_model": "Double_Progression",
+              "sets": 3,
+              "reps_min": 10,
+              "reps_max": 12,
+              "target_rpe": 8,
+              "rest_seconds": 90
+            },
+            {
+              "order_index": 4,
+              "architectural_group": "Isolation_Lateral_Delt",
+              "is_required": true,
+              "archetype": "Isolation",
+              "progression_model": "Double_Progression",
+              "sets": 3,
+              "reps_min": 15,
+              "reps_max": 20,
+              "target_rpe": 9,
+              "rest_seconds": 60
+            },
+            {
+              "order_index": 5,
+              "architectural_group": "Isolation_Tricep_Extension",
+              "is_required": false,
+              "archetype": "Isolation",
+              "progression_model": "Double_Progression",
+              "sets": 3,
+              "reps_min": 12,
+              "reps_max": 15,
+              "target_rpe": 9,
+              "rest_seconds": 60
+            }
+          ]
+        },
+        {
+          "day_number": 2,
+          "day_type": "LowerHypertrophy",
+          "slots": [
+            {
+              "order_index": 0,
+              "architectural_group": "Primary_Bilateral_Squat",
+              "is_required": true,
+              "archetype": "PrimeCompound",
+              "progression_model": "Double_Progression",
+              "sets": 4,
+              "reps_min": 6,
+              "reps_max": 8,
+              "target_rpe": 8,
+              "rest_seconds": 180
+            },
+            {
+              "order_index": 1,
+              "architectural_group": "Unilateral_Squat_Lunge",
+              "is_required": true,
+              "archetype": "SecondaryCompound",
+              "progression_model": "Double_Progression",
+              "sets": 3,
+              "reps_min": 10,
+              "reps_max": 12,
+              "target_rpe": 8,
+              "rest_seconds": 90
+            },
+            {
+              "order_index": 2,
+              "architectural_group": "Isolation_Hamstring_Curl",
+              "is_required": true,
+              "archetype": "Isolation",
+              "progression_model": "Double_Progression",
+              "sets": 3,
+              "reps_min": 12,
+              "reps_max": 15,
+              "target_rpe": 9,
+              "rest_seconds": 90
+            },
+            {
+              "order_index": 3,
+              "architectural_group": "Isolation_Calf_Raise",
+              "is_required": true,
+              "archetype": "Isolation",
+              "progression_model": "Double_Progression",
+              "sets": 4,
+              "reps_min": 10,
+              "reps_max": 12,
+              "target_rpe": 9,
+              "rest_seconds": 60
+            },
+            {
+              "order_index": 4,
+              "architectural_group": "Trunk_Flexion",
+              "is_required": false,
+              "archetype": "Isolation",
+              "progression_model": "Rep_Goal",
+              "sets": 3,
+              "reps_min": 15,
+              "reps_max": 20,
+              "target_rpe": 8,
+              "rest_seconds": 60
+            }
+          ]
+        },
+        {
+          "day_number": 3,
+          "day_type": "UpperHypertrophy",
+          "slots": [
+            {
+              "order_index": 0,
+              "architectural_group": "Primary_Vertical_Press",
+              "is_required": true,
+              "archetype": "PrimeCompound",
+              "progression_model": "Double_Progression",
+              "sets": 4,
+              "reps_min": 8,
+              "reps_max": 10,
+              "target_rpe": 8,
+              "rest_seconds": 180
+            },
+            {
+              "order_index": 1,
+              "architectural_group": "Primary_Horizontal_Pull",
+              "is_required": true,
+              "archetype": "SecondaryCompound",
+              "progression_model": "Double_Progression",
+              "sets": 4,
+              "reps_min": 8,
+              "reps_max": 10,
+              "target_rpe": 8,
+              "rest_seconds": 120
+            },
+            {
+              "order_index": 2,
+              "architectural_group": "Isolation_Chest_Fly",
+              "is_required": true,
+              "archetype": "Isolation",
+              "progression_model": "Double_Progression",
+              "sets": 3,
+              "reps_min": 12,
+              "reps_max": 15,
+              "target_rpe": 9,
+              "rest_seconds": 90
+            },
+            {
+              "order_index": 3,
+              "architectural_group": "Primary_Vertical_Pull",
+              "is_required": true,
+              "archetype": "SecondaryCompound",
+              "progression_model": "Double_Progression",
+              "sets": 3,
+              "reps_min": 10,
+              "reps_max": 12,
+              "target_rpe": 8,
+              "rest_seconds": 90
+            },
+            {
+              "order_index": 4,
+              "architectural_group": "Isolation_Lateral_Delt",
+              "is_required": true,
+              "archetype": "Isolation",
+              "progression_model": "Double_Progression",
+              "sets": 3,
+              "reps_min": 15,
+              "reps_max": 20,
+              "target_rpe": 9,
+              "rest_seconds": 60
+            },
+            {
+              "order_index": 5,
+              "architectural_group": "Isolation_Bicep_Flexion",
+              "is_required": false,
+              "archetype": "Isolation",
+              "progression_model": "Double_Progression",
+              "sets": 3,
+              "reps_min": 12,
+              "reps_max": 15,
+              "target_rpe": 9,
+              "rest_seconds": 60
+            }
+          ]
+        },
+        {
+          "day_number": 4,
+          "day_type": "LowerHypertrophy",
+          "slots": [
+            {
+              "order_index": 0,
+              "architectural_group": "Primary_Bilateral_Hinge",
+              "is_required": true,
+              "archetype": "PrimeCompound",
+              "progression_model": "Double_Progression",
+              "sets": 3,
+              "reps_min": 6,
+              "reps_max": 8,
+              "target_rpe": 8,
+              "rest_seconds": 180
+            },
+            {
+              "order_index": 1,
+              "architectural_group": "Primary_Bilateral_Squat",
+              "is_required": true,
+              "archetype": "SecondaryCompound",
+              "progression_model": "Double_Progression",
+              "sets": 3,
+              "reps_min": 10,
+              "reps_max": 12,
+              "target_rpe": 8,
+              "rest_seconds": 120
+            },
+            {
+              "order_index": 2,
+              "architectural_group": "Isolation_Quad_Extension",
+              "is_required": true,
+              "archetype": "Isolation",
+              "progression_model": "Double_Progression",
+              "sets": 3,
+              "reps_min": 12,
+              "reps_max": 15,
+              "target_rpe": 9,
+              "rest_seconds": 60
+            },
+            {
+              "order_index": 3,
+              "architectural_group": "Isolation_Calf_Raise",
+              "is_required": true,
+              "archetype": "Isolation",
+              "progression_model": "Double_Progression",
+              "sets": 4,
+              "reps_min": 12,
+              "reps_max": 15,
+              "target_rpe": 9,
+              "rest_seconds": 60
+            },
+            {
+              "order_index": 4,
+              "architectural_group": "Trunk_Anti_Extension",
+              "is_required": false,
+              "archetype": "Isolation",
+              "progression_model": "Rep_Goal",
+              "sets": 3,
+              "reps_min": 45,
+              "reps_max": 45,
+              "target_rpe": 8,
+              "rest_seconds": 60
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

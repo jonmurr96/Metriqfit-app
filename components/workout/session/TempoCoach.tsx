@@ -214,7 +214,7 @@ export function TempoCoach({
         <Text
           style={{
             color: c.text,
-            fontFamily: ty.mono.familySemibold,
+            fontFamily: ty.mono.family,
             fontSize: ty.sizes.lg,
           }}
         >
@@ -246,7 +246,7 @@ export function TempoCoach({
             <Text
               style={{
                 color: c.text,
-                fontFamily: ty.mono.familySemibold,
+                fontFamily: ty.mono.family,
                 fontSize: ty.sizes.xl,
               }}
             >
@@ -300,7 +300,7 @@ export function TempoCoach({
             <Text
               style={{
                 color: c.text,
-                fontFamily: ty.mono.familySemibold,
+                fontFamily: ty.mono.family,
                 fontSize: ty.sizes.md,
               }}
             >
@@ -405,7 +405,7 @@ function PhaseBreakdown({ phase, duration, color, icon }: PhaseBreakdownProps) {
       <Text
         style={{
           color: c.text,
-          fontFamily: ty.mono.familySemibold,
+          fontFamily: ty.mono.family,
           fontSize: ty.sizes.xs,
         }}
       >

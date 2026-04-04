@@ -128,7 +128,7 @@ export default function SignInScreen() {
         autoCapitalize="none"
         autoCorrect={false}
         keyboardType="email-address"
-        textContentType="emailAddress"
+        textContentType="oneTimeCode"
         autoComplete="email"
         returnKeyType="next"
         onSubmitEditing={() => passwordRef.current?.focus()}

@@ -153,8 +153,8 @@ export interface WorkoutDashboardResourceState {
 
 export interface WorkoutDashboardCompactLayoutState {
   primaryCard: WorkoutDashboardPrimaryCardState;
-  coachInsightTile: WorkoutDashboardUtilityTileState;
   myPlanTile: WorkoutDashboardUtilityTileState;
+  changeProgramTile: WorkoutDashboardUtilityTileState;
   quickActions: WorkoutDashboardQuickActionState[];
   resources: WorkoutDashboardResourceState[];
 }
@@ -364,36 +364,16 @@ function buildCompactPrimaryCard(
   }
 }
 
-function buildCompactCoachInsight(
-  coachQueue: WorkoutCoachQueueState,
-  hero: WorkoutDashboardPrimaryHeroState,
+function buildChangeProgramTile(
+  activePlanLabel: string | null | undefined,
 ): WorkoutDashboardUtilityTileState {
-  if (coachQueue.mode === 'recommendations' && coachQueue.items.length > 0) {
-    return {
-      title: 'Coach Insight',
-      subtitle: coachQueue.items[0].title,
-      icon: 'sparkles-outline',
-      action: 'open_adaptation',
-      badgeLabel: `${coachQueue.items.length}`,
-    };
-  }
-
   return {
-    title: 'Coach Insight',
-    subtitle:
-      hero.mode === 'today_workout'
-        ? 'Today’s session is still the highest-leverage move.'
-        : hero.mode === 'completed_today'
-          ? 'Recovery quality is what keeps tomorrow sharp.'
-          : hero.mode === 'recovery'
-            ? 'Use today to make tomorrow easier to execute.'
-            : hero.mode === 'no_plan'
-              ? 'Build the week before chasing intensity.'
-              : hero.primaryAction === 'finish_session'
-                ? 'Close the session cleanly and reset the board.'
-                : 'Finish what is already in motion before browsing.',
-    icon: 'sparkles-outline',
-    action: 'open_adaptation',
+    title: 'Change Program',
+    subtitle: activePlanLabel 
+      ? `Currently: ${activePlanLabel}`
+      : 'Browse available training programs',
+    icon: 'swap-horizontal-outline',
+    action: 'browse_programs',
   };
 }
 
@@ -505,7 +485,7 @@ export function buildWorkoutDashboardState(input: BuildWorkoutDashboardStateInpu
       title: `${todayCompletedSession.name || 'Workout'} complete`,
       subtitle: todayCompletedSession.prCount > 0
         ? `Today is closed with ${todayCompletedSession.prCount} new PR${todayCompletedSession.prCount === 1 ? '' : 's'}. Review the win while it is still fresh and set up tomorrow with intent.`
-        : 'Today’s training is closed. Review the session while it is still fresh, recover cleanly, and look at tomorrow with intent.',
+        : 'Today\'s training is closed. Review the session while it is still fresh, recover cleanly, and look at tomorrow with intent.',
       icon: 'checkmark-circle',
       tone: 'success',
       primaryLabel: 'View Summary',
@@ -529,7 +509,7 @@ export function buildWorkoutDashboardState(input: BuildWorkoutDashboardStateInpu
       mode: 'missed_session',
       chipLabel: 'MISSED TODAY',
       title: 'Missed session recovery',
-      subtitle: `${input.todayEntry.planDayName || 'Today’s workout'} slipped. Open the plan and pick the least disruptive recovery move for the week.`,
+      subtitle: `${input.todayEntry.planDayName || 'Today\'s workout'} slipped. Open the plan and pick the least disruptive recovery move for the week.`,
       icon: 'refresh-outline',
       tone: 'accent',
       primaryLabel: 'Make-Up Options',
@@ -625,7 +605,7 @@ export function buildWorkoutDashboardState(input: BuildWorkoutDashboardStateInpu
         mode: 'fallback',
         title:
           hero.mode === 'today_workout'
-            ? 'Today’s session is the highest leverage move'
+            ? 'Today\'s session is the highest leverage move'
             : hero.mode === 'stale_session'
               ? 'Clean up the older session'
             : hero.mode === 'completed_today'
@@ -649,7 +629,7 @@ export function buildWorkoutDashboardState(input: BuildWorkoutDashboardStateInpu
             : hero.mode === 'completed_today'
               ? `${tomorrow.subtitle} Use tonight to lock in recovery and keep the next session obvious.`
               : hero.mode === 'missed_session'
-                ? 'Open the plan and decide whether to make up today’s session or shift the week forward on purpose.'
+                ? 'Open the plan and decide whether to make up today\'s session or shift the week forward on purpose.'
               : hero.mode === 'recovery'
                 ? 'Mobility, hydration, and tomorrow prep are the right win today.'
                 : hero.mode === 'no_plan'
@@ -755,8 +735,8 @@ export function buildWorkoutDashboardState(input: BuildWorkoutDashboardStateInpu
 
   const compact: WorkoutDashboardCompactLayoutState = {
     primaryCard: buildCompactPrimaryCard(hero, input.todayEntry),
-    coachInsightTile: buildCompactCoachInsight(coachQueue, hero),
     myPlanTile: buildCompactPlanTile(input),
+    changeProgramTile: buildChangeProgramTile(input.activePlanLabel),
     quickActions: [
       { label: 'Notes', icon: 'document-text', action: 'open_notes' },
       { label: 'Exercise Library', icon: 'bar-chart', action: 'open_exercise_library' },

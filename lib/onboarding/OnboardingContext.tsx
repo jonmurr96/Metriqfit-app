@@ -18,6 +18,17 @@ export type SessionEmphasis = 'strength' | 'hypertrophy' | 'balanced' | 'conditi
 export type PrepDiscipline = 'bodybuilding' | 'powerlifting';
 export type PrepPhase = 'cut' | 'bulk';
 
+// NEW: Enhanced Nutrition Types
+export type ProteinSource = 'chicken' | 'turkey' | 'beef' | 'pork' | 'fish' | 'shellfish' | 'eggs' | 'dairy' | 'tofu_tempeh' | 'legumes' | 'protein_powder';
+export type CarbSource = 'rice' | 'oats' | 'sweet_potato' | 'potato' | 'quinoa' | 'pasta' | 'bread' | 'fruit';
+export type FatSource = 'olive_oil' | 'almonds' | 'walnuts' | 'avocado' | 'peanut_butter' | 'chia_seeds' | 'coconut_oil' | 'cheese';
+export type WakeTime = '5_6am' | '7_8am' | '9_10am' | 'other';
+export type FirstMealDelay = 'immediate' | '1_2hrs' | '3hrs_plus';
+export type LastMealBeforeBed = '2hrs' | '3_4hrs' | 'no_constraint';
+export type TrainingTime = 'early_morning' | 'mid_morning' | 'midday' | 'afternoon' | 'evening' | 'no_training';
+export type CarbTolerance = 'energized_satiated' | 'hungry_quickly' | 'tired_sleepy' | 'bloated';
+export type CookingLevel = 'minimal' | 'basic' | 'moderate' | 'full';
+
 export interface OnboardingData {
   first_name: string | null;
   last_name: string | null;
@@ -36,6 +47,7 @@ export interface OnboardingData {
   avg_steps: number | null;
   sleep_hours: SleepHours | null;
   training_days_per_week: number | null;
+  training_days: Weekday[];
   minutes_per_workout: MinutesPerWorkout | null;
   preferred_days_off: Weekday[];
   experience_level: ExperienceLevel | null;
@@ -58,6 +70,17 @@ export interface OnboardingData {
   refused_foods: RefusedFood[];
   refused_foods_other_text: string | null;
   meals_per_day: MealsPerDay | null;
+  // NEW: Enhanced Nutrition Fields
+  preferred_proteins: ProteinSource[];
+  preferred_carbs: CarbSource[];
+  preferred_fats: FatSource[];
+  traditional_meals: boolean;
+  wake_time: WakeTime | null;
+  first_meal_delay: FirstMealDelay | null;
+  last_meal_before_bed: LastMealBeforeBed | null;
+  training_time: TrainingTime | null;
+  carb_tolerance: CarbTolerance | null;
+  cooking_level: CookingLevel | null;
   userId: string | null;
 }
 
@@ -88,6 +111,7 @@ const defaultData: OnboardingData = {
   avg_steps: null,
   sleep_hours: null,
   training_days_per_week: null,
+  training_days: [],
   minutes_per_workout: null,
   preferred_days_off: [],
   experience_level: null,
@@ -110,6 +134,17 @@ const defaultData: OnboardingData = {
   refused_foods: [],
   refused_foods_other_text: null,
   meals_per_day: null,
+  // NEW: Enhanced Nutrition Defaults
+  preferred_proteins: [],
+  preferred_carbs: [],
+  preferred_fats: [],
+  traditional_meals: true,
+  wake_time: null,
+  first_meal_delay: null,
+  last_meal_before_bed: null,
+  training_time: null,
+  carb_tolerance: null,
+  cooking_level: null,
   userId: null,
 };
 
@@ -118,7 +153,9 @@ const OnboardingContext = createContext<OnboardingContextType | undefined>(undef
 export function OnboardingProvider({ children }: { children: React.ReactNode }) {
   const [data, setData] = useState<OnboardingData>(defaultData);
   const [currentStep, setCurrentStep] = useState(1);
-  const totalSteps = 5;
+  // Updated to 7 steps for the new flow:
+  // 1. Identity → 2. About You → 3. Height → 4. Weight → 5. Goals → 6. Training → 7. Nutrition
+  const totalSteps = 7;
 
   const updateData = useCallback((updates: Partial<OnboardingData>) => {
     setData((prev) => ({ ...prev, ...updates }));

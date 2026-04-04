@@ -18,6 +18,62 @@ import { TabBarIcon } from '../../../components/navigation/TabBarIcon';
 import { GlassCard } from '../../../components/premium/GlassCard';
 import { MacroRow } from '../../../components/nutrition/MacroRow';
 
+function PortionBadge({ grams, fallbackLabel }: { grams?: number | null; fallbackLabel?: string }) {
+  const { c, ty, r } = useTokens();
+  if (!grams && !fallbackLabel) return null;
+
+  if (grams && grams > 0) {
+    const oz = (grams / 28.3495).toFixed(1);
+    return (
+      <View
+        style={{
+          flexDirection: 'row',
+          alignItems: 'baseline',
+          backgroundColor: c.surface2,
+          paddingHorizontal: 8,
+          paddingVertical: 3,
+          borderRadius: 6,
+          alignSelf: 'flex-start',
+          marginTop: 6,
+          borderWidth: 1,
+          borderColor: `${c.textMuted}20`,
+        }}
+      >
+        <Text style={{ color: c.text, fontFamily: ty.body.familySemibold, fontSize: ty.sizes.sm }}>
+          {Math.round(grams)}
+          <Text style={{ color: c.textMuted, fontFamily: ty.body.family, fontSize: ty.sizes.xs }}>g</Text>
+        </Text>
+        <Text style={{ color: `${c.textMuted}50`, marginHorizontal: 6, fontSize: ty.sizes.xs }}>|</Text>
+        <Text style={{ color: c.textMuted, fontFamily: ty.body.family, fontSize: ty.sizes.sm }}>
+          {oz}
+          <Text style={{ fontSize: ty.sizes.xs }}>oz</Text>
+        </Text>
+      </View>
+    );
+  }
+
+  return (
+    <View
+      style={{
+        flexDirection: 'row',
+        alignItems: 'center',
+        backgroundColor: c.surface2,
+        paddingHorizontal: 8,
+        paddingVertical: 3,
+        borderRadius: 6,
+        alignSelf: 'flex-start',
+        marginTop: 6,
+        borderWidth: 1,
+        borderColor: `${c.textMuted}20`,
+      }}
+    >
+      <Text style={{ color: c.textMuted, fontFamily: ty.body.family, fontSize: ty.sizes.xs }}>
+        {fallbackLabel}
+      </Text>
+    </View>
+  );
+}
+
 export default function MealDetailScreen() {
   const { c, s, ty, r } = useTokens();
   const router = useRouter();
@@ -289,16 +345,7 @@ export default function MealDetailScreen() {
                             >
                               {item.name}
                             </Text>
-                            <Text
-                              style={{
-                                color: c.textMuted,
-                                fontFamily: ty.body.family,
-                                fontSize: ty.sizes.xs,
-                                marginTop: 4,
-                              }}
-                            >
-                              {item.quantityLabel}
-                            </Text>
+                            <PortionBadge grams={item.grams} fallbackLabel={item.quantityLabel} />
                           </View>
 
                           <Pressable
@@ -426,8 +473,9 @@ export default function MealDetailScreen() {
                           >
                             {item.food.name}
                           </Text>
+                          <PortionBadge grams={Number(item.grams || 0)} />
                           <MacroRow
-                            style={{ marginTop: 8 }}
+                            style={{ marginTop: 12 }}
                             size="sm"
                             emphasis="outlined"
                             items={[

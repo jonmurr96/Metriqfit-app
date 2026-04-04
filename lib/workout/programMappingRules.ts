@@ -110,7 +110,7 @@ const EXERCISE_FOCUS_RULES: Record<
 };
 
 const DAY_LABEL_FALLBACK_BLUEPRINTS: Record<string, WorkoutFocusTag[][]> = {
-  bro_split_5: [['chest'], ['back'], ['shoulders'], ['legs'], ['arms']],
+  bro_split_5: [['chest'], ['back'], ['shoulders'], ['arms'], ['legs']],
   arnold_split_6: [['chest', 'back'], ['shoulders', 'arms'], ['legs'], ['chest', 'back'], ['shoulders', 'arms'], ['legs']],
   ppl_3: [['chest', 'shoulders', 'arms'], ['back', 'arms'], ['legs', 'hamstrings', 'glutes']],
   ppl_6: [
@@ -857,7 +857,8 @@ export function inferExerciseMovementFamily(exercise: ProgramExercise): string |
     ['row', ['row', 'seal row', 't bar']],
     ['pulldown', ['pulldown', 'pull up', 'chin up']],
     ['shoulder_press', ['shoulder press', 'overhead press', 'arnold press', 'landmine press']],
-    ['lateral_raise', ['lateral raise', 'rear delt', 'front raise', 'upright row', 'y raise']],
+    ['rear_delt', ['rear delt', 'face pull', 'reverse fly', 'reverse flye', 'band pull apart', 'w raise', 'prone y raise']],
+    ['lateral_raise', ['lateral raise', 'front raise', 'upright row', 'y raise']],
     ['biceps_curl', ['curl', 'preacher', 'hammer curl', 'concentration curl']],
     ['triceps_extension', ['pushdown', 'skull crusher', 'skullcrusher', 'triceps extension', 'dip']],
     ['carry_core', ['carry', 'pallof', 'plank', 'crunch', 'dead bug', 'leg raise', 'ab wheel']],

@@ -52,13 +52,7 @@ export default function SettingsScreen() {
     );
 
     const SettingsItem = ({ icon, label, value, onPress, isDestructive = false }: any) => (
-        <Pressable
-            style={({ pressed }) => [
-                styles.item,
-                { backgroundColor: pressed ? c.surface2 : 'transparent' }
-            ]}
-            onPress={onPress}
-        >
+        <Pressable style={styles.item} onPress={onPress}>
             <View style={styles.itemLeft}>
                 <View style={[styles.iconContainer, { backgroundColor: isDestructive ? `${c.danger}15` : c.surface2 }]}>
                     <TabBarIcon

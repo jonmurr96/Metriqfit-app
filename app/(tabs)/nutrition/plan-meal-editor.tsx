@@ -255,7 +255,21 @@ export default function NutritionPlanMealEditorScreen() {
     <View style={[styles.container, { backgroundColor: c.bg, paddingTop: insets.top }]}>
       <View style={[styles.header, { paddingHorizontal: s.lg }]}> 
         <Pressable
-          onPress={() => router.back()}
+          onPress={() => {
+            if (returnTo === 'onboarding-edit-nutrition') {
+              // Coming from onboarding - navigate back to onboarding edit screen
+              router.push({
+                pathname: '/(onboarding)/edit-nutrition-plan',
+                params: { 
+                  ...(runId ? { runId } : {}), 
+                  ...(returnDay ? { day: returnDay } : {}) 
+                },
+              });
+            } else {
+              // Normal tabs navigation - use back
+              router.back();
+            }
+          }}
           style={[styles.backButton, { backgroundColor: c.surface }]}
         >
           <TabBarIcon name="chevron-back" color={c.text} size={22} />

@@ -33,6 +33,8 @@ export interface Exercise {
   video_url: string | null;
   gif_url: string | null;
   image_url: string | null;
+  /** Pre-curated swaps seeded per exercise — surfaced as top-tier picks */
+  alternative_exercise_ids?: string[] | null;
 }
 
 export type SubstitutionCategory = 'perfect_match' | 'good_alternative' | 'different_pattern';
@@ -324,12 +326,24 @@ export function scoreSubstitutionCandidate(input: {
 // Main Substitution Function
 // ============================================================================
 
+/** Curated boost applied to alternative_exercise_ids picks */
+const CURATED_SCORE_BOOST = 100;
+
 /**
- * Get smart substitution options for an exercise
+ * Get smart substitution options for an exercise.
+ *
+ * Returns four tiers:
+ * - curatedAlternatives  — pre-seeded alternative_exercise_ids, scored + boosted
+ * - perfectMatches       — algorithmically scored: same pattern + equipment OK
+ * - goodAlternatives     — algorithmically scored: related pattern + equipment OK
+ * - allExercises         — full pool for text-search fallback
+ *
+ * Curated picks are excluded from the algorithmic tiers to avoid duplicates.
  */
 export async function getSmartSubstitutions(
   input: SmartSubstitutionInput
 ): Promise<{
+  curatedAlternatives: SubstitutionOption[];
   perfectMatches: SubstitutionOption[];
   goodAlternatives: SubstitutionOption[];
   allExercises: SubstitutionOption[];
@@ -337,7 +351,7 @@ export async function getSmartSubstitutions(
   // 1. Fetch user equipment
   const userEquipment = await getUserEquipment(input.userId);
 
-  // 2. Get original exercise
+  // 2. Get original exercise (include alternative_exercise_ids)
   const { data: originalExercise, error: originalError } = await supabase
     .from('exercises')
     .select('*')
@@ -348,21 +362,57 @@ export async function getSmartSubstitutions(
     throw new Error('Original exercise not found');
   }
 
-  // 3. Get all exercises (excluding the original)
+  const curatedIds: string[] = Array.isArray(originalExercise.alternative_exercise_ids)
+    ? (originalExercise.alternative_exercise_ids as string[]).filter(Boolean)
+    : [];
+
+  // 3. Fetch curated exercises and score them (with boost)
+  const sessionExercises = input.sessionExercises || [];
+  const slotIndex = input.slotIndex ?? 0;
+
+  let curatedAlternatives: SubstitutionOption[] = [];
+  if (curatedIds.length > 0) {
+    const { data: curatedExercises } = await supabase
+      .from('exercises')
+      .select('*')
+      .in('id', curatedIds);
+
+    if (curatedExercises && curatedExercises.length > 0) {
+      curatedAlternatives = curatedExercises.map(candidate => {
+        const scoring = scoreSubstitutionCandidate({
+          candidate,
+          original: originalExercise,
+          userEquipment,
+          sessionExercises,
+          dayFocus: input.dayFocus ?? null,
+          slotIndex,
+        });
+        return {
+          exercise: candidate,
+          score: scoring.score + CURATED_SCORE_BOOST,
+          category: scoring.category,
+          matchReasons: ['Curated pick', ...scoring.matchReasons],
+          warnings: scoring.warnings,
+          equipmentCompatible: isExerciseAccessible(candidate, userEquipment),
+        };
+      });
+      curatedAlternatives.sort((a, b) => b.score - a.score);
+    }
+  }
+
+  // 4. Get all other exercises (excluding original + curated IDs to avoid duplicates)
+  const excludeIds = [input.originalExerciseId, ...curatedIds];
   const { data: allExercises, error: allError } = await supabase
     .from('exercises')
     .select('*')
-    .neq('id', input.originalExerciseId)
+    .not('id', 'in', `(${excludeIds.join(',')})`)
     .order('name');
 
   if (allError || !allExercises) {
     throw new Error('Failed to fetch exercise pool');
   }
 
-  // 4. Score and categorize all exercises
-  const sessionExercises = input.sessionExercises || [];
-  const slotIndex = input.slotIndex ?? 0;
-
+  // 5. Score the general pool
   const scoredOptions: SubstitutionOption[] = allExercises.map(candidate => {
     const scoring = scoreSubstitutionCandidate({
       candidate,
@@ -372,7 +422,6 @@ export async function getSmartSubstitutions(
       dayFocus: input.dayFocus ?? null,
       slotIndex,
     });
-
     return {
       exercise: candidate,
       score: scoring.score,
@@ -383,10 +432,9 @@ export async function getSmartSubstitutions(
     };
   });
 
-  // 5. Sort by score (highest first)
   scoredOptions.sort((a, b) => b.score - a.score);
 
-  // 6. Categorize into tiers
+  // 6. Categorize into tiers (equipment-compatible only for top two)
   const perfectMatches = scoredOptions.filter(
     opt => opt.category === 'perfect_match' && opt.equipmentCompatible
   );
@@ -395,15 +443,15 @@ export async function getSmartSubstitutions(
     opt => opt.category === 'good_alternative' && opt.equipmentCompatible
   );
 
-  // All exercises (including incompatible ones, for fallback search)
   const allExercisesFiltered = scoredOptions.filter(
     opt => !sessionExercises.some(ex => ex.id === opt.exercise.id)
   );
 
   return {
-    perfectMatches: perfectMatches.slice(0, 10), // Top 10 perfect matches
+    curatedAlternatives,                          // All curated picks (no cap — usually ≤5)
+    perfectMatches: perfectMatches.slice(0, 10),  // Top 10 perfect matches
     goodAlternatives: goodAlternatives.slice(0, 15), // Top 15 good alternatives
-    allExercises: allExercisesFiltered.slice(0, 50), // Top 50 all exercises
+    allExercises: allExercisesFiltered.slice(0, 50), // Top 50 for search fallback
   };
 }
 

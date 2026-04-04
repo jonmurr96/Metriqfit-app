@@ -1,9 +1,12 @@
 import React, { useMemo, useState } from 'react';
 import { Pressable, Text, TextInput, View } from 'react-native';
+import { Ionicons } from '@expo/vector-icons';
 
 import type { ActiveSetRowViewModel } from '../../../lib/workout/logging-state';
 import { TabBarIcon } from '../../navigation/TabBarIcon';
 import { useTokens } from '../../../lib/theme';
+import { SetTargetBadge } from './SetTargetBadge';
+import { GlassCard } from '../../premium/GlassCard';
 
 interface SetLogRowProps {
   row: ActiveSetRowViewModel;
@@ -96,9 +99,16 @@ export function SetLogRow(props: SetLogRowProps) {
         }}
       >
         <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
-          <Text style={{ color: c.text, fontFamily: ty.body.familySemibold, fontSize: ty.sizes.sm }}>
-            Set {props.row.setNumber}
-          </Text>
+          <View style={{ flex: 1 }}>
+            <Text style={{ color: c.text, fontFamily: ty.body.familySemibold, fontSize: ty.sizes.sm }}>
+              Set {props.row.setNumber}
+            </Text>
+            {(props.row.targetWeight || props.row.targetReps) && (
+              <Text style={{ color: c.primary, fontFamily: ty.body.familySemibold, fontSize: 11, marginTop: 2 }}>
+                Target: {props.row.targetWeight ? `${props.row.targetWeight} lbs` : ''}{props.row.targetWeight && props.row.targetReps ? ' x ' : ''}{props.row.targetReps ? `${props.row.targetReps} reps` : ''}
+              </Text>
+            )}
+          </View>
           <Text style={{ color: c.textMuted, fontFamily: ty.body.family, fontSize: ty.sizes.xs }}>
             Previous: {props.row.previousLabel}
           </Text>
@@ -118,14 +128,56 @@ export function SetLogRow(props: SetLogRowProps) {
         gap: s.sm,
       }}
     >
-      <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
-        <Text style={{ color: c.text, fontFamily: ty.body.familySemibold, fontSize: ty.sizes.md }}>
-          Set {props.row.setNumber}
-        </Text>
-        <Text style={{ color: c.textMuted, fontFamily: ty.body.family, fontSize: ty.sizes.xs }}>
-          Previous: {props.row.previousLabel}
-        </Text>
+      {/* Set Header & Previous Info */}
+      <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: props.row.targetWeight || props.row.targetReps ? 8 : 0 }}>
+        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+          <Text style={{ color: c.text, fontFamily: ty.body.familySemibold, fontSize: ty.sizes.md }}>
+            Set {props.row.setNumber}
+          </Text>
+          {props.row.state === 'active' && (
+            <View style={{ backgroundColor: `${c.primary}20`, paddingHorizontal: 6, paddingVertical: 2, borderRadius: 4 }}>
+              <Text style={{ color: c.primary, fontFamily: ty.body.familySemibold, fontSize: 10, textTransform: 'uppercase' }}>Active</Text>
+            </View>
+          )}
+        </View>
+        
+        {props.row.previousLabel ? (
+          <Text style={{ color: c.textMuted, fontFamily: ty.body.family, fontSize: ty.sizes.xs }}>
+            Previous: {props.row.previousLabel}
+          </Text>
+        ) : (
+          <Text style={{ color: c.success, fontFamily: ty.body.familySemibold, fontSize: 11 }}>
+             Match Target
+          </Text>
+        )}
       </View>
+
+      {/* Target & Coaching */}
+      {(props.row.targetWeight || props.row.targetReps || props.row.progressionLabel) && (
+        <SetTargetBadge 
+          weight={props.row.targetWeight} 
+          reps={props.row.targetReps} 
+          label={props.row.progressionLabel}
+          isPR={props.row.isPROpportunity}
+        />
+      )}
+
+      {props.row.progressionRationale && (
+        <View style={{ 
+          marginBottom: s.sm, 
+          padding: 10, 
+          backgroundColor: `${c.surface2}50`, 
+          borderRadius: 8,
+          borderLeftWidth: 2,
+          borderLeftColor: c.primary
+        }}>
+          <Text style={{ color: c.text, fontFamily: ty.body.family, fontSize: 13, lineHeight: 18 }}>
+            <Ionicons name="bulb-outline" size={14} color={c.primary} /> {props.row.progressionRationale}
+          </Text>
+        </View>
+      )}
+
+
 
       <View style={{ flexDirection: 'row', gap: s.sm }}>
         <View style={{ flex: 1 }}>

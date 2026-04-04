@@ -30,6 +30,8 @@ export interface LoggingExercise {
   reps_max?: number | null;
   rest_seconds?: number | null;
   sets: LoggingSet[];
+  isModifiedCarryover?: boolean;
+  isReset?: boolean;
 }
 
 export interface ActiveSetRowViewModel {
@@ -43,6 +45,12 @@ export interface ActiveSetRowViewModel {
   canRepeatPlusFive: boolean;
   repeatLastDraft?: WorkoutSetDraft;
   repeatPlusFiveDraft?: WorkoutSetDraft;
+  // Progression fields
+  targetWeight?: number;
+  targetReps?: number;
+  progressionLabel?: string;
+  progressionRationale?: string;
+  isPROpportunity?: boolean;
 }
 
 export interface ExerciseSetRowsViewModel {
@@ -218,6 +226,12 @@ export function buildExerciseSetRows(input: {
   extraSetCount?: number;
   activeSetNumber?: number | null;
   previousSession?: PreviousExerciseSession | null;
+  recommendation?: {
+    type: 'increase_weight' | 'increase_reps' | 'maintain' | 'deload';
+    suggestedWeight?: number;
+    suggestedReps?: number;
+    rationale: string;
+  } | null;
 }): ExerciseSetRowsViewModel {
   const draftsBySet = input.draftsBySet ?? {};
   const extraSetCount = input.extraSetCount ?? 0;
@@ -244,11 +258,48 @@ export function buildExerciseSetRows(input: {
     const isActive = !completedSet && activeSetNumber === setNumber;
     const previousLabel = formatPreviousLabel(input.previousSession, setNumber);
 
+    // Progression logic
+    let targetWeight = input.recommendation?.suggestedWeight;
+    let targetReps = input.recommendation?.suggestedReps;
+    let progressionLabel: string | undefined;
+    let progressionRationale: string | undefined;
+    let isPROpportunity = false;
+
+    if (input.recommendation) {
+      if (input.recommendation.type === 'increase_weight') {
+        progressionLabel = input.exercise.isModifiedCarryover ? 'Adjusted Baseline' : 'Weight Increase';
+        isPROpportunity = !input.exercise.isModifiedCarryover;
+      } else if (input.recommendation.type === 'increase_reps') {
+        progressionLabel = 'Rep Progression';
+        isPROpportunity = !input.exercise.isModifiedCarryover;
+      } else if (input.recommendation.type === 'deload') {
+        progressionLabel = 'Deload Focus';
+      } else if (input.exercise.isReset) {
+        progressionLabel = 'Fresh Benchmark';
+      }
+
+      // Only show rationale for the active set
+      if (isActive) {
+        progressionRationale = input.recommendation.rationale;
+      }
+    } else if (input.exercise.isReset) {
+      progressionLabel = 'Fresh Benchmark';
+    } else if (input.exercise.isModifiedCarryover) {
+      progressionLabel = 'Adjusted Baseline';
+    }
+
+    // Space optimization: Only show "Previous" if it differs from the current Target
+    // or if no target is present. This reduces visual noise in the active row.
+    const isTargetSameAsPrevious = 
+      targetWeight !== undefined && 
+      targetReps !== undefined && 
+      previousLabel === `${targetWeight === null ? 'BW' : targetWeight} x ${targetReps}`;
+
     return {
       setNumber,
       state: completedSet ? 'completed' : isActive ? 'active' : 'upcoming',
       draft,
-      previousLabel,
+      previousLabel: (isActive && isTargetSameAsPrevious) ? '' : previousLabel,
       summaryLabel: completedSet ? buildSummaryLabel(completedSet) : undefined,
       completedSet,
       canRepeatLast: Boolean(lastWorkingSet) && isActive,
@@ -268,7 +319,13 @@ export function buildExerciseSetRows(input: {
               weight: String(lastWorkingSet.weight_lb + 5),
             }
           : undefined,
+      targetWeight,
+      targetReps,
+      progressionLabel,
+      progressionRationale,
+      isPROpportunity,
     } satisfies ActiveSetRowViewModel;
+
   });
 
   return {

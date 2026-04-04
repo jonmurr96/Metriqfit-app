@@ -152,9 +152,19 @@ export interface WorkoutTemplateWithDays extends WorkoutProgramCatalogItem {
 }
 
 export interface WorkoutSessionWithDetails extends WorkoutSession {
+  plan_day?: {
+    id: string;
+    name: string;
+    focus: string | null;
+  } | null;
   exercises: (SessionExercise & {
     exercise: Exercise;
     sets: WorkoutSet[];
+    plan_exercise?: {
+      tempo: string | null;
+    } | null;
+    tempo: string | null;
+    reps_target: string | null;
   })[];
 }
 
@@ -939,15 +949,41 @@ export async function startSession(
   // Auto-generate name if not provided
   const sessionName = name || `Workout ${new Date().toLocaleDateString()}`;
 
-  // 1. Create the session
+  // 1. Check if today's schedule entry is a deload week
+  let scheduleEntryId: string | null = null;
+  let volumeMultiplier: number | undefined;
+  let isDeloadSession = false;
+
+  if (planDayId) {
+    const today = new Date().toISOString().split('T')[0];
+    const { data: scheduleEntry } = await supabase
+      .from('user_workout_plan_schedule')
+      .select('id, is_deload_week, volume_multiplier')
+      .eq('plan_day_id', planDayId)
+      .eq('scheduled_date', today)
+      .eq('status', 'planned')
+      .maybeSingle();
+
+    if (scheduleEntry) {
+      scheduleEntryId = scheduleEntry.id;
+      isDeloadSession = scheduleEntry.is_deload_week === true;
+      if (isDeloadSession && scheduleEntry.volume_multiplier) {
+        volumeMultiplier = Number(scheduleEntry.volume_multiplier);
+      }
+    }
+  }
+
+  // 2. Create the session
   const { data: session, error: sessionError } = await supabase
     .from('workout_sessions')
     .insert({
       user_id: userId,
       plan_day_id: planDayId || null,
       template_day_id: templateDayId || null,
+      schedule_id: scheduleEntryId,
       name: sessionName,
       started_at: new Date().toISOString(),
+      ...(isDeloadSession ? { notes: '🔄 Deload week — volume reduced for recovery.' } : {}),
     })
     .select()
     .single();
@@ -955,14 +991,35 @@ export async function startSession(
   if (sessionError) throw sessionError;
   if (!session) throw new Error('Failed to create session');
 
-  // 2. Fetch exercises to copy
-  const exercisesToCopy = await loadSessionExerciseSnapshotRows({
+  // 3. Fetch exercises to copy
+  const rawRows = await loadSessionExerciseSnapshotRows({
     sessionId: session.id,
     planDayId,
     templateDayId,
   });
 
-  // 3. Insert session exercises
+  // 4. Re-snapshot with deload multiplier if applicable
+  //    loadSessionExerciseSnapshotRows returns pre-built snapshots; we need to
+  //    rebuild them with the multiplier applied using the raw plan exercises.
+  let exercisesToCopy = rawRows;
+  if (planDayId && isDeloadSession && volumeMultiplier && volumeMultiplier < 1) {
+    const { data: planExercises } = await supabase
+      .from('user_workout_plan_exercises')
+      .select('*')
+      .eq('plan_day_id', planDayId)
+      .order('order_index');
+
+    if (planExercises && planExercises.length > 0) {
+      exercisesToCopy = buildSessionExerciseSnapshots({
+        sessionId: session.id,
+        source: 'plan',
+        exercises: planExercises,
+        volumeMultiplier,
+      });
+    }
+  }
+
+  // 5. Insert session exercises
   if (exercisesToCopy.length > 0) {
     try {
       await insertSessionExercisesWithFallback(exercisesToCopy);
@@ -972,7 +1029,7 @@ export async function startSession(
     }
   }
 
-  // 4. Return complete session with exercises
+  // 6. Return complete session with exercises
   return getActiveSession(userId) as Promise<WorkoutSessionWithDetails>;
 }
 
@@ -988,8 +1045,16 @@ async function getActiveSessionInternal(userId: string, allowRepair: boolean): P
       .select(
         `
         *,
+        plan_day:user_workout_plan_days(
+          id,
+          name,
+          focus
+        ),
         exercises:session_exercises(
           *,
+          plan_exercise:user_workout_plan_exercises(
+            tempo
+          ),
           exercise:exercises(*),
           sets:workout_sets(*)
         )
@@ -1038,6 +1103,15 @@ async function getActiveSessionInternal(userId: string, allowRepair: boolean): P
         .sort((a: any, b: any) => a.order_index - b.order_index)
         .map((ex: any) => ({
           ...ex,
+          tempo: ex.plan_exercise?.tempo ?? null,
+          reps_target:
+            ex.reps_min != null && ex.reps_max != null
+              ? `${ex.reps_min}-${ex.reps_max}`
+              : ex.reps_min != null
+                ? String(ex.reps_min)
+                : ex.reps_max != null
+                  ? String(ex.reps_max)
+                  : null,
           sets: ex.sets.sort((a: any, b: any) => a.set_number - b.set_number),
         })),
     };
@@ -1061,8 +1135,16 @@ export async function getSessionDetails(sessionId: string): Promise<WorkoutSessi
     .select(
       `
       *,
+      plan_day:user_workout_plan_days(
+        id,
+        name,
+        focus
+      ),
       exercises:session_exercises(
         *,
+        plan_exercise:user_workout_plan_exercises(
+          tempo
+        ),
         exercise:exercises(*),
         sets:workout_sets(*)
       )
@@ -1081,6 +1163,15 @@ export async function getSessionDetails(sessionId: string): Promise<WorkoutSessi
       .sort((a: any, b: any) => a.order_index - b.order_index)
       .map((ex: any) => ({
         ...ex,
+        tempo: ex.plan_exercise?.tempo ?? null,
+        reps_target:
+          ex.reps_min != null && ex.reps_max != null
+            ? `${ex.reps_min}-${ex.reps_max}`
+            : ex.reps_min != null
+              ? String(ex.reps_min)
+              : ex.reps_max != null
+                ? String(ex.reps_max)
+                : null,
         sets: ex.sets.sort((a: any, b: any) => a.set_number - b.set_number),
       })),
   };

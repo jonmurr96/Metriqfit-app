@@ -1,0 +1,199 @@
+{
+  "AXFrame": "{{0, 0}, {402, 874}}",
+  "AXUniqueId": null,
+  "frame": {
+    "y": 0,
+    "x": 0,
+    "width": 402,
+    "height": 874
+  },
+  "role_description": "application",
+  "AXLabel": "Expo Go",
+  "content_required": false,
+  "type": "Application",
+  "title": null,
+  "help": null,
+  "custom_actions": [],
+  "AXValue": null,
+  "enabled": true,
+  "role": "AXApplication",
+  "children": [
+    {
+      "AXFrame": "{{16, 86}, {370, 57.333333333333343}}",
+      "AXUniqueId": null,
+      "frame": {
+        "y": 86,
+        "x": 16,
+        "width": 370,
+        "height": 57.33333333333334
+      },
+      "role_description": "text",
+      "AXLabel": "There was a problem running the requested app.",
+      "content_required": false,
+      "type": "StaticText",
+      "title": null,
+      "help": null,
+      "custom_actions": [],
+      "AXValue": null,
+      "enabled": true,
+      "role": "AXStaticText",
+      "children": [],
+      "subrole": null
+    },
+    {
+      "AXFrame": "{{16, 159.33333333333334}, {358.296875, 38.1875}}",
+      "AXUniqueId": null,
+      "frame": {
+        "y": 159.33333333333334,
+        "x": 16,
+        "width": 358.296875,
+        "height": 38.1875
+      },
+      "role_description": "text",
+      "AXLabel": null,
+      "content_required": false,
+      "type": "StaticText",
+      "title": null,
+      "help": null,
+      "custom_actions": [],
+      "AXValue": "Failed to parse manifest JSON: The data couldn\u2019t be read because it isn\u2019t in the correct format.",
+      "enabled": true,
+      "role": "AXStaticText",
+      "children": [],
+      "subrole": null
+    },
+    {
+      "AXFrame": "{{16, 213.66666666666666}, {370, 17}}",
+      "AXUniqueId": null,
+      "frame": {
+        "y": 213.66666666666666,
+        "x": 16,
+        "width": 370,
+        "height": 17
+      },
+      "role_description": "text",
+      "AXLabel": "exp://localhost:8081/(auth)/sign-in",
+      "content_required": false,
+      "type": "StaticText",
+      "title": null,
+      "help": null,
+      "custom_actions": [],
+      "AXValue": null,
+      "enabled": true,
+      "role": "AXStaticText",
+      "children": [],
+      "subrole": null
+    },
+    {
+      "AXFrame": "{{129.16666666666666, 373}, {20, 20}}",
+      "AXUniqueId": null,
+      "frame": {
+        "y": 373,
+        "x": 129.16666666666666,
+        "width": 20,
+        "height": 20
+      },
+      "role_description": "",
+      "AXLabel": "In progress",
+      "content_required": false,
+      "type": "GenericElement",
+      "title": null,
+      "help": null,
+      "custom_actions": [],
+      "AXValue": "1",
+      "enabled": true,
+      "role": "AXGenericElement",
+      "children": [],
+      "subrole": null
+    },
+    {
+      "AXFrame": "{{157.16666666666666, 374.5}, {115.66666666666666, 17}}",
+      "AXUniqueId": null,
+      "frame": {
+        "y": 374.5,
+        "x": 157.16666666666666,
+        "width": 115.66666666666666,
+        "height": 17
+      },
+      "role_description": "text",
+      "AXLabel": "Opening project...",
+      "content_required": false,
+      "type": "StaticText",
+      "title": null,
+      "help": null,
+      "custom_actions": [],
+      "AXValue": null,
+      "enabled": true,
+      "role": "AXStaticText",
+      "children": [],
+      "subrole": null
+    },
+    {
+      "AXFrame": "{{159, 421.5}, {84, 36}}",
+      "AXUniqueId": null,
+      "frame": {
+        "y": 421.5,
+        "x": 159,
+        "width": 84,
+        "height": 36
+      },
+      "role_description": "button",
+      "AXLabel": "Go back",
+      "content_required": false,
+      "type": "Button",
+      "title": null,
+      "help": null,
+      "custom_actions": [],
+      "AXValue": null,
+      "enabled": true,
+      "role": "AXButton",
+      "children": [],
+      "subrole": null
+    },
+    {
+      "AXFrame": "{{52.666666666666657, 481.5}, {296.66666666666674, 50.333333333333371}}",
+      "AXUniqueId": null,
+      "frame": {
+        "y": 481.5,
+        "x": 52.66666666666666,
+        "width": 296.66666666666674,
+        "height": 50.33333333333337
+      },
+      "role_description": "text",
+      "AXLabel": "This is taking much longer than it should. You might want to check your internet connectivity.",
+      "content_required": false,
+      "type": "StaticText",
+      "title": null,
+      "help": null,
+      "custom_actions": [],
+      "AXValue": null,
+      "enabled": true,
+      "role": "AXStaticText",
+      "children": [],
+      "subrole": null
+    },
+    {
+      "AXFrame": "{{16, 788}, {370, 36}}",
+      "AXUniqueId": null,
+      "frame": {
+        "y": 788,
+        "x": 16,
+        "width": 370,
+        "height": 36
+      },
+      "role_description": "button",
+      "AXLabel": "Go Home",
+      "content_required": false,
+      "type": "Button",
+      "title": null,
+      "help": null,
+      "custom_actions": [],
+      "AXValue": null,
+      "enabled": true,
+      "role": "AXButton",
+      "children": [],
+      "subrole": null
+    }
+  ],
+  "subrole": null
+}

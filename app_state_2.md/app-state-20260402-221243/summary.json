@@ -1,0 +1,25 @@
+{
+  "timestamp": "2026-04-02T22:12:43.071948",
+  "screenshot_mode": "file",
+  "output_dir": "/Users/owner/Projects/Metriqfit-elite-remote-20260307-073401/app_state_2.md/app-state-20260402-221243",
+  "screenshot": {
+    "mode": "file",
+    "file": "screenshot.png",
+    "size_bytes": 79154
+  },
+  "accessibility": {
+    "captured": true,
+    "element_count": 9
+  },
+  "logs": {
+    "captured": true,
+    "lines": 2,
+    "warnings": 0,
+    "errors": 0
+  },
+  "device": {
+    "name": "iPhone 16 Pro Clean",
+    "udid": "D215C773-3DF4-4577-B041-6C0C5B0113DE",
+    "state": "Booted"
+  }
+}

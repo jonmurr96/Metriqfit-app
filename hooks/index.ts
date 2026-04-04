@@ -309,3 +309,10 @@ export {
   useRemoveReviewWorkoutDay,
   useUpdateReviewNutritionPlan,
 } from './useOnboardingReview';
+
+// Intelligent meal plan hook
+export {
+  useIntelligentMealPlan,
+  type UseIntelligentMealPlanOptions,
+  type UseIntelligentMealPlanReturn,
+} from './useIntelligentMealPlan';

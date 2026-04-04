@@ -156,7 +156,7 @@ export function SupersetPairDisplay({
           <Text
             style={{
               color: c.primary,
-              fontFamily: ty.mono.familySemibold,
+              fontFamily: ty.mono.family,
               fontSize: ty.sizes.xs,
             }}
           >
@@ -210,7 +210,7 @@ export function SupersetPairDisplay({
               style={{
                 color: c.textMuted,
                 fontFamily: ty.mono.family,
-                fontSize: ty.sizes.xxs,
+                fontSize: 11,
               }}
             >
               {config.rest_between_exercises_sec}s rest
@@ -311,8 +311,8 @@ function ExerciseCard({
               <Text
                 style={{
                   color: isActive || isCompleted ? c.bg : c.textMuted,
-                  fontFamily: ty.mono.familySemibold,
-                  fontSize: ty.sizes.xxs,
+                  fontFamily: ty.mono.family,
+                  fontSize: 11,
                 }}
               >
                 {label}

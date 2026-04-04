@@ -77,6 +77,7 @@ export default function PlanGenerationScreen() {
       try {
         const startTime = Date.now();
         const result = await triggerPlanGeneration(user.id, 'both', {
+          generation_mode: 'initial',
           strict_days_match: true,
           strict_macro_mode: true,
           variety_profile: 'moderate_rotation_4_5',
@@ -123,7 +124,7 @@ export default function PlanGenerationScreen() {
                   goToPlanReview(latestRunId);
                   return;
                 }
-                router.replace('/(onboarding)/nutrition-prefs');
+                router.replace('/(onboarding)/nutrition');
               },
             },
           ],

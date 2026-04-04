@@ -20,11 +20,17 @@ const normalizeError = (message?: string): string => {
   if (lowered.includes('already registered')) {
     return 'An account with this email already exists. Please sign in instead.';
   }
+  if (lowered.includes('user already exists')) {
+    return 'An account with this email already exists. Please sign in instead.';
+  }
   if (lowered.includes('password')) {
     return 'Password does not meet requirements. Use at least 6 characters.';
   }
   if (lowered.includes('network')) {
     return 'Network issue detected. Check your connection and retry.';
+  }
+  if (lowered.includes('database error saving new user') || lowered.includes('temporarily unavailable')) {
+    return 'We hit an account setup issue. Please try again.';
   }
   return message;
 };
@@ -165,7 +171,7 @@ export default function SignUpScreen() {
         autoCapitalize="none"
         autoCorrect={false}
         keyboardType="email-address"
-        textContentType="emailAddress"
+        textContentType="oneTimeCode"
         autoComplete="email"
         returnKeyType="next"
         onSubmitEditing={() => passwordRef.current?.focus()}
@@ -183,7 +189,7 @@ export default function SignUpScreen() {
         hint={passwordHint}
         autoCapitalize="none"
         autoCorrect={false}
-        textContentType="password"
+        textContentType="oneTimeCode"
         autoComplete="off"
         returnKeyType="next"
         onSubmitEditing={() => confirmRef.current?.focus()}
@@ -201,7 +207,7 @@ export default function SignUpScreen() {
         error={confirmError}
         autoCapitalize="none"
         autoCorrect={false}
-        textContentType="password"
+        textContentType="oneTimeCode"
         autoComplete="off"
         returnKeyType="done"
         onSubmitEditing={handleSignUp}

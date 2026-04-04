@@ -177,7 +177,7 @@ export function DropSetPrompt({
                 <Text
                   style={{
                     color: idx === currentDropPhase ? c.bg : c.textMuted,
-                    fontFamily: ty.mono.familySemibold,
+                    fontFamily: ty.mono.family,
                     fontSize: ty.sizes.xs,
                   }}
                 >
@@ -286,7 +286,7 @@ export function DropSetPrompt({
           <Text
             style={{
               color: c.text,
-              fontFamily: ty.mono.familySemibold,
+              fontFamily: ty.mono.family,
               fontSize: ty.sizes.xs,
             }}
           >
@@ -353,7 +353,7 @@ export function DropSetPrompt({
         style={{
           color: c.textMuted,
           fontFamily: ty.body.family,
-          fontSize: ty.sizes.xxs,
+          fontSize: 11,
           textAlign: 'center',
           marginTop: s.sm,
         }}

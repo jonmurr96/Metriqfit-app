@@ -185,7 +185,7 @@ export function ExerciseProgressionChart({
                       style={{
                         color: isLatest ? c.bg : c.textMuted,
                         fontFamily: ty.mono.family,
-                        fontSize: ty.sizes.xxs,
+                        fontSize: 11,
                         textAlign: 'center',
                       }}
                     >
@@ -197,7 +197,7 @@ export function ExerciseProgressionChart({
                     style={{
                       color: c.textMuted,
                       fontFamily: ty.body.family,
-                      fontSize: ty.sizes.xxs,
+                      fontSize: 11,
                     }}
                   >
                     {metric.date.replace(' ', '\n')}
@@ -256,7 +256,7 @@ export function ExerciseProgressionChart({
                         style={{
                           color: isLatest ? c.bg : c.textMuted,
                           fontFamily: ty.mono.family,
-                          fontSize: ty.sizes.xxs,
+                          fontSize: 11,
                           textAlign: 'center',
                         }}
                       >
@@ -268,7 +268,7 @@ export function ExerciseProgressionChart({
                       style={{
                         color: c.textMuted,
                         fontFamily: ty.body.family,
-                        fontSize: ty.sizes.xxs,
+                        fontSize: 11,
                       }}
                     >
                       {metric.date.replace(' ', '\n')}
@@ -323,7 +323,7 @@ export function ExerciseProgressionChart({
                   : analysis.readinessScore >= 50
                   ? c.primary
                   : c.warning,
-              fontFamily: ty.mono.familySemibold,
+              fontFamily: ty.mono.family,
               fontSize: ty.sizes.sm,
             }}
           >
@@ -352,7 +352,7 @@ function StatPill({ label, value, trend }: StatPillProps) {
       <Text
         style={{
           color: c.text,
-          fontFamily: ty.mono.familySemibold,
+          fontFamily: ty.mono.family,
           fontSize: ty.sizes.md,
           marginBottom: 2,
         }}
@@ -363,7 +363,7 @@ function StatPill({ label, value, trend }: StatPillProps) {
         style={{
           color: c.textMuted,
           fontFamily: ty.body.family,
-          fontSize: ty.sizes.xxs,
+          fontSize: 11,
           textTransform: 'uppercase',
         }}
       >

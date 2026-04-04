@@ -1693,7 +1693,15 @@ export async function regeneratePlans(
 
   if (error) {
     console.error('Plan regeneration error:', error);
-    throw new Error('Failed to regenerate plans. Please try again.');
+    // Try to extract the actual error message from the Edge Function response
+    const errorMessage = error?.message || 'Failed to regenerate plans. Please try again.';
+    throw new Error(errorMessage);
+  }
+
+  // Handle structured error responses from Edge Function
+  if (data?.success === false) {
+    console.error('Edge Function returned error:', data.error, data.details);
+    throw new Error(data.error || 'Plan generation failed. Please try again.');
   }
 
   return {
@@ -1906,6 +1914,12 @@ export async function triggerPlanGeneration(
       throw new Error(error.message || 'Plan generation failed');
     }
 
+    // Handle structured error responses from Edge Function
+    if (data?.success === false) {
+      console.error('Edge Function returned error:', data.error, data.details);
+      throw new Error(data.error || 'Plan generation failed. Please try again.');
+    }
+
     return {
       runId: data?.runId || data?.run_id,
       workoutPlanId: data?.workoutPlanId || data?.workout_plan_id,
@@ -2091,6 +2105,12 @@ export async function generateNutritionPlanPreview(
   if (error) {
     console.error('Nutrition preview generation failed:', error);
     throw new Error(error.message || 'Failed to generate nutrition preview');
+  }
+
+  // Handle structured error responses from Edge Function
+  if (data?.success === false) {
+    console.error('Edge Function returned error:', data.error, data.details);
+    throw new Error(data.error || 'Failed to generate nutrition preview');
   }
 
   const runId = data?.runId || data?.run_id;
@@ -2329,6 +2349,12 @@ export async function generateWorkoutPlanPreview(
   if (error) {
     console.error('Workout preview generation failed:', error);
     throw new Error(error.message || 'Failed to generate workout preview');
+  }
+
+  // Handle structured error responses from Edge Function
+  if (data?.success === false) {
+    console.error('Edge Function returned error:', data.error, data.details);
+    throw new Error(data.error || 'Failed to generate workout preview');
   }
 
   const runId = data?.runId || data?.run_id;
