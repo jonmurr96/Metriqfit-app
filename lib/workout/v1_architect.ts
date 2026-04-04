@@ -110,16 +110,35 @@ export function hydrateTemplate(
 /**
  * Helper to find and rank an exercise within a group and tiers.
  */
+/**
+ * Maps unilateral groups to their base bilateral group for exercise lookup.
+ */
+const UnilateralGroupMapping: Record<string, { baseGroup: ReplacementGroup; requiresUnilateral: boolean }> = {
+  [ReplacementGroup.Unilateral_Hinge]: { baseGroup: ReplacementGroup.Primary_Bilateral_Hinge, requiresUnilateral: true },
+  [ReplacementGroup.Unilateral_Squat_Lunge]: { baseGroup: ReplacementGroup.Primary_Bilateral_Squat, requiresUnilateral: true },
+};
+
 function findExerciseInGroup(
   group: ReplacementGroup,
   tiers: ExerciseTier[],
   user: { goal: GoalBucket; environment: SessionEnvironment; comfort: LiftComfort; injuries: string[] },
   fallback_path: string = 'primary_match'
 ): WorkoutExercise | null {
+  // Check if this is a unilateral group that needs special handling
+  const unilateralMapping = UnilateralGroupMapping[group];
+  const targetGroup = unilateralMapping?.baseGroup ?? group;
+  const requireUnilateral = unilateralMapping?.requiresUnilateral ?? false;
+
   // Hard Filters
   const candidates = coreExercises.filter((ex) => {
     // Group & Tier Match
-    if (ex.architectural_group !== group) return false;
+    // For unilateral groups, match the base group (e.g., Primary_Bilateral_Hinge) 
+    // and check is_unilateral flag separately
+    if (ex.architectural_group !== targetGroup) return false;
+    
+    // For unilateral groups, require is_unilateral = true
+    if (requireUnilateral && !ex.is_unilateral) return false;
+    
     if (!tiers.includes(ex.tier)) return false;
 
     // Environment Filter (Hard Whitelist)
