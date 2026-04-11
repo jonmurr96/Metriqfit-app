@@ -1,4 +1,4 @@
-import { GoalBucket, LiftComfort, ExperienceLevel, SessionEnvironment, TrainingStyle } from '../../types/v1_engine.ts';
+import { GoalBucket, LiftComfort, ExperienceLevel, SessionEnvironment } from '../../types/v1_engine.ts';
 
 export type OnboardingProfileInput = {
   userId?: string;
@@ -13,6 +13,19 @@ export type LibrarianRecommendation = {
   familyIdRef: string; // The external lookup string for PlanFamilies (e.g. 'fam_beginner_fullbody_v1')
   confidence: 'HIGH' | 'MODERATE' | 'FALLBACK';
   notes: string;
+};
+
+const CONSTRAINED_FAMILY_SUPPORTED_DAYS: Record<string, number[]> = {
+  fam_at_home_bw: [3],
+  fam_min_equip_db: [3],
+  fam_beginner_machine_fb: [3],
+  fam_beginner_fb: [3],
+  fam_minimalist_2_day: [2],
+};
+
+const supportsRequestedDays = (familyIdRef: string, daysPerWeek: number): boolean => {
+  const supportedDays = CONSTRAINED_FAMILY_SUPPORTED_DAYS[familyIdRef];
+  return supportedDays ? supportedDays.includes(daysPerWeek) : true;
 };
 
 /**
@@ -30,7 +43,7 @@ export const routeUserToPlan = (profile: OnboardingProfileInput): LibrarianRecom
 
   // 1. Environment Hard Overrides
   // Bodyweight is the absolute constraint
-  if (environment === SessionEnvironment.Bodyweight) {
+  if (environment === SessionEnvironment.Bodyweight && supportsRequestedDays('fam_at_home_bw', daysPerWeek)) {
     return {
       familyIdRef: 'fam_at_home_bw',
       confidence: 'HIGH',
@@ -38,9 +51,19 @@ export const routeUserToPlan = (profile: OnboardingProfileInput): LibrarianRecom
     };
   }
 
-  // Home or Apt/Hotel with limited equipment forces Minimal Equipment DB path
+  // Home or Apt/Hotel with limited equipment
   if (environment === SessionEnvironment.Home || environment === SessionEnvironment.AptHotel) {
-    if (liftComfort === LiftComfort.NoBarbell || liftComfort === LiftComfort.MachineDB) {
+    if (daysPerWeek === 2 && supportsRequestedDays('fam_minimalist_2_day', daysPerWeek)) {
+      return {
+        familyIdRef: 'fam_minimalist_2_day',
+        confidence: 'HIGH',
+        notes: 'Constrained environment at 2 days/week routes to Minimalist Full Body.',
+      };
+    }
+    if (
+      (liftComfort === LiftComfort.NoBarbell || liftComfort === LiftComfort.MachineDB)
+      && supportsRequestedDays('fam_min_equip_db', daysPerWeek)
+    ) {
       return {
         familyIdRef: 'fam_min_equip_db',
         confidence: 'HIGH',
@@ -49,10 +72,24 @@ export const routeUserToPlan = (profile: OnboardingProfileInput): LibrarianRecom
     }
   }
 
-  // 2. Lift Comfort Hard Overrides (Commercial Gym but user avoids Barbells)
+  // 2. Lift Comfort Hard Overrides
+  if (liftComfort === LiftComfort.NoBarbell || liftComfort === LiftComfort.MachineDB) {
+    if (daysPerWeek === 2 && supportsRequestedDays('fam_minimalist_2_day', daysPerWeek)) {
+      return {
+        familyIdRef: 'fam_minimalist_2_day',
+        confidence: 'HIGH',
+        notes: 'Machine/DB or No Barbell preference at 2 days/week routes to Minimalist Full Body.',
+      };
+    }
+  }
+
+  // (Commercial Gym but user avoids Barbells)
   if (liftComfort === LiftComfort.NoBarbell) {
     // If beginner, they get the Machine/DB Full Body
-    if (experienceLevel === ExperienceLevel.Beginner) {
+    if (
+      experienceLevel === ExperienceLevel.Beginner
+      && supportsRequestedDays('fam_beginner_machine_fb', daysPerWeek)
+    ) {
       return {
         familyIdRef: 'fam_beginner_machine_fb',
         confidence: 'HIGH',
@@ -60,45 +97,66 @@ export const routeUserToPlan = (profile: OnboardingProfileInput): LibrarianRecom
       };
     }
     // Otherwise, they get the high-volume DB path
-    return {
-      familyIdRef: 'fam_min_equip_db',
-      confidence: 'HIGH',
-      notes: 'User avoids barbells in commercial gym -> DB fallback.',
-    };
+    if (supportsRequestedDays('fam_min_equip_db', daysPerWeek)) {
+      return {
+        familyIdRef: 'fam_min_equip_db',
+        confidence: 'HIGH',
+        notes: 'User avoids barbells in commercial gym -> DB fallback.',
+      };
+    }
   }
 
   // 3. Safety/Experience Constraints
   if (experienceLevel === ExperienceLevel.Beginner) {
-    if (liftComfort === LiftComfort.MachineDB) {
+    if (
+      liftComfort === LiftComfort.MachineDB
+      && supportsRequestedDays('fam_beginner_machine_fb', daysPerWeek)
+    ) {
       return {
         familyIdRef: 'fam_beginner_machine_fb',
         confidence: 'HIGH',
         notes: 'Beginner with Machine preference.',
       };
     }
-    return {
-      familyIdRef: 'fam_beginner_fb',
-      confidence: 'HIGH',
-      notes: 'Standard beginner barbell protocol.',
-    };
+    if (supportsRequestedDays('fam_beginner_fb', daysPerWeek)) {
+      return {
+        familyIdRef: 'fam_beginner_fb',
+        confidence: 'HIGH',
+        notes: 'Standard beginner barbell protocol.',
+      };
+    }
   }
 
   // 4. Goal-Based Routing (Assuming Commercial Gym + Barbell Comfort)
 
   // Hypertrophy Tracks
   if (primaryGoal === GoalBucket.Hypertrophy) {
+    if (daysPerWeek === 2) {
+      return {
+        familyIdRef: 'fam_hyp_2_day',
+        confidence: 'HIGH',
+        notes: 'Hypertrophy 2-day maps to specialized full body split.',
+      };
+    }
     if (daysPerWeek <= 3) {
       return {
         familyIdRef: 'fam_hyp_fb',
         confidence: 'HIGH',
-        notes: 'Hypertrophy 3-day max forces Full Body structure.',
+        notes: 'Hypertrophy 3-day maps to Full Body.',
       };
     }
-    if (daysPerWeek >= 5) {
+    if (daysPerWeek === 5) {
+      return {
+        familyIdRef: 'fam_hyp_5_day',
+        confidence: 'HIGH',
+        notes: 'Hypertrophy 5-day routes to the optimized PPL-UL split.',
+      };
+    }
+    if (daysPerWeek >= 6) {
       return {
         familyIdRef: 'fam_hyp_ppl',
         confidence: 'HIGH',
-        notes: 'Hypertrophy 5+ days routes to Push-Pull-Legs.',
+        notes: 'Hypertrophy 6+ days routes to traditional Push-Pull-Legs.',
       };
     }
     return {
@@ -110,6 +168,13 @@ export const routeUserToPlan = (profile: OnboardingProfileInput): LibrarianRecom
 
   // Strength Tracks
   if (primaryGoal === GoalBucket.Strength) {
+    if (daysPerWeek === 2) {
+      return {
+        familyIdRef: 'fam_str_2_day',
+        confidence: 'HIGH',
+        notes: 'Strength 2-day maps to low-frequency powerlift compound focus.',
+      };
+    }
     if (daysPerWeek >= 4) {
       return {
         familyIdRef: 'fam_str_ul',
@@ -135,11 +200,32 @@ export const routeUserToPlan = (profile: OnboardingProfileInput): LibrarianRecom
 
   // General Fitness / Recomp / Athletic
   if (primaryGoal === GoalBucket.GenFitness || primaryGoal === GoalBucket.Recomp || primaryGoal === GoalBucket.Athletic) {
+    if (daysPerWeek === 2) {
+      return {
+        familyIdRef: 'fam_gen_2_day',
+        confidence: 'HIGH',
+        notes: 'General Fitness 2-day maps to maintenance/longevity full body.',
+      };
+    }
+    if (daysPerWeek === 5) {
+      return {
+        familyIdRef: 'fam_hyp_5_day',
+        confidence: 'MODERATE',
+        notes: '5-Day GenFit/Recomp routes to optimized Hypertrophy PPL-UL.',
+      };
+    }
+    if (daysPerWeek >= 6) {
+      return {
+        familyIdRef: 'fam_hyp_ppl',
+        confidence: 'MODERATE',
+        notes: '6+ Day GenFit/Recomp routes to Hypertrophy PPL.',
+      };
+    }
     if (daysPerWeek >= 4) {
       return {
         familyIdRef: 'fam_hyp_ul',
         confidence: 'MODERATE',
-        notes: '4+ Days General Fitness routes to Upper/Lower structure (fam_hyp_ul). No dedicated GenFit UL family is seeded.',
+        notes: '4-Day GenFit/Recomp routes to Hypertrophy Upper/Lower.',
       };
     }
   }
