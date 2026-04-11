@@ -21,6 +21,9 @@ const CONSTRAINED_FAMILY_SUPPORTED_DAYS: Record<string, number[]> = {
   fam_beginner_machine_fb: [3],
   fam_beginner_fb: [3],
   fam_minimalist_2_day: [2],
+  fam_minimalist_2_day_strength: [2],
+  fam_minimalist_2_day_aesthetics: [2],
+  fam_minimalist_2_day_athletic: [2],
 };
 
 const supportsRequestedDays = (familyIdRef: string, daysPerWeek: number): boolean => {
@@ -30,13 +33,28 @@ const supportsRequestedDays = (familyIdRef: string, daysPerWeek: number): boolea
 
 /**
  * The Librarian: Responsible for deterministic assignment of a user configuration to a V1 Plan Family.
- * 
+ *
  * PRIORITY ORDER:
  * 1. Environment Hard Constraints (Bodyweight, Apt/Hotel, Home)
- * 2. Lift Comfort Hard Constraints (No Barbell, Machine/DB)
- * 3. Safety/Experience (Beginner lockouts)
- * 4. Goal Bucket (Hypertrophy, Strength, Fat Loss, GenFit)
- * 5. Refinement (Days per week)
+ * 2. Specialized 2-Day Routing — all daysPerWeek === 2 exits cleanly here
+ * 3. Lift Comfort Hard Constraints (No Barbell, Machine/DB) — 3+ day paths
+ * 4. Safety/Experience (Beginner lockouts) — 3+ day paths
+ * 5. Goal Bucket — 3+ day paths
+ *
+ * ─── 2-DAY FAMILY PRECEDENCE ──────────────────────────────────────────────
+ * fam_minimalist_2_day_strength  → GoalBucket.Strength + Barbell comfort
+ *                                  (replaces fam_str_2_day for minimalist users)
+ * fam_minimalist_2_day_aesthetics→ GoalBucket.Hypertrophy
+ *                                  (replaces fam_hyp_2_day for minimalist users)
+ * fam_minimalist_2_day_athletic  → GoalBucket.Athletic
+ *                                  (dedicated path; does NOT collapse into strength)
+ * fam_minimalist_2_day           → GenFitness, FatLoss, Recomp, or Strength
+ *                                  without barbell comfort (generic fallback)
+ *
+ * Legacy generic 2-day families (fam_hyp_2_day, fam_str_2_day, fam_gen_2_day)
+ * are intentionally NOT reachable from this router for 2-day profiles.
+ * They remain in the family catalog for admin assignment and future expansion.
+ * ──────────────────────────────────────────────────────────────────────────
  */
 export const routeUserToPlan = (profile: OnboardingProfileInput): LibrarianRecommendation => {
   const { experienceLevel, primaryGoal, daysPerWeek, liftComfort, environment } = profile;
@@ -51,15 +69,51 @@ export const routeUserToPlan = (profile: OnboardingProfileInput): LibrarianRecom
     };
   }
 
-  // Home or Apt/Hotel with limited equipment
-  if (environment === SessionEnvironment.Home || environment === SessionEnvironment.AptHotel) {
-    if (daysPerWeek === 2 && supportsRequestedDays('fam_minimalist_2_day', daysPerWeek)) {
+  // 2. Specialized 2-Day Routing
+  // If the user only has 2 days, we route them entirely through the highly-optimized minimalist tracks.
+  if (daysPerWeek === 2) {
+    if (primaryGoal === GoalBucket.Strength) {
+      // Strength requires Barbells. If they don't want barbells, fall back to generic.
+      if (liftComfort === LiftComfort.BarbellAdv || liftComfort === LiftComfort.BarbellBasic) {
+        return {
+          familyIdRef: 'fam_minimalist_2_day_strength',
+          confidence: 'HIGH',
+          notes: 'Strength goal at 2 days/week maps to Minimalist Strength Full Body.',
+        };
+      }
       return {
         familyIdRef: 'fam_minimalist_2_day',
-        confidence: 'HIGH',
-        notes: 'Constrained environment at 2 days/week routes to Minimalist Full Body.',
+        confidence: 'MODERATE',
+        notes: 'Strength goal at 2 days/week but lacking barbell comfort routes to generic Minimalist.',
       };
     }
+
+    if (primaryGoal === GoalBucket.Hypertrophy) {
+      return {
+        familyIdRef: 'fam_minimalist_2_day_aesthetics',
+        confidence: 'HIGH',
+        notes: 'Hypertrophy goal at 2 days/week maps to Minimalist Aesthetics Full Body.',
+      };
+    }
+
+    if (primaryGoal === GoalBucket.Athletic) {
+      return {
+        familyIdRef: 'fam_minimalist_2_day_athletic',
+        confidence: 'HIGH',
+        notes: 'Athletic goal at 2 days/week maps to Minimalist Performance.',
+      };
+    }
+
+    // Default Fallback for GenFitness, FatLoss, Recomp, Bodyweight constraints, etc.
+    return {
+      familyIdRef: 'fam_minimalist_2_day',
+      confidence: 'HIGH',
+      notes: 'General or non-specific 2-day requests route to standard Minimalist.',
+    };
+  }
+
+  // 3. Environment/Comfort Fallbacks for 3+ Days
+  if (environment === SessionEnvironment.Home || environment === SessionEnvironment.AptHotel) {
     if (
       (liftComfort === LiftComfort.NoBarbell || liftComfort === LiftComfort.MachineDB)
       && supportsRequestedDays('fam_min_equip_db', daysPerWeek)
@@ -68,17 +122,6 @@ export const routeUserToPlan = (profile: OnboardingProfileInput): LibrarianRecom
         familyIdRef: 'fam_min_equip_db',
         confidence: 'HIGH',
         notes: 'Limited environment with No Barbell/Machine preference forces DB routing.',
-      };
-    }
-  }
-
-  // 2. Lift Comfort Hard Overrides
-  if (liftComfort === LiftComfort.NoBarbell || liftComfort === LiftComfort.MachineDB) {
-    if (daysPerWeek === 2 && supportsRequestedDays('fam_minimalist_2_day', daysPerWeek)) {
-      return {
-        familyIdRef: 'fam_minimalist_2_day',
-        confidence: 'HIGH',
-        notes: 'Machine/DB or No Barbell preference at 2 days/week routes to Minimalist Full Body.',
       };
     }
   }
@@ -106,7 +149,7 @@ export const routeUserToPlan = (profile: OnboardingProfileInput): LibrarianRecom
     }
   }
 
-  // 3. Safety/Experience Constraints
+  // 4. Safety/Experience Constraints (For 3+ days)
   if (experienceLevel === ExperienceLevel.Beginner) {
     if (
       liftComfort === LiftComfort.MachineDB
@@ -127,17 +170,10 @@ export const routeUserToPlan = (profile: OnboardingProfileInput): LibrarianRecom
     }
   }
 
-  // 4. Goal-Based Routing (Assuming Commercial Gym + Barbell Comfort)
+  // 5. Goal-Based Routing (Assuming Commercial Gym + Barbell Comfort, 3+ Days)
 
   // Hypertrophy Tracks
   if (primaryGoal === GoalBucket.Hypertrophy) {
-    if (daysPerWeek === 2) {
-      return {
-        familyIdRef: 'fam_hyp_2_day',
-        confidence: 'HIGH',
-        notes: 'Hypertrophy 2-day maps to specialized full body split.',
-      };
-    }
     if (daysPerWeek <= 3) {
       return {
         familyIdRef: 'fam_hyp_fb',
@@ -168,13 +204,6 @@ export const routeUserToPlan = (profile: OnboardingProfileInput): LibrarianRecom
 
   // Strength Tracks
   if (primaryGoal === GoalBucket.Strength) {
-    if (daysPerWeek === 2) {
-      return {
-        familyIdRef: 'fam_str_2_day',
-        confidence: 'HIGH',
-        notes: 'Strength 2-day maps to low-frequency powerlift compound focus.',
-      };
-    }
     if (daysPerWeek >= 4) {
       return {
         familyIdRef: 'fam_str_ul',
@@ -200,13 +229,6 @@ export const routeUserToPlan = (profile: OnboardingProfileInput): LibrarianRecom
 
   // General Fitness / Recomp / Athletic
   if (primaryGoal === GoalBucket.GenFitness || primaryGoal === GoalBucket.Recomp || primaryGoal === GoalBucket.Athletic) {
-    if (daysPerWeek === 2) {
-      return {
-        familyIdRef: 'fam_gen_2_day',
-        confidence: 'HIGH',
-        notes: 'General Fitness 2-day maps to maintenance/longevity full body.',
-      };
-    }
     if (daysPerWeek === 5) {
       return {
         familyIdRef: 'fam_hyp_5_day',
@@ -230,7 +252,7 @@ export const routeUserToPlan = (profile: OnboardingProfileInput): LibrarianRecom
     }
   }
 
-  // 5. Universal Fallback
+  // 6. Universal Fallback
   return {
     familyIdRef: 'fam_beginner_fb',
     confidence: 'FALLBACK',

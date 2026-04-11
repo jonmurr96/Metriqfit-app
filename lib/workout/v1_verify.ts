@@ -1,6 +1,6 @@
 import { routeUserToPlan } from './v1_librarian_router';
 import { GoalBucket, LiftComfort, ExperienceLevel, SessionEnvironment, TrainingStyle } from '../../types/v1_engine';
-import { coreFamilies } from '../../loaders/seeds/templates';
+import { planFamilies } from '../../loaders/seeds/families';
 import * as fs from 'fs';
 
 // 1. Run profile simulation
@@ -16,7 +16,7 @@ const recommendation = routeUserToPlan(profile);
 console.log(`Librarian Recommended Family: ${recommendation.familyIdRef}`);
 
 // 2. Find Family and hydrate
-const family = coreFamilies.find(f => f.external_id === recommendation.familyIdRef);
+const family = planFamilies.find((f: { external_id: string }) => f.external_id === recommendation.familyIdRef);
 if (!family) {
   console.error("Family not found! Check your routing IDs.");
   process.exit(1);
