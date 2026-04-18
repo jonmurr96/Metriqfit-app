@@ -28,7 +28,9 @@ export type FeatureGateKey =
   | 'grocery_planner'
   | 'pantry'
   | 'prep_auto_adjust'
-  | 'unlimited_history';
+  | 'unlimited_history'
+  | 'macro_budgeter'
+  | 'supplement_guide';
 
 export type LimitedFeatureKey =
   | 'ai_messages'
@@ -73,6 +75,8 @@ const FEATURE_ACCESS_MATRIX: Record<FeatureGateKey, SubscriptionTier> = {
   pantry: 'elite',
   prep_auto_adjust: 'elite',
   unlimited_history: 'premium',
+  macro_budgeter: 'free',
+  supplement_guide: 'free',
 };
 
 const FEATURE_LIMITS: Record<LimitedFeatureKey, TierLimitConfig> = {

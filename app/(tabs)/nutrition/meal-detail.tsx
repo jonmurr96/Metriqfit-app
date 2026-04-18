@@ -17,13 +17,28 @@ import { useTokens } from '../../../lib/theme';
 import { TabBarIcon } from '../../../components/navigation/TabBarIcon';
 import { GlassCard } from '../../../components/premium/GlassCard';
 import { MacroRow } from '../../../components/nutrition/MacroRow';
+import { useProfile } from '../../../hooks/useUser';
+import { formatFoodQuantity, formatMacroDisplay, detectFoodCategory, getDefaultFoodMeasurement } from '../../../lib/nutrition/displayUnits';
 
-function PortionBadge({ grams, fallbackLabel }: { grams?: number | null; fallbackLabel?: string }) {
+function PortionBadge({
+  grams,
+  fallbackLabel,
+  itemName,
+}: {
+  grams?: number | null;
+  fallbackLabel?: string;
+  itemName?: string;
+}) {
   const { c, ty, r } = useTokens();
+  const { data: profile } = useProfile();
+  const foodMeasurement = getDefaultFoodMeasurement(profile?.unit_system);
+  const displayFoodMeasurement = (profile?.display_preferences?.food_measurement as any) ?? foodMeasurement;
+
   if (!grams && !fallbackLabel) return null;
 
   if (grams && grams > 0) {
-    const oz = (grams / 28.3495).toFixed(1);
+    const category = detectFoodCategory(itemName || '');
+    const fmt = formatFoodQuantity(grams, category, displayFoodMeasurement);
     return (
       <View
         style={{
@@ -40,13 +55,8 @@ function PortionBadge({ grams, fallbackLabel }: { grams?: number | null; fallbac
         }}
       >
         <Text style={{ color: c.text, fontFamily: ty.body.familySemibold, fontSize: ty.sizes.sm }}>
-          {Math.round(grams)}
-          <Text style={{ color: c.textMuted, fontFamily: ty.body.family, fontSize: ty.sizes.xs }}>g</Text>
-        </Text>
-        <Text style={{ color: `${c.textMuted}50`, marginHorizontal: 6, fontSize: ty.sizes.xs }}>|</Text>
-        <Text style={{ color: c.textMuted, fontFamily: ty.body.family, fontSize: ty.sizes.sm }}>
-          {oz}
-          <Text style={{ fontSize: ty.sizes.xs }}>oz</Text>
+          {fmt.value}
+          <Text style={{ color: c.textMuted, fontFamily: ty.body.family, fontSize: ty.sizes.xs }}>{fmt.unit}</Text>
         </Text>
       </View>
     );
@@ -78,6 +88,9 @@ export default function MealDetailScreen() {
   const { c, s, ty, r } = useTokens();
   const router = useRouter();
   const insets = useSafeAreaInsets();
+  const { data: profile } = useProfile();
+  const foodMeasurement = getDefaultFoodMeasurement(profile?.unit_system);
+  const displayFoodMeasurement = (profile?.display_preferences?.food_measurement as any) ?? foodMeasurement;
   const params = useLocalSearchParams<{
     mealId?: string | string[];
     planMealId?: string | string[];
@@ -308,9 +321,9 @@ export default function MealDetailScreen() {
                 emphasis="soft"
                 items={[
                   { macro: 'calories', value: targetCalories, unit: 'kcal' },
-                  { macro: 'protein', value: Math.round(targetProtein), unit: 'g' },
-                  { macro: 'carbs', value: Math.round(targetCarbs), unit: 'g' },
-                  { macro: 'fat', value: Math.round(targetFat), unit: 'g' },
+                  { macro: 'protein', value: parseFloat(formatMacroDisplay(targetProtein, 'protein', displayFoodMeasurement).value), unit: formatMacroDisplay(targetProtein, 'protein', displayFoodMeasurement).unit },
+                  { macro: 'carbs', value: parseFloat(formatMacroDisplay(targetCarbs, 'carbs', displayFoodMeasurement).value), unit: formatMacroDisplay(targetCarbs, 'carbs', displayFoodMeasurement).unit },
+                  { macro: 'fat', value: parseFloat(formatMacroDisplay(targetFat, 'fat', displayFoodMeasurement).value), unit: formatMacroDisplay(targetFat, 'fat', displayFoodMeasurement).unit },
                 ]}
               />
 
@@ -345,7 +358,7 @@ export default function MealDetailScreen() {
                             >
                               {item.name}
                             </Text>
-                            <PortionBadge grams={item.grams} fallbackLabel={item.quantityLabel} />
+                            <PortionBadge grams={item.grams} fallbackLabel={item.quantityLabel} itemName={item.name} />
                           </View>
 
                           <Pressable
@@ -382,9 +395,9 @@ export default function MealDetailScreen() {
                           emphasis="outlined"
                           items={[
                             { macro: 'calories', value: item.calories, unit: 'kcal' },
-                            { macro: 'protein', value: item.protein, unit: 'g' },
-                            { macro: 'carbs', value: item.carbs, unit: 'g' },
-                            { macro: 'fat', value: item.fat, unit: 'g' },
+                            { macro: 'protein', value: parseFloat(formatMacroDisplay(item.protein, 'protein', displayFoodMeasurement).value), unit: formatMacroDisplay(item.protein, 'protein', displayFoodMeasurement).unit },
+                            { macro: 'carbs', value: parseFloat(formatMacroDisplay(item.carbs, 'carbs', displayFoodMeasurement).value), unit: formatMacroDisplay(item.carbs, 'carbs', displayFoodMeasurement).unit },
+                            { macro: 'fat', value: parseFloat(formatMacroDisplay(item.fat, 'fat', displayFoodMeasurement).value), unit: formatMacroDisplay(item.fat, 'fat', displayFoodMeasurement).unit },
                           ]}
                         />
                       </View>
@@ -480,9 +493,9 @@ export default function MealDetailScreen() {
                             emphasis="outlined"
                             items={[
                               { macro: 'calories', value: item.calories, unit: 'kcal' },
-                              { macro: 'protein', value: item.protein, unit: 'g' },
-                              { macro: 'carbs', value: item.carbs, unit: 'g' },
-                              { macro: 'fat', value: item.fat, unit: 'g' },
+                              { macro: 'protein', value: parseFloat(formatMacroDisplay(item.protein, 'protein', displayFoodMeasurement).value), unit: formatMacroDisplay(item.protein, 'protein', displayFoodMeasurement).unit },
+                              { macro: 'carbs', value: parseFloat(formatMacroDisplay(item.carbs, 'carbs', displayFoodMeasurement).value), unit: formatMacroDisplay(item.carbs, 'carbs', displayFoodMeasurement).unit },
+                              { macro: 'fat', value: parseFloat(formatMacroDisplay(item.fat, 'fat', displayFoodMeasurement).value), unit: formatMacroDisplay(item.fat, 'fat', displayFoodMeasurement).unit },
                             ]}
                           />
                         </View>

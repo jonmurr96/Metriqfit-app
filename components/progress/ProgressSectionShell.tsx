@@ -43,7 +43,7 @@ export function ProgressSectionShell({
               if (router.canGoBack()) {
                 router.back();
               } else {
-                router.push("/(tabs)/progress" as any);
+                router.navigate("/(tabs)/progress");
               }
             }}
             style={[styles.backButton, { backgroundColor: c.surface }]}

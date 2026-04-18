@@ -1649,10 +1649,19 @@ export async function getExerciseHistory(
 /**
  * Swap an exercise in an active session
  */
-export async function swapExercise(sessionExerciseId: string, newExerciseId: string): Promise<void> {
+export async function swapExercise(
+  sessionExerciseId: string, 
+  newExerciseId: string,
+  reason?: string,
+  continuity?: string
+): Promise<void> {
   const { error } = await supabase
     .from('session_exercises')
-    .update({ exercise_id: newExerciseId })
+    .update({ 
+        exercise_id: newExerciseId,
+        swap_reason: reason,
+        continuity_method: continuity
+    })
     .eq('id', sessionExerciseId);
 
   if (error) throw error;

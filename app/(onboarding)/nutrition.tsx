@@ -27,8 +27,6 @@ import {
   FirstMealDelay,
   LastMealBeforeBed,
   TrainingTime,
-  CarbTolerance,
-  CookingLevel,
   normalizeOnboardingAnswers,
 } from '../../lib/onboarding';
 import { PremiumHeader, PremiumFooter } from '../../components/onboarding/premium';
@@ -84,10 +82,6 @@ const AVOID_FOODS: { value: RefusedFood | 'none'; label: string }[] = [
   { value: 'pasta',       label: 'Pasta' },
   { value: 'potatoes',    label: 'Potatoes' },
   { value: 'oats',        label: 'Oats' },
-  { value: 'cheese',      label: 'Cheese' },
-  { value: 'milk',        label: 'Milk' },
-  { value: 'yogurt',      label: 'Yogurt' },
-  { value: 'whey',        label: 'Whey' },
   { value: 'nuts',        label: 'Nuts' },
 ];
 
@@ -164,19 +158,7 @@ const TRAINING_TIMES: { value: TrainingTime; label: string }[] = [
   { value: 'no_training', label: 'No Training' },
 ];
 
-const CARB_RESPONSES: { value: CarbTolerance; label: string; description: string }[] = [
-  { value: 'energized_satiated', label: 'Energized & Full', description: 'Feel good for hours' },
-  { value: 'hungry_quickly', label: 'Hungry Again Soon', description: 'Want more food within 2 hours' },
-  { value: 'tired_sleepy', label: 'Tired/Sleepy', description: 'Feel like napping after' },
-  { value: 'bloated', label: 'Bloated', description: 'Uncomfortable digestion' },
-];
 
-const COOKING_LEVELS: { value: CookingLevel; label: string; description: string }[] = [
-  { value: 'minimal', label: 'Minimal', description: 'Heat & eat, simple prep' },
-  { value: 'basic', label: 'Basic', description: '15-20 min cooking' },
-  { value: 'moderate', label: 'Moderate', description: '30-45 min cooking' },
-  { value: 'full', label: 'Full', description: 'Batch cooking, meal prep' },
-];
 
 export default function NutritionScreen() {
   const { data, updateData, setCurrentStep } = useOnboarding();
@@ -189,15 +171,11 @@ export default function NutritionScreen() {
     dietary_preference: !!data.dietary_preference,
     allergies_exclusions: data.allergies_exclusions.length > 0,
     preferred_proteins: data.preferred_proteins.length > 0,
-    preferred_carbs: data.preferred_carbs.length > 0,
-    preferred_fats: data.preferred_fats.length > 0,
     wake_time: !!data.wake_time,
     first_meal_delay: !!data.first_meal_delay,
     last_meal_before_bed: !!data.last_meal_before_bed,
     training_time: !!data.training_time,
-    carb_tolerance: !!data.carb_tolerance,
     meals_per_day: !!data.meals_per_day,
-    cooking_level: !!data.cooking_level,
     dietary_other_text: (data.dietary_preference !== 'other' || !!data.dietary_preference_other_text),
     allergies_other_text: (!data.allergies_exclusions.includes('other') || !!data.allergies_other_text),
   };
@@ -215,15 +193,11 @@ export default function NutritionScreen() {
         dietary: data.dietary_preference,
         allergies: data.allergies_exclusions,
         proteins: data.preferred_proteins,
-        carbs: data.preferred_carbs,
-        fats: data.preferred_fats,
         wake: data.wake_time,
         firstMeal: data.first_meal_delay,
         lastMeal: data.last_meal_before_bed,
         training: data.training_time,
-        carbTol: data.carb_tolerance,
         meals: data.meals_per_day,
-        cooking: data.cooking_level,
       });
     }
   }, [isValid, data]);
@@ -302,6 +276,13 @@ export default function NutritionScreen() {
 
       const normalizedAnswers = normalizeOnboardingAnswers(data);
 
+      // Validate required earlier-step data is present
+      if (!normalizedAnswers.goal_type || !normalizedAnswers.sex || !normalizedAnswers.dob || !normalizedAnswers.experience_level) {
+        setError('Missing required profile information. Please complete the earlier onboarding steps.');
+        setIsLoading(false);
+        return;
+      }
+
       // Save onboarding answers
       const { error: answersError } = await supabase
         .from('onboarding_answers')
@@ -347,11 +328,10 @@ export default function NutritionScreen() {
         }, { onConflict: 'user_id' });
       if (targetsError) throw targetsError;
 
-      // Update profile
+      // Upsert profile — guarantees the row exists even if the auth trigger failed on signup
       const { error: profileError } = await supabase
         .from('profiles')
-        .update({ first_name: data.first_name, last_name: data.last_name })
-        .eq('id', uid);
+        .upsert({ id: uid, first_name: data.first_name, last_name: data.last_name }, { onConflict: 'id' });
       if (profileError) throw profileError;
 
       router.replace('/(onboarding)/plan-generation');
@@ -455,7 +435,7 @@ export default function NutritionScreen() {
                       style={[styles.chip, sel && (a.value === 'none' ? styles.chipSelectedGreen : styles.chipSelectedRed)]}
                       onPress={() => handleAllergySelect(a.value)}
                     >
-                      <Text style={[styles.chipText, sel && styles.chipTextSelected]}>{a.label}</Text>
+                      <Text style={[styles.chipText, sel && { color: a.value === 'none' ? '#22C55E' : '#EF4444' }]}>{a.label}</Text>
                     </Pressable>
                   );
                 })}
@@ -485,7 +465,7 @@ export default function NutritionScreen() {
                       style={[styles.chip, sel && (isNoneOpt ? styles.chipSelectedGreen : styles.chipSelectedOrange)]}
                       onPress={() => handleAvoidSelect(f.value)}
                     >
-                      <Text style={[styles.chipText, sel && styles.chipTextSelected]}>{f.label}</Text>
+                      <Text style={[styles.chipText, sel && { color: isNoneOpt ? '#22C55E' : ORANGE }]}>{f.label}</Text>
                     </Pressable>
                   );
                 })}
@@ -506,7 +486,7 @@ export default function NutritionScreen() {
                       style={[styles.proteinChip, sel && styles.proteinChipSelected]}
                       onPress={() => handleProteinSelect(p.value)}
                     >
-                      <Ionicons name={p.icon} size={16} color={sel ? BG : CYAN} style={{ marginRight: 6 }} />
+                      <Ionicons name={p.icon} size={16} color={sel ? CYAN : 'rgba(255,255,255,0.7)'} style={{ marginRight: 6 }} />
                       <Text style={[styles.proteinChipText, sel && styles.proteinChipTextSelected]}>{p.label}</Text>
                       {sel && (
                         <View style={styles.rankBadge}>
@@ -533,7 +513,7 @@ export default function NutritionScreen() {
                       style={[styles.proteinChip, sel && styles.proteinChipSelected]}
                       onPress={() => handleCarbSelect(c.value)}
                     >
-                      <Ionicons name={c.icon} size={16} color={sel ? BG : CYAN} style={{ marginRight: 6 }} />
+                      <Ionicons name={c.icon} size={16} color={sel ? CYAN : 'rgba(255,255,255,0.7)'} style={{ marginRight: 6 }} />
                       <Text style={[styles.proteinChipText, sel && styles.proteinChipTextSelected]}>{c.label}</Text>
                       {sel && (
                         <View style={styles.rankBadge}>
@@ -560,7 +540,7 @@ export default function NutritionScreen() {
                       style={[styles.proteinChip, sel && styles.proteinChipSelected]}
                       onPress={() => handleFatSelect(f.value)}
                     >
-                      <Ionicons name={f.icon} size={16} color={sel ? BG : CYAN} style={{ marginRight: 6 }} />
+                      <Ionicons name={f.icon} size={16} color={sel ? CYAN : 'rgba(255,255,255,0.7)'} style={{ marginRight: 6 }} />
                       <Text style={[styles.proteinChipText, sel && styles.proteinChipTextSelected]}>{f.label}</Text>
                       {sel && (
                         <View style={styles.rankBadge}>
@@ -647,48 +627,6 @@ export default function NutritionScreen() {
                       onPress={() => updateData({ training_time: t.value })}
                     >
                       <Text style={[styles.trainingCardText, sel && styles.trainingCardTextSelected]}>{t.label}</Text>
-                    </Pressable>
-                  );
-                })}
-              </View>
-            </View>
-
-            {/* NEW: Carb Tolerance */}
-            <View style={styles.section}>
-              <Text style={styles.sectionLabel}>Carb Response</Text>
-              <Text style={styles.sectionHint}>How do you feel after a high-carb meal (rice, pasta, potatoes)?</Text>
-              <View style={styles.carbGrid}>
-                {CARB_RESPONSES.map((c) => {
-                  const sel = data.carb_tolerance === c.value;
-                  return (
-                    <Pressable
-                      key={c.value}
-                      style={[styles.carbCard, sel && styles.carbCardSelected]}
-                      onPress={() => updateData({ carb_tolerance: c.value })}
-                    >
-                      <Text style={[styles.carbCardLabel, sel && styles.carbCardLabelSelected]}>{c.label}</Text>
-                      <Text style={[styles.carbCardDesc, sel && styles.carbCardDescSelected]}>{c.description}</Text>
-                    </Pressable>
-                  );
-                })}
-              </View>
-            </View>
-
-            {/* NEW: Cooking Reality */}
-            <View style={styles.section}>
-              <Text style={styles.sectionLabel}>Kitchen Reality</Text>
-              <Text style={styles.sectionHint}>How much cooking are you actually going to do?</Text>
-              <View style={styles.cookingGrid}>
-                {COOKING_LEVELS.map((c) => {
-                  const sel = data.cooking_level === c.value;
-                  return (
-                    <Pressable
-                      key={c.value}
-                      style={[styles.cookingCard, sel && styles.cookingCardSelected]}
-                      onPress={() => updateData({ cooking_level: c.value })}
-                    >
-                      <Text style={[styles.cookingCardLabel, sel && styles.cookingCardLabelSelected]}>{c.label}</Text>
-                      <Text style={[styles.cookingCardDesc, sel && styles.cookingCardDescSelected]}>{c.description}</Text>
                     </Pressable>
                   );
                 })}
@@ -795,12 +733,12 @@ const styles = StyleSheet.create({
     borderColor: 'rgba(255,255,255,0.08)',
     backgroundColor: SURFACE,
   },
-  chipSelected: { backgroundColor: CYAN, borderColor: CYAN },
-  chipSelectedGreen: { backgroundColor: '#22C55E', borderColor: '#22C55E' },
-  chipSelectedRed: { backgroundColor: '#EF4444', borderColor: '#EF4444' },
-  chipSelectedOrange: { backgroundColor: ORANGE, borderColor: ORANGE },
+  chipSelected: { backgroundColor: `${CYAN}10`, borderColor: CYAN },
+  chipSelectedGreen: { backgroundColor: '#22C55E10', borderColor: '#22C55E' },
+  chipSelectedRed: { backgroundColor: '#EF444410', borderColor: '#EF4444' },
+  chipSelectedOrange: { backgroundColor: `${ORANGE}10`, borderColor: ORANGE },
   chipText: { fontSize: 13, fontFamily: 'Sora_500Medium', color: 'rgba(255,255,255,0.5)' },
-  chipTextSelected: { color: BG },
+  chipTextSelected: { color: CYAN },
 
   // Meals
   mealRow: { flexDirection: 'row', gap: 10 },
@@ -810,12 +748,10 @@ const styles = StyleSheet.create({
     borderColor: 'rgba(255,255,255,0.08)', backgroundColor: SURFACE,
   },
   mealBtnSelected: {
-    backgroundColor: ORANGE, borderColor: ORANGE,
-    shadowColor: ORANGE, shadowOffset: { width: 0, height: 0 },
-    shadowOpacity: 0.4, shadowRadius: 10,
+    backgroundColor: `${ORANGE}10`, borderColor: ORANGE,
   } as any,
   mealBtnText: { fontSize: 16, fontFamily: 'Sora_700Bold', color: 'rgba(255,255,255,0.5)' },
-  mealBtnTextSelected: { color: BG },
+  mealBtnTextSelected: { color: ORANGE },
 
   otherInput: {
     marginTop: 12, backgroundColor: SURFACE,
@@ -835,14 +771,14 @@ const styles = StyleSheet.create({
     position: 'relative',
   },
   proteinChipSelected: {
-    backgroundColor: CYAN,
+    backgroundColor: `${CYAN}10`,
     borderColor: CYAN,
   },
   proteinChipText: {
     fontSize: 13, fontFamily: 'Sora_500Medium', color: 'rgba(255,255,255,0.7)',
   },
   proteinChipTextSelected: {
-    color: BG,
+    color: CYAN,
     fontFamily: 'Sora_600SemiBold',
   },
   rankBadge: {
@@ -868,7 +804,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   trainingCardSelected: {
-    backgroundColor: PURPLE,
+    backgroundColor: `${PURPLE}10`,
     borderColor: PURPLE,
   },
   trainingCardText: {
@@ -876,7 +812,7 @@ const styles = StyleSheet.create({
     textAlign: 'center',
   },
   trainingCardTextSelected: {
-    color: BG,
+    color: PURPLE,
     fontFamily: 'Sora_600SemiBold',
   },
 

@@ -3,6 +3,8 @@ import { StyleSheet, Text, View } from 'react-native';
 import { useTokens } from '../../../lib/theme';
 import { MacroInlineSummary } from '../../nutrition/MacroInlineSummary';
 import type { NutritionPlanDayDetails } from '../../../services/planService';
+import { useProfile } from '../../../hooks/useUser';
+import { formatFoodQuantity, detectFoodCategory, getDefaultFoodMeasurement } from '../../../lib/nutrition/displayUnits';
 
 interface NutritionMealPreviewProps {
   dayDetails: NutritionPlanDayDetails | null;
@@ -22,6 +24,9 @@ function slotLabel(slot: string) {
 
 export function NutritionMealPreview({ dayDetails }: NutritionMealPreviewProps) {
   const { c, ty, r } = useTokens();
+  const { data: profile } = useProfile();
+  const foodMeasurement = getDefaultFoodMeasurement(profile?.unit_system);
+  const displayFoodMeasurement = (profile?.display_preferences?.food_measurement as any) ?? foodMeasurement;
 
   const meals = useMemo(() => {
     if (!dayDetails) return [];
@@ -81,11 +86,18 @@ export function NutritionMealPreview({ dayDetails }: NutritionMealPreviewProps) 
               ]}
             />
 
-            {items.slice(0, 5).map((item, idx) => (
-              <Text key={`${item.id || idx}`} style={{ color: c.text, fontFamily: ty.body.family, fontSize: 12, lineHeight: 17 }}>
-                • {item.item_name} — {Number(item.quantity_value || 0).toFixed(item.quantity_value && item.quantity_value % 1 ? 1 : 0)} {item.quantity_unit || 'g'}
-              </Text>
-            ))}
+            {items.slice(0, 5).map((item, idx) => {
+              const fmt = formatFoodQuantity(
+                Number(item.grams || item.quantity_value || 0),
+                detectFoodCategory(item.item_name || ''),
+                displayFoodMeasurement
+              );
+              return (
+                <Text key={`${item.id || idx}`} style={{ color: c.text, fontFamily: ty.body.family, fontSize: 12, lineHeight: 17 }}>
+                  • {item.item_name} — {fmt.value}{fmt.unit}
+                </Text>
+              );
+            })}
             {items.length > 5 ? (
               <Text style={{ color: c.textMuted, fontFamily: ty.body.family, fontSize: 12, marginTop: 4 }}>
                 +{items.length - 5} more ingredients

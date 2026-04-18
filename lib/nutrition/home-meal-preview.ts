@@ -1,12 +1,22 @@
 import type { NutritionPlanMeal } from '../../services/planService';
 import type { MealLog, MealSlot } from '../../services/nutritionService';
 import { getMealSlotIndex, getMealSlotLabel, normalizeMealSlot } from './meal-slots';
+import { detectFoodCategory, formatFoodQuantity } from './displayUnits';
+import type { FoodMeasurement } from './displayUnits';
+
+export interface PlannedFoodItem {
+  name: string;
+  amount: string;
+  unit: string;
+  grams: number | null;
+}
 
 export interface HomeMealPreviewItem {
   slot: MealSlot;
   label: string;
   plannedName: string;
   mealSummary: string | null;
+  foods: PlannedFoodItem[];
   canDirectLog: boolean;
   targetCalories: number;
   targetProtein: number;
@@ -23,6 +33,7 @@ export interface HomeMealPreviewCardMeal {
   label: string;
   plannedName: string;
   mealSummary?: string | null;
+  foods?: PlannedFoodItem[];
   canDirectLog?: boolean;
   targetCalories: number;
   targetProtein?: number;
@@ -61,9 +72,33 @@ function buildMealSummary(meal: NutritionPlanMeal): string | null {
   return `${itemNames[0]}, ${itemNames[1]} + ${itemNames.length - 2} more`;
 }
 
+function buildFoodItems(
+  meal: NutritionPlanMeal,
+  measurement: FoodMeasurement
+): PlannedFoodItem[] {
+  const items = (meal.selected_variant?.items || [])
+    .slice()
+    .sort((a, b) => Number(a.order_index || 0) - Number(b.order_index || 0));
+
+  return items.map((item) => {
+    const name = String(item.item_name || '').trim();
+    const grams = item.grams ?? 0;
+    const category = detectFoodCategory(name);
+    const formatted = formatFoodQuantity(grams, category, measurement);
+
+    return {
+      name,
+      amount: formatted.value,
+      unit: formatted.unit,
+      grams: item.grams,
+    };
+  });
+}
+
 export function buildHomeMealPreviewItems(
   planMeals: NutritionPlanMeal[] | null | undefined,
   dailyMeals: MealLog[] | null | undefined,
+  measurement: FoodMeasurement = 'metric',
 ): HomeMealPreviewItem[] {
   if (!planMeals?.length) return [];
 
@@ -82,6 +117,7 @@ export function buildHomeMealPreviewItems(
         label: getMealSlotLabel(slot),
         plannedName: selectedVariant?.name || meal.name || `${getMealSlotLabel(slot)} Meal`,
         mealSummary: buildMealSummary(meal),
+        foods: buildFoodItems(meal, measurement),
         canDirectLog: !!meal.can_direct_log,
         targetCalories: Math.round(
           Number(selectedVariant?.target_calories ?? meal.target_calories ?? 0),

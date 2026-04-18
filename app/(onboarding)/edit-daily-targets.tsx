@@ -25,9 +25,11 @@ function estimateTDEE(goalType: string | null | undefined, calories: number) {
     case 'recomp':
       return calories + 250;
     case 'gain_weight':
+    case 'build_muscle':
       return calories - 300;
     case 'increase_endurance':
       return calories - 150;
+    case 'get_fitter':
     default:
       return calories;
   }

@@ -1,4 +1,5 @@
 import { supabase } from '../lib/supabase';
+import { invokeFunction } from '../lib/supabase/invokeFunction';
 
 export type WorkoutImportSourceType = 'text' | 'json' | 'csv';
 
@@ -32,16 +33,18 @@ export async function importWorkoutPlan(input: {
   format?: string;
   activate?: boolean;
 }): Promise<WorkoutImportResult> {
-  const { data, error } = await supabase.functions.invoke('import-workout-plan', {
-    body: {
-      sourceType: input.sourceType,
-      payload: input.payload,
-      format: input.format,
-      activate: input.activate === true,
-    },
-  });
+  const { data, parsedError, rawError } = await invokeFunction(() =>
+    supabase.functions.invoke('import-workout-plan', {
+      body: {
+        sourceType: input.sourceType,
+        payload: input.payload,
+        format: input.format,
+        activate: input.activate === true,
+      },
+    })
+  );
 
-  if (error) throw new Error(error.message || 'Failed to import workout plan');
+  if (rawError) throw new Error(parsedError?.error || parsedError?.message || rawError?.message || 'Failed to import workout plan');
   if (!data?.success) throw new Error(data?.error || 'Failed to import workout plan');
 
   return data as WorkoutImportResult;
@@ -52,15 +55,17 @@ export async function resolveWorkoutImportMappings(input: {
   mappings: Array<{ sourceExerciseName: string; mappedExerciseId: string }>;
   activate?: boolean;
 }): Promise<WorkoutImportResult> {
-  const { data, error } = await supabase.functions.invoke('import-workout-plan', {
-    body: {
-      jobId: input.jobId,
-      mappings: input.mappings,
-      activate: input.activate === true,
-    },
-  });
+  const { data, parsedError, rawError } = await invokeFunction(() =>
+    supabase.functions.invoke('import-workout-plan', {
+      body: {
+        jobId: input.jobId,
+        mappings: input.mappings,
+        activate: input.activate === true,
+      },
+    })
+  );
 
-  if (error) throw new Error(error.message || 'Failed to resolve import mappings');
+  if (rawError) throw new Error(parsedError?.error || parsedError?.message || rawError?.message || 'Failed to resolve import mappings');
   if (!data?.success) throw new Error(data?.error || 'Failed to resolve import mappings');
 
   return {

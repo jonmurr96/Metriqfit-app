@@ -12,6 +12,7 @@ import type {
   EquipmentAccess,
   ExperienceLevel,
   PrimaryGoal,
+  RecoveryBurden,
   TrainingStylePreference,
 } from './training-profile.ts';
 
@@ -29,6 +30,7 @@ export type ExercisePriorityContext = {
   trainingStylePreference?: TrainingStylePreference | null;
   sessionDurationMin?: number | null;
   injuries?: string[];
+  recoveryBurden?: RecoveryBurden;
 };
 
 export type ExerciseQualityPolicy = {

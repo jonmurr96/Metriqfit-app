@@ -52,6 +52,8 @@ import {
   FatigueCost,
   type Exercise as V1Exercise,
   type SwapAlternative,
+  SwapReason,
+  ExperienceLevel,
 } from '../../../types/v1_engine';
 import { SwapConfirmationSheet } from '../../../components/workout/session/SwapConfirmationSheet';
 import {
@@ -252,7 +254,7 @@ export default function ActiveSessionScreen() {
   const [showFinishSheet, setShowFinishSheet] = useState(false);
   const [showExercisePreview, setShowExercisePreview] = useState(true);
   const [swapSearch, setSwapSearch] = useState('');
-  const [pendingSwap, setPendingSwap] = useState<SwapAlternative | null>(null);
+  const [pendingSwap, setPendingSwap] = useState<{ alt: SwapAlternative; reason: SwapReason } | null>(null);
   const [showSwapSuccess, setShowSwapSuccess] = useState(false);
   const [exerciseNoteDraft, setExerciseNoteDraft] = useState('');
   const [sessionNoteDraft, setSessionNoteDraft] = useState('');
@@ -658,15 +660,15 @@ export default function ActiveSessionScreen() {
 
   const currentRIRRPEConfig = getRIRRPEConfig(currentExercise);
 
-  const handleSwapExercise = async (newExerciseId: string, alternative?: SwapAlternative, source: 'coach' | 'manual' = 'coach') => {
+  const handleSwapExercise = async (newExerciseId: string, reason: SwapReason, alternative?: SwapAlternative, source: 'coach' | 'manual' = 'coach') => {
     try {
       const originalExId = currentExercise.exercise.id;
       const continuity = alternative?.continuity_recommendation || ContinuityMethod.Reset;
 
-      // 1. Log the swap (simulated for V1.1)
       console.log(`[SWAP_LOG] User swapped exercise:`, {
         original: originalExId,
         new: newExerciseId,
+        reason,
         continuityMethod: continuity,
         timestamp: new Date().toISOString(),
         source: source
@@ -676,6 +678,8 @@ export default function ActiveSessionScreen() {
       await swapExerciseMutation.mutateAsync({
         sessionExerciseId: currentExercise.id,
         newExerciseId,
+        reason,
+        continuity,
       });
 
       // 3. Optional: Prepopulate/Adjust Progress (V1.1 UI Logic)
@@ -1607,12 +1611,13 @@ export default function ActiveSessionScreen() {
                 environment: SessionEnvironment.Commercial,
                 comfort: LiftComfort.BarbellAdv,
                 injuries: [],
+                experience_level: ExperienceLevel.Intermediate,
               }}
-              onSelect={(alternative) => {
-                setPendingSwap(alternative);
+              onSelect={(alt, reason) => {
+                setPendingSwap({ alt, reason });
               }}
-              onManualSelect={(v1ex) => {
-                handleSwapExercise(v1ex.external_id, undefined, 'manual');
+              onManualSelect={(v1ex, reason) => {
+                handleSwapExercise(v1ex.external_id, reason, undefined, 'manual');
               }}
               onClose={() => setShowSwap(false)}
             />
@@ -1621,8 +1626,8 @@ export default function ActiveSessionScreen() {
             {pendingSwap && (
               <SwapConfirmationSheet
                 originalExercise={toV1Exercise(currentExercise.exercise)}
-                alternative={pendingSwap}
-                onConfirm={() => handleSwapExercise(pendingSwap.exercise.external_id, pendingSwap, 'coach')}
+                alternative={pendingSwap.alt}
+                onConfirm={() => handleSwapExercise(pendingSwap.alt.exercise.external_id, pendingSwap.reason, pendingSwap.alt, 'coach')}
                 onCancel={() => setPendingSwap(null)}
               />
             )}

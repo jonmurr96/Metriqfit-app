@@ -1,6 +1,6 @@
 import React, { createContext, useContext, useState, useCallback } from 'react';
 
-export type GoalType = 'lose_weight' | 'gain_weight' | 'maintain_weight' | 'recomp' | 'increase_endurance' | 'general_fitness';
+export type GoalType = 'lose_weight' | 'build_muscle' | 'get_fitter' | 'gain_weight' | 'maintain_weight' | 'recomp' | 'increase_endurance' | 'general_fitness';
 export type ActivityLevel = 'sedentary' | 'lightly_active' | 'moderately_active' | 'very_active';
 export type SleepHours = 'lt5' | '5_6' | '6_7' | '7_8' | '8_plus';
 export type ExperienceLevel = 'beginner' | 'intermediate' | 'advanced';
@@ -10,7 +10,7 @@ export type GoalTimeline = '1_month' | '3_months' | '6_months' | '1_year' | 'cus
 export type MinutesPerWorkout = '30' | '45' | '60' | '90_plus';
 export type MealsPerDay = '2' | '3' | '4' | '5_plus' | 'no_preference';
 export type Weekday = 'mon' | 'tue' | 'wed' | 'thu' | 'fri' | 'sat' | 'sun' | 'no_preference';
-export type Injury = 'shoulders' | 'knees' | 'back' | 'wrists' | 'ankles' | 'hips' | 'elbows' | 'neck' | 'other' | 'none';
+export type Injury = 'shoulders' | 'knees' | 'back' | 'wrists' | 'ankles' | 'hips' | 'elbows' | 'neck' | 'lower_body_joints' | 'upper_body_joints' | 'other' | 'none';
 export type AllergyExclusion = 'gluten' | 'dairy' | 'peanuts' | 'soy' | 'eggs' | 'shellfish' | 'fish' | 'other' | 'none';
 export type RefusedFood = 'pork' | 'beef' | 'chicken' | 'turkey' | 'seafood' | 'rice' | 'pasta' | 'potatoes' | 'oats' | 'cheese' | 'milk' | 'yogurt' | 'whey' | 'nuts' | 'other';
 export type ProgressionPreference = 'linear_overload' | 'undulating' | 'autoregulated' | 'no_preference';
@@ -101,7 +101,7 @@ const defaultData: OnboardingData = {
   height_ft: null,
   height_in: null,
   current_weight_lb: null,
-  target_weight_enabled: false,
+  target_weight_enabled: true,
   target_weight_lb: null,
   goal_timeline: null,
   target_date: null,

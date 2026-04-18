@@ -17,6 +17,7 @@ import { getActiveWorkoutPlan } from './planService';
 import { getWorkoutAdaptationRecommendations } from './workoutAdaptationService';
 import { checkEntitlementStatus, getFeatureLimit } from './subscriptionService';
 import { type SubscriptionTier } from '../lib/subscription/plans';
+import { invokeFunction } from '../lib/supabase/invokeFunction';
 
 // ============================================================================
 // Types
@@ -1165,30 +1166,32 @@ export async function sendMessage(
     return refreshedData.session;
   };
 
-  const invokeCoachMessage = async () =>
-    supabase.functions.invoke('ai-coach-message', {
-      body: {
-        user_id: userId,
-        message,
-        context: options?.context,
-        thread_id: options?.threadId,
-        context_mode: options?.contextMode,
-        allow_web: options?.allowWeb ?? true,
-        allow_actions: options?.allowActions ?? true,
-        allow_auto_apply: options?.allowAutoApply ?? true,
-      },
-    });
+  const invokeCoachMessage = () =>
+    invokeFunction(() =>
+      supabase.functions.invoke('ai-coach-message', {
+        body: {
+          user_id: userId,
+          message,
+          context: options?.context,
+          thread_id: options?.threadId,
+          context_mode: options?.contextMode,
+          allow_web: options?.allowWeb ?? true,
+          allow_actions: options?.allowActions ?? true,
+          allow_auto_apply: options?.allowAutoApply ?? true,
+        },
+      })
+    );
 
   await ensureFreshSession();
 
-  let { data, error } = await invokeCoachMessage();
+  let { data, parsedError, rawError } = await invokeCoachMessage();
 
-  if (error?.message?.includes('non-2xx')) {
+  if (rawError?.message?.includes('non-2xx') || rawError?.context?.status === 401) {
     await ensureFreshSession();
-    ({ data, error } = await invokeCoachMessage());
+    ({ data, parsedError, rawError } = await invokeCoachMessage());
   }
 
-  if (error) throw new Error(error.message || 'Failed to send AI Coach message');
+  if (rawError) throw new Error(parsedError?.error || parsedError?.message || rawError?.message || 'Failed to send AI Coach message');
   if (!data?.id || !data?.content) throw new Error('AI Coach returned an invalid response');
 
   return mapChatMessageRow({
@@ -1218,16 +1221,18 @@ export async function sendMessage(
 }
 
 export async function approveActionProposal(proposalId: string, userId: string): Promise<ChatMessage> {
-  const { data, error } = await supabase.functions.invoke('ai-coach-message', {
-    body: {
-      user_id: userId,
-      approved_proposal_id: proposalId,
-      allow_actions: true,
-      allow_auto_apply: true,
-    },
-  });
+  const { data, parsedError, rawError } = await invokeFunction(() =>
+    supabase.functions.invoke('ai-coach-message', {
+      body: {
+        user_id: userId,
+        approved_proposal_id: proposalId,
+        allow_actions: true,
+        allow_auto_apply: true,
+      },
+    })
+  );
 
-  if (error) throw new Error(error.message || 'Failed to approve coach action');
+  if (rawError) throw new Error(parsedError?.error || parsedError?.message || rawError?.message || 'Failed to approve coach action');
   if (!data?.id || !data?.content) throw new Error('AI Coach returned an invalid approval response');
   return mapChatMessageRow({
     ...data,
@@ -1237,15 +1242,17 @@ export async function approveActionProposal(proposalId: string, userId: string):
 }
 
 export async function rejectActionProposal(proposalId: string, userId: string): Promise<ChatMessage> {
-  const { data, error } = await supabase.functions.invoke('ai-coach-message', {
-    body: {
-      user_id: userId,
-      rejected_proposal_id: proposalId,
-      allow_actions: true,
-    },
-  });
+  const { data, parsedError, rawError } = await invokeFunction(() =>
+    supabase.functions.invoke('ai-coach-message', {
+      body: {
+        user_id: userId,
+        rejected_proposal_id: proposalId,
+        allow_actions: true,
+      },
+    })
+  );
 
-  if (error) throw new Error(error.message || 'Failed to reject coach action');
+  if (rawError) throw new Error(parsedError?.error || parsedError?.message || rawError?.message || 'Failed to reject coach action');
   if (!data?.id || !data?.content) throw new Error('AI Coach returned an invalid rejection response');
   return mapChatMessageRow({
     ...data,

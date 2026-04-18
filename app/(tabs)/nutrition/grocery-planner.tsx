@@ -18,11 +18,16 @@ import { useFeatureAccess } from '../../../hooks/useSubscription';
 import { useBuildMealsFromConstraints, useApplyMealsBatch } from '../../../hooks/useMealBuilder';
 import { useGroceryLists } from '../../../hooks/useGrocery';
 import { useEditableNutritionPlanContext } from '../../../hooks/usePlan';
+import { useProfile } from '../../../hooks/useUser';
+import { formatFoodQuantity, detectFoodCategory, getDefaultFoodMeasurement } from '../../../lib/nutrition/displayUnits';
 
 export default function GroceryPlannerScreen() {
   const { c, s, ty, r } = useTokens();
   const router = useRouter();
   const insets = useSafeAreaInsets();
+  const { data: profile } = useProfile();
+  const foodMeasurement = getDefaultFoodMeasurement(profile?.unit_system);
+  const displayFoodMeasurement = (profile?.display_preferences?.food_measurement as any) ?? foodMeasurement;
 
   const access = useFeatureAccess('grocery_pantry_builder');
   const buildMutation = useBuildMealsFromConstraints();
@@ -313,11 +318,17 @@ export default function GroceryPlannerScreen() {
                 </Text>
 
                 <View style={{ marginTop: s.sm, gap: s.xs }}>
-                  {buildMutation.data.groceryList.items.map((item) => (
-                    <Text key={`${item.item_name}-${item.to_buy_quantity}`} style={{ color: c.textMuted, fontFamily: ty.body.family, fontSize: ty.sizes.xs }}>
-                      {item.item_name}: need {item.required_quantity}{item.quantity_unit}, on-hand {item.on_hand_quantity}{item.quantity_unit}, buy {item.to_buy_quantity}{item.quantity_unit}
-                    </Text>
-                  ))}
+                  {buildMutation.data.groceryList.items.map((item) => {
+                    const category = detectFoodCategory(item.item_name || '');
+                    const needFmt = formatFoodQuantity(Number(item.required_quantity || 0), category, displayFoodMeasurement);
+                    const onHandFmt = formatFoodQuantity(Number(item.on_hand_quantity || 0), category, displayFoodMeasurement);
+                    const buyFmt = formatFoodQuantity(Number(item.to_buy_quantity || 0), category, displayFoodMeasurement);
+                    return (
+                      <Text key={`${item.item_name}-${item.to_buy_quantity}`} style={{ color: c.textMuted, fontFamily: ty.body.family, fontSize: ty.sizes.xs }}>
+                        {item.item_name}: need {needFmt.value}{needFmt.unit}, on-hand {onHandFmt.value}{onHandFmt.unit}, buy {buyFmt.value}{buyFmt.unit}
+                      </Text>
+                    );
+                  })}
                 </View>
               </View>
             )}
@@ -327,11 +338,14 @@ export default function GroceryPlannerScreen() {
                 <Text style={{ color: c.text, fontFamily: ty.heading.familySemibold, fontSize: ty.sizes.sm }}>
                   Leftovers Logic
                 </Text>
-                {buildMutation.data.leftoversPlan.map((item) => (
-                  <Text key={item.item_name} style={{ marginTop: 4, color: c.textMuted, fontFamily: ty.body.family, fontSize: ty.sizes.xs }}>
-                    {item.item_name}: {item.expected_leftover_grams}g leftover
-                  </Text>
-                ))}
+                {buildMutation.data.leftoversPlan.map((item) => {
+                  const fmt = formatFoodQuantity(item.expected_leftover_grams || 0, detectFoodCategory(item.item_name), displayFoodMeasurement);
+                  return (
+                    <Text key={item.item_name} style={{ marginTop: 4, color: c.textMuted, fontFamily: ty.body.family, fontSize: ty.sizes.xs }}>
+                      {item.item_name}: {fmt.value}{fmt.unit} leftover
+                    </Text>
+                  );
+                })}
               </View>
             )}
 

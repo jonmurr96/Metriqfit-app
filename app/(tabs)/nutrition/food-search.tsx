@@ -11,6 +11,8 @@ import { GlassCard } from '../../../components/premium/GlassCard';
 import { MacroRow } from '../../../components/nutrition/MacroRow';
 import { getMealSlotLabel, normalizeDateKey, normalizeMealSlot } from '../../../lib/nutrition/meal-slots';
 import { useAuth } from '../../../lib/auth/AuthProvider';
+import { useProfile } from '../../../hooks/useUser';
+import { formatFoodQuantity, detectFoodCategory, getDefaultFoodMeasurement } from '../../../lib/nutrition/displayUnits';
 import {
   useAddFavoriteFood,
   useFavoriteFoodIds,
@@ -733,9 +735,19 @@ function SavedFoodRow({
   onLog: () => void;
 }) {
   const { c, s, ty, r } = useTokens();
-  const servingLabel = favorite.food.servingSizeG && favorite.food.servingSizeG > 0
-    ? favorite.food.servingDescription || `${Math.round(favorite.food.servingSizeG)}g serving`
-    : '100g default';
+  const { data: profile } = useProfile();
+  const foodMeasurement = getDefaultFoodMeasurement(profile?.unit_system);
+  const displayFoodMeasurement = (profile?.display_preferences?.food_measurement as any) ?? foodMeasurement;
+  const category = detectFoodCategory(favorite.food.name);
+  const servingLabel = (() => {
+    if (favorite.food.servingSizeG && favorite.food.servingSizeG > 0) {
+      if (favorite.food.servingDescription) return favorite.food.servingDescription;
+      const fmt = formatFoodQuantity(favorite.food.servingSizeG, category, displayFoodMeasurement);
+      return `${fmt.value}${fmt.unit} serving`;
+    }
+    const fmt = formatFoodQuantity(100, category, displayFoodMeasurement);
+    return `${fmt.value}${fmt.unit} default`;
+  })();
 
   return (
     <GlassCard intensity="light" style={{ marginBottom: s.sm, padding: 0 }}>

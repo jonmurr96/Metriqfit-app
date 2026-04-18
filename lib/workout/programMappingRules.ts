@@ -20,7 +20,7 @@ export type ProgramExercise = {
   equipment_required?: string[] | null;
   primary_muscle?: string | null;
   pattern?: string | null;
-  difficulty?: string | null;
+  difficulty?: string | number | null;
 };
 
 export type DayFocusPolicy = {

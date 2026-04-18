@@ -25,6 +25,7 @@ export default function IndexPage() {
             hasCompletedOnboarding: false,
             hasTargets: false,
             hasPlans: false,
+            hasSubscription: false,
           });
         } finally {
           setCheckingOnboarding(false);
@@ -74,6 +75,11 @@ export default function IndexPage() {
     return <Redirect href="/(onboarding)/plan-generation" />;
   }
 
-  // Authenticated and completed onboarding with plans - go to main app.
+  // Plans generated but paywall not completed - must not skip to home.
+  if (onboardingStatus && onboardingStatus.hasCompletedOnboarding && onboardingStatus.hasPlans && !onboardingStatus.hasSubscription) {
+    return <Redirect href="/(onboarding)/paywall" />;
+  }
+
+  // Authenticated, onboarding complete, plans exist, paywall completed - go to main app.
   return <Redirect href="/(tabs)/home" />;
 }

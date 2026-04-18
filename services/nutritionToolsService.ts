@@ -16,7 +16,7 @@ import type { FeatureGateKey, SubscriptionTier } from '../lib/subscription/plans
 export type NutritionToolAccessState = 'available' | 'premium_required' | 'elite_required';
 
 export interface NutritionToolCard {
-  id: 'camera' | 'barcode' | 'menu' | 'recipe-import' | 'pantry' | 'grocery';
+  id: 'camera' | 'barcode' | 'menu' | 'recipe-import' | 'pantry' | 'grocery' | 'macro-budgeter' | 'supplement-guide';
   title: string;
   subtitle: string;
   icon: string;
@@ -141,6 +141,24 @@ export async function getNutritionToolsSnapshot(userId: string): Promise<Nutriti
         route: '/(tabs)/nutrition/grocery-planner',
         accessState: getAccessState('grocery_planner', tier),
         meta: withPreviewMeta(latestList?.title || 'No active grocery list yet', editableContext),
+      },
+      {
+        id: 'macro-budgeter',
+        title: 'Macro Budgeter',
+        subtitle: 'Log a cheat meal and see how to recover the rest of the day.',
+        icon: 'calculator-outline',
+        route: '/(tabs)/nutrition/tools/macro-budgeter',
+        accessState: getAccessState('macro_budgeter', tier),
+        meta: 'Recover smarter',
+      },
+      {
+        id: 'supplement-guide',
+        title: 'Supplement Guide',
+        subtitle: 'Searchable reference for vitamins, minerals, and performance supplements.',
+        icon: 'medical-outline',
+        route: '/(tabs)/nutrition/tools/supplement-guide',
+        accessState: getAccessState('supplement_guide', tier),
+        meta: 'Educational only',
       },
     ],
   };

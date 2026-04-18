@@ -1,4 +1,5 @@
 import { supabase } from "../lib/supabase";
+import { invokeFunction } from "../lib/supabase/invokeFunction";
 import { checkEntitlementStatus } from "./subscriptionService";
 
 export type PrepDiscipline = "bodybuilding" | "powerlifting";
@@ -178,15 +179,17 @@ export async function runPrepCoachCheckInAdjustment(input: {
   measurementId: string;
   dryRun?: boolean;
 }): Promise<PrepCoachAdjustmentResult> {
-  const { data, error } = await supabase.functions.invoke("prep-coach-checkin-adjust", {
-    body: {
-      measurementId: input.measurementId,
-      dryRun: Boolean(input.dryRun),
-      source: "weekly_check_in",
-    },
-  });
+  const { data, parsedError, rawError } = await invokeFunction(() =>
+    supabase.functions.invoke("prep-coach-checkin-adjust", {
+      body: {
+        measurementId: input.measurementId,
+        dryRun: Boolean(input.dryRun),
+        source: "weekly_check_in",
+      },
+    })
+  );
 
-  if (error) throw new Error(error.message || "Failed to run prep coach adjustment");
+  if (rawError) throw new Error(parsedError?.error || parsedError?.message || rawError?.message || "Failed to run prep coach adjustment");
   if (!data?.success && data?.error) throw new Error(data.error);
 
   return data as PrepCoachAdjustmentResult;

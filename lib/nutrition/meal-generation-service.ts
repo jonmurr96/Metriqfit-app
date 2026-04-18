@@ -79,7 +79,21 @@ export interface GeneratedMealPlan {
  * Map onboarding data to goal type
  */
 function getGoalType(onboarding: OnboardingData): GoalType {
-  return onboarding.goal_type === 'build_muscle' ? 'bulk' : 'cut';
+  switch (onboarding.goal_type) {
+    case 'build_muscle':
+    case 'gain_weight':
+      return 'bulk';
+    case 'lose_weight':
+    case 'get_fitter':
+      return 'cut';
+    case 'recomp':
+      return 'recomp';
+    case 'maintain_weight':
+    case 'increase_endurance':
+    case 'general_fitness':
+    default:
+      return 'maintain';
+  }
 }
 
 /**
@@ -100,11 +114,17 @@ export function createIntelligentConfig(
     lastMealBeforeBed: (onboarding.last_meal_before_bed || '2hrs') as LastMealBeforeBed,
     carbTolerance: (onboarding.carb_tolerance || 'energized_satiated') as CarbTolerance,
     cookingLevel: (onboarding.cooking_level || 'basic') as CookingLevel,
-    dailyTargets: {
-      calories: goal === 'bulk' ? targets.trainingDay.calories : targets.restDay.calories,
-      protein: goal === 'bulk' ? targets.trainingDay.protein_g : targets.restDay.protein_g,
-      carbs: goal === 'bulk' ? targets.trainingDay.carbs_g : targets.restDay.carbs_g,
-      fat: goal === 'bulk' ? targets.trainingDay.fat_g : targets.restDay.fat_g,
+    trainingDayTargets: {
+      calories: targets.trainingDay.calories,
+      protein: targets.trainingDay.protein_g,
+      carbs: targets.trainingDay.carbs_g,
+      fat: targets.trainingDay.fat_g,
+    },
+    restDayTargets: {
+      calories: targets.restDay.calories,
+      protein: targets.restDay.protein_g,
+      carbs: targets.restDay.carbs_g,
+      fat: targets.restDay.fat_g,
     },
   };
 }
@@ -427,9 +447,7 @@ export function validateNutritionOnboarding(onboarding: OnboardingData): {
     { field: 'wake_time', label: 'Wake time' },
     { field: 'first_meal_delay', label: 'First meal timing' },
     { field: 'training_time', label: 'Training time' },
-    { field: 'carb_tolerance', label: 'Carb tolerance' },
     { field: 'meals_per_day', label: 'Meals per day' },
-    { field: 'cooking_level', label: 'Cooking level' },
   ];
 
   const missing: string[] = [];

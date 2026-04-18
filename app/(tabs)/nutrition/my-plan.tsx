@@ -30,6 +30,8 @@ import {
   useApplyMealPlanChange,
 } from '../../../hooks/usePlan';
 import { useTargets } from '../../../lib/targets/useTargets';
+import { useProfile } from '../../../hooks/useUser';
+import { formatFoodQuantity, formatMacroDisplay, detectFoodCategory, getDefaultFoodMeasurement } from '../../../lib/nutrition/displayUnits';
 
 const DAY_LABELS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
 
@@ -61,6 +63,9 @@ export default function MyNutritionPlanScreen() {
   const [selectedDay, setSelectedDay] = useState(todayDay);
 
   const { targets, loading: targetsLoading, refetch: refetchTargets } = useTargets();
+  const { data: profile } = useProfile();
+  const foodMeasurement = getDefaultFoodMeasurement(profile?.unit_system);
+  const displayFoodMeasurement = (profile?.display_preferences?.food_measurement as any) ?? foodMeasurement;
 
   const {
     data: nutritionPlan,
@@ -438,7 +443,14 @@ export default function MyNutritionPlanScreen() {
                     <View style={{ marginTop: s.sm, gap: 2 }}>
                       {(meal.selected_variant?.items || []).slice(0, 4).map((item) => (
                         <Text key={item.id} style={{ color: c.textMuted, fontFamily: ty.body.family, fontSize: ty.sizes.xs, marginBottom: 2 }}>
-                          • {item.quantity_value}{item.quantity_unit} {item.item_name} ({Math.round(item.calories || 0)} kcal)
+                          • {(() => {
+                            const fmt = formatFoodQuantity(
+                              Number(item.grams || item.quantity_value || 0),
+                              detectFoodCategory(item.item_name || ''),
+                              displayFoodMeasurement
+                            );
+                            return `${fmt.value}${fmt.unit} ${item.item_name} (${Math.round(item.calories || 0)} kcal)`;
+                          })()}
                         </Text>
                       ))}
                       {(meal.selected_variant?.items?.length || 0) > 4 && (
@@ -452,9 +464,9 @@ export default function MyNutritionPlanScreen() {
                       style={{ marginTop: s.sm }}
                       items={[
                         { macro: 'calories', value: Math.round(meal.selected_variant?.target_calories || meal.target_calories || 0), unit: ' kcal' },
-                        { macro: 'protein', value: round1(Number(meal.selected_variant?.target_protein || meal.target_protein || 0)), unit: 'g' },
-                        { macro: 'carbs', value: round1(Number(meal.selected_variant?.target_carbs || meal.target_carbs || 0)), unit: 'g' },
-                        { macro: 'fat', value: round1(Number(meal.selected_variant?.target_fat || meal.target_fat || 0)), unit: 'g' },
+                        { macro: 'protein', value: parseFloat(formatMacroDisplay(Number(meal.selected_variant?.target_protein || meal.target_protein || 0), 'protein', displayFoodMeasurement).value), unit: formatMacroDisplay(Number(meal.selected_variant?.target_protein || meal.target_protein || 0), 'protein', displayFoodMeasurement).unit },
+                        { macro: 'carbs', value: parseFloat(formatMacroDisplay(Number(meal.selected_variant?.target_carbs || meal.target_carbs || 0), 'carbs', displayFoodMeasurement).value), unit: formatMacroDisplay(Number(meal.selected_variant?.target_carbs || meal.target_carbs || 0), 'carbs', displayFoodMeasurement).unit },
+                        { macro: 'fat', value: parseFloat(formatMacroDisplay(Number(meal.selected_variant?.target_fat || meal.target_fat || 0), 'fat', displayFoodMeasurement).value), unit: formatMacroDisplay(Number(meal.selected_variant?.target_fat || meal.target_fat || 0), 'fat', displayFoodMeasurement).unit },
                       ]}
                     />
 

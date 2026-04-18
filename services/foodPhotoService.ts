@@ -4,6 +4,7 @@
  */
 
 import { supabase } from '../lib/supabase';
+import { invokeFunction } from '../lib/supabase/invokeFunction';
 import type { Database } from '../lib/supabase/types';
 import * as FileSystem from 'expo-file-system';
 import { getFeatureLimit } from './subscriptionService';
@@ -152,16 +153,18 @@ export async function analyzeFoodPhoto(
   const base64Image = await imageUriToBase64(photoUri);
 
   // Call Supabase Edge Function for AI analysis
-  const { data, error } = await supabase.functions.invoke('analyze-food-photo', {
-    body: {
-      image: base64Image,
-      userId,
-    },
-  });
+  const { data, parsedError, rawError } = await invokeFunction(() =>
+    supabase.functions.invoke('analyze-food-photo', {
+      body: {
+        image: base64Image,
+        userId,
+      },
+    })
+  );
 
-  if (error) {
-    console.error('AI food photo analysis error:', error);
-    throw new Error('Failed to analyze photo. Please try again.');
+  if (rawError) {
+    console.error('AI food photo analysis error:', rawError);
+    throw new Error(parsedError?.error || parsedError?.message || rawError?.message || 'Failed to analyze photo. Please try again.');
   }
 
   // Increment usage counter

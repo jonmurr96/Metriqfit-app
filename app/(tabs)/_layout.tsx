@@ -158,6 +158,12 @@ export default function TabLayout() {
               <TabBarIcon name={focused ? 'home' : 'home-outline'} color={color} />
             ),
           }}
+          listeners={({ navigation }) => ({
+            tabPress: (e) => {
+              e.preventDefault();
+              navigation.navigate('home', { screen: 'index' });
+            },
+          })}
         />
         <Tabs.Screen
           name="workout"
@@ -183,6 +189,12 @@ export default function TabLayout() {
               <TabBarIcon name={focused ? 'nutrition' : 'nutrition-outline'} color={color} />
             ),
           }}
+          listeners={({ navigation }) => ({
+            tabPress: (e) => {
+              e.preventDefault();
+              navigation.navigate('nutrition', { screen: 'index' });
+            },
+          })}
         />
         <Tabs.Screen
           name="progress"
@@ -192,6 +204,12 @@ export default function TabLayout() {
               <TabBarIcon name={focused ? 'stats-chart' : 'stats-chart-outline'} color={color} />
             ),
           }}
+          listeners={({ navigation }) => ({
+            tabPress: (e) => {
+              e.preventDefault();
+              navigation.navigate('progress', { screen: 'index' });
+            },
+          })}
         />
         <Tabs.Screen
           name="ai-coach"

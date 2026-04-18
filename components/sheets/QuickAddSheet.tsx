@@ -6,9 +6,9 @@ import {
   Pressable,
   Modal,
   Animated,
-  Dimensions,
   Platform,
   Alert,
+  Easing,
 } from 'react-native';
 import { useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -29,139 +29,171 @@ interface QuickAddSheetProps {
   onClose: () => void;
 }
 
-const { height: SCREEN_HEIGHT } = Dimensions.get('window');
-const SHEET_HEIGHT = 480;
+// Tab bar height constant — must match _layout.tsx
+const TAB_BAR_HEIGHT = 84;
+const ICON_BTN_SIZE = 54;
+const ITEM_GAP = 14;
+const CLOSE_BTN_SIZE = 64;
 
 export function QuickAddSheet({ isVisible, onClose }: QuickAddSheetProps) {
-  const { c, s, r, ty, state } = useTokens();
+  const { c, ty } = useTokens();
   const router = useRouter();
   const insets = useSafeAreaInsets();
   const photoScanAccess = useFeatureAccess('food_photo_scan');
   const barcodeScanAccess = useFeatureAccess('barcode_scan');
 
-  const translateY = useRef(new Animated.Value(SHEET_HEIGHT)).current;
-  const backdropOpacity = useRef(new Animated.Value(0)).current;
+  // Animation values
+  const backdropAnim = useRef(new Animated.Value(0)).current;
+  const closeBtnAnim = useRef(new Animated.Value(0)).current;
+  const itemAnims = useRef(
+    QUICK_ADD_ACTIONS.map(() => new Animated.Value(0))
+  ).current;
 
-  const getActionAccess = useCallback((actionId: string) => {
-    if (actionId === 'scan_meal_photo') {
-      return {
-        hasAccess: photoScanAccess.hasAccess,
-        isLoading: photoScanAccess.isLoading,
-        upgradeTier: photoScanAccess.upgradeTier,
-      };
-    }
-    if (actionId === 'scan_barcode') {
-      return {
-        hasAccess: barcodeScanAccess.hasAccess,
-        isLoading: barcodeScanAccess.isLoading,
-        upgradeTier: barcodeScanAccess.upgradeTier,
-      };
-    }
-    return { hasAccess: true, isLoading: false, upgradeTier: null };
-  }, [
-    barcodeScanAccess.hasAccess,
-    barcodeScanAccess.isLoading,
-    barcodeScanAccess.upgradeTier,
-    photoScanAccess.hasAccess,
-    photoScanAccess.isLoading,
-    photoScanAccess.upgradeTier,
-  ]);
-
-  useEffect(() => {
-    if (__DEV__) {
-      // VALIDATION: Ensure unique IDs
-      const ids = new Set<string>();
-      QUICK_ADD_ACTIONS.forEach(action => {
-        if (ids.has(action.id)) {
-          console.error(`[QuickAdd] Duplicate action ID found: ${action.id}`);
-        }
-        ids.add(action.id);
-      });
-    }
-  }, []); // Run once on mount for dev validation
+  const getActionAccess = useCallback(
+    (actionId: string) => {
+      if (actionId === 'scan_meal_photo') {
+        return {
+          hasAccess: photoScanAccess.hasAccess,
+          isLoading: photoScanAccess.isLoading,
+          upgradeTier: photoScanAccess.upgradeTier,
+        };
+      }
+      if (actionId === 'scan_barcode') {
+        return {
+          hasAccess: barcodeScanAccess.hasAccess,
+          isLoading: barcodeScanAccess.isLoading,
+          upgradeTier: barcodeScanAccess.upgradeTier,
+        };
+      }
+      return { hasAccess: true, isLoading: false, upgradeTier: null };
+    },
+    [
+      barcodeScanAccess.hasAccess,
+      barcodeScanAccess.isLoading,
+      barcodeScanAccess.upgradeTier,
+      photoScanAccess.hasAccess,
+      photoScanAccess.isLoading,
+      photoScanAccess.upgradeTier,
+    ]
+  );
 
   useEffect(() => {
     if (isVisible) {
-      Animated.parallel([
-        Animated.spring(translateY, {
-          toValue: 0,
-          useNativeDriver: true,
-          damping: 20,
-          stiffness: 200,
-        }),
-        Animated.timing(backdropOpacity, {
+      // Backdrop fades in
+      Animated.timing(backdropAnim, {
+        toValue: 1,
+        duration: 220,
+        easing: Easing.out(Easing.quad),
+        useNativeDriver: true,
+      }).start();
+
+      // Close button springs in
+      Animated.spring(closeBtnAnim, {
+        toValue: 1,
+        damping: 14,
+        stiffness: 220,
+        useNativeDriver: true,
+      }).start();
+
+      // Items stagger in from bottom (last item = nearest close btn = first to appear)
+      const reversed = [...itemAnims].reverse();
+      reversed.forEach((anim, i) => {
+        Animated.spring(anim, {
           toValue: 1,
-          duration: 200,
+          delay: 40 + i * 55,
+          damping: 14,
+          stiffness: 220,
           useNativeDriver: true,
-        }),
-      ]).start();
+        }).start();
+      });
     } else {
+      // Everything fades out together, quickly
       Animated.parallel([
-        Animated.spring(translateY, {
-          toValue: SHEET_HEIGHT,
-          useNativeDriver: true,
-          damping: 20,
-          stiffness: 200,
-        }),
-        Animated.timing(backdropOpacity, {
+        Animated.timing(backdropAnim, {
           toValue: 0,
-          duration: 200,
+          duration: 160,
+          easing: Easing.in(Easing.quad),
           useNativeDriver: true,
         }),
+        Animated.timing(closeBtnAnim, {
+          toValue: 0,
+          duration: 140,
+          useNativeDriver: true,
+        }),
+        ...itemAnims.map((anim) =>
+          Animated.timing(anim, {
+            toValue: 0,
+            duration: 140,
+            easing: Easing.in(Easing.quad),
+            useNativeDriver: true,
+          })
+        ),
       ]).start();
     }
-  }, [isVisible, translateY, backdropOpacity]);
+  }, [isVisible, backdropAnim, closeBtnAnim, itemAnims]);
 
   const handleDismiss = useCallback(async () => {
     await trackQuickAddDismissed();
     onClose();
   }, [onClose]);
 
-  const handleActionPress = useCallback(async (action: typeof QUICK_ADD_ACTIONS[number]) => {
-    try {
-      const access = getActionAccess(action.id);
-      const requiresPaidTier = action.requiredTier && action.requiredTier !== 'free';
+  const handleActionPress = useCallback(
+    async (action: (typeof QUICK_ADD_ACTIONS)[number]) => {
+      try {
+        const access = getActionAccess(action.id);
+        const requiresPaidTier = action.requiredTier && action.requiredTier !== 'free';
 
-      if (requiresPaidTier && access.isLoading) {
-        return;
-      }
+        if (requiresPaidTier && access.isLoading) return;
 
-      if (requiresPaidTier && !access.hasAccess) {
-        const upgradeTier = access.upgradeTier || action.requiredTier;
-        const tierLabel = upgradeTier === 'elite' ? 'Elite' : 'Premium';
-        Alert.alert(
-          `MetriqFit ${tierLabel} Required`,
-          `${action.label} is available on ${tierLabel}. Upgrade to unlock this feature.`,
-          [
-            { text: 'Not now', style: 'cancel' },
-            { text: 'Upgrade', onPress: () => router.push('/settings/subscription') },
-          ]
-        );
-        return;
-      }
-
-      if (Platform.OS !== 'web') {
-        await Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-      }
-
-      await trackQuickAddActionSelected(action.id as QuickAddActionId);
-      onClose();
-
-      // Small delay to let sheet close animation start
-      setTimeout(() => {
-        try {
-          router.push(action.route as any);
-        } catch (err) {
-          console.error(`[QuickAdd] Failed to navigate to ${action.route}`, err);
+        if (requiresPaidTier && !access.hasAccess) {
+          const upgradeTier = access.upgradeTier || action.requiredTier;
+          const tierLabel = upgradeTier === 'elite' ? 'Elite' : 'Premium';
+          Alert.alert(
+            `MetriqFit ${tierLabel} Required`,
+            `${action.label} is available on ${tierLabel}. Upgrade to unlock this feature.`,
+            [
+              { text: 'Not now', style: 'cancel' },
+              { text: 'Upgrade', onPress: () => router.push('/settings/subscription') },
+            ]
+          );
+          return;
         }
-      }, 100);
-    } catch (error) {
-      console.error('[QuickAdd] Action failed:', error);
-      onClose(); // Ensure we close even if tracking fails
-    }
-  }, [getActionAccess, onClose, router]);
+
+        if (Platform.OS !== 'web') {
+          await Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+        }
+
+        await trackQuickAddActionSelected(action.id as QuickAddActionId);
+        onClose();
+
+        setTimeout(() => {
+          try {
+            // Modals live at root level — push creates the overlay correctly.
+            // Tab screens must use navigate so the screen is pushed onto that
+            // tab's own stack (not the global stack), ensuring back returns to
+            // the tab's index rather than wherever the user came from.
+            const isModal = (action as any).isModal === true;
+            if (isModal) {
+              router.push(action.route as any);
+            } else {
+              router.navigate(action.route as any);
+            }
+          } catch (err) {
+            console.error(`[QuickAdd] Failed to navigate to ${action.route}`, err);
+          }
+        }, 100);
+      } catch (error) {
+        console.error('[QuickAdd] Action failed:', error);
+        onClose();
+      }
+    },
+    [getActionAccess, onClose, router]
+  );
 
   if (!isVisible) return null;
+
+  // Base bottom position — sits just above the tab bar + safe area
+  const closeBottom = insets.bottom + TAB_BAR_HEIGHT - 32;
 
   return (
     <Modal
@@ -171,157 +203,168 @@ export function QuickAddSheet({ isVisible, onClose }: QuickAddSheetProps) {
       onRequestClose={handleDismiss}
       statusBarTranslucent
     >
+      {/* Backdrop */}
       <Animated.View
-        style={[
-          styles.backdrop,
-          { opacity: backdropOpacity }
-        ]}
+        style={[styles.backdrop, { opacity: backdropAnim }]}
+        pointerEvents="auto"
       >
         <Pressable
-          style={styles.backdropPressable}
+          style={StyleSheet.absoluteFill}
           onPress={handleDismiss}
           accessibilityLabel="Close quick add menu"
           accessibilityRole="button"
         />
       </Animated.View>
 
+      {/* Speed-dial items — absolutely positioned, center-aligned with FAB */}
+      {QUICK_ADD_ACTIONS.map((action, index) => {
+        const access = getActionAccess(action.id);
+        const requiresPaidTier = action.requiredTier && action.requiredTier !== 'free';
+        const isDisabled = requiresPaidTier && access.isLoading;
+        const badgeLabel =
+          (action.requiredTier as string) === 'elite'
+            ? 'ELITE'
+            : (action.requiredTier as string) === 'premium'
+              ? 'PREMIUM'
+              : null;
+
+        // Stack items upward from the close button
+        // Item at the bottom of the list (highest index) is closest to the close button
+        const stackIndex = QUICK_ADD_ACTIONS.length - 1 - index;
+        const itemBottom =
+          closeBottom + CLOSE_BTN_SIZE + 16 + stackIndex * (ICON_BTN_SIZE + ITEM_GAP);
+
+        const anim = itemAnims[index];
+
+        return (
+          <Animated.View
+            key={action.id}
+            style={[
+              styles.itemRow,
+              {
+                bottom: itemBottom,
+                left: 0,
+                right: 0,
+                alignItems: 'center',
+                opacity: anim,
+                transform: [
+                  {
+                    translateY: anim.interpolate({
+                      inputRange: [0, 1],
+                      outputRange: [16, 0],
+                    }),
+                  },
+                  {
+                    scale: anim.interpolate({
+                      inputRange: [0, 1],
+                      outputRange: [0.75, 1],
+                    }),
+                  },
+                ],
+              },
+            ]}
+            pointerEvents={isVisible ? 'auto' : 'none'}
+          >
+            <Pressable
+              style={({ pressed }) => [
+                styles.itemPressable,
+                { opacity: isDisabled ? 0.45 : pressed ? 0.72 : 1 },
+              ]}
+              onPress={() => handleActionPress(action)}
+              disabled={isDisabled}
+              accessibilityLabel={action.label}
+              accessibilityHint={action.description}
+              accessibilityRole="button"
+            >
+              {/* Label pill */}
+              <View style={styles.labelGroup}>
+                {badgeLabel ? (
+                  <View style={[styles.badge, { backgroundColor: `${c.primary}22`, borderColor: `${c.primary}55`, borderWidth: 1 }]}>
+                    <Text
+                      style={[
+                        styles.badgeText,
+                        { color: c.primary, fontFamily: ty.body.familySemibold },
+                      ]}
+                    >
+                      {badgeLabel}
+                    </Text>
+                  </View>
+                ) : null}
+                <Text
+                  style={[
+                    styles.itemLabel,
+                    { color: c.text, fontFamily: ty.body.familySemibold, fontSize: 15 },
+                  ]}
+                >
+                  {action.label}
+                </Text>
+              </View>
+
+              {/* Icon circle */}
+              <View
+                style={[
+                  styles.iconCircle,
+                  {
+                    backgroundColor: c.surface2,
+                    borderColor: `${c.primary}30`,
+                    borderWidth: 1,
+                    shadowColor: c.primary,
+                    shadowOffset: { width: 0, height: 0 },
+                    shadowOpacity: 0.18,
+                    shadowRadius: 8,
+                  },
+                ]}
+              >
+                <TabBarIcon name={action.icon as any} color={c.primary} size={22} />
+              </View>
+            </Pressable>
+          </Animated.View>
+        );
+      })}
+
+      {/* Close / X button — centered, aligned with FAB */}
       <Animated.View
         style={[
-          styles.sheet,
+          styles.closeBtnWrap,
           {
-            backgroundColor: c.surface,
-            borderTopLeftRadius: r.xl,
-            borderTopRightRadius: r.xl,
-            paddingBottom: insets.bottom + s.lg,
-            transform: [{ translateY }],
+            bottom: closeBottom,
+            left: 0,
+            right: 0,
+            opacity: closeBtnAnim,
+            transform: [
+              {
+                scale: closeBtnAnim.interpolate({
+                  inputRange: [0, 1],
+                  outputRange: [0.6, 1],
+                }),
+              },
+              {
+                rotate: closeBtnAnim.interpolate({
+                  inputRange: [0, 1],
+                  outputRange: ['45deg', '0deg'],
+                }),
+              },
+            ],
           },
         ]}
+        pointerEvents="auto"
       >
-        {/* Handle bar */}
-        <View style={styles.handleContainer}>
-          <View style={[styles.handle, { backgroundColor: c.textSubtle }]} />
-        </View>
-
-        {/* Header */}
-        <View style={[styles.header, { paddingHorizontal: s.xl }]}>
-          <Text
-            style={[
-              styles.title,
-              {
-                color: c.text,
-                fontFamily: ty.heading.familySemibold,
-                fontSize: ty.sizes.xl,
-              }
-            ]}
-          >
-            Quick Add
-          </Text>
-          <Pressable
-            onPress={handleDismiss}
-            style={[styles.closeButton, { backgroundColor: c.surface2 }]}
-            accessibilityLabel="Close"
-            accessibilityRole="button"
-          >
-            <TabBarIcon name="close" color={c.textMuted} size={20} />
-          </Pressable>
-        </View>
-
-        {/* Actions List */}
-        <View style={[styles.actionsList, { paddingHorizontal: s.lg }]}>
-          {QUICK_ADD_ACTIONS.map((action, index) => (
-            (() => {
-              const access = getActionAccess(action.id);
-              const requiresPaidTier = action.requiredTier && action.requiredTier !== 'free';
-              const isDisabled = requiresPaidTier && access.isLoading;
-              const badgeLabel = action.requiredTier === 'elite'
-                ? 'ELITE'
-                : action.requiredTier === 'premium'
-                  ? 'PREMIUM'
-                  : null;
-
-              return (
-                <Pressable
-                  key={action.id}
-                  style={({ pressed }) => [
-                    styles.actionItem,
-                    {
-                      opacity: isDisabled ? 0.55 : 1,
-                      backgroundColor: pressed ? state.pressed : 'transparent',
-                      borderRadius: r.md,
-                      marginBottom: index === QUICK_ADD_ACTIONS.length - 1 ? 0 : s.xs,
-                    },
-                  ]}
-                  disabled={isDisabled}
-                  onPress={() => handleActionPress(action)}
-                  accessibilityLabel={action.label}
-                  accessibilityHint={action.description}
-                  accessibilityRole="button"
-                >
-                  <View
-                    style={[
-                      styles.actionIcon,
-                      {
-                        backgroundColor: c.surface2,
-                        borderRadius: r.sm,
-                      }
-                    ]}
-                  >
-                    <TabBarIcon name={action.icon} color={c.primary} size={22} />
-                  </View>
-                  <View style={styles.actionText}>
-                    <Text
-                      style={[
-                        styles.actionLabel,
-                        {
-                          color: c.text,
-                          fontFamily: ty.body.familyMedium,
-                          fontSize: ty.sizes.md,
-                        }
-                      ]}
-                    >
-                      {action.label}
-                    </Text>
-                    <Text
-                      style={[
-                        styles.actionDescription,
-                        {
-                          color: c.textMuted,
-                          fontFamily: ty.body.family,
-                          fontSize: ty.sizes.sm,
-                        }
-                      ]}
-                    >
-                      {action.description}
-                    </Text>
-                  </View>
-                  {badgeLabel ? (
-                    <View
-                      style={[
-                        styles.eliteBadge,
-                        { backgroundColor: c.accent2 }
-                      ]}
-                    >
-                      <Text
-                        style={[
-                          styles.eliteText,
-                          {
-                            color: c.text,
-                            fontFamily: ty.body.familySemibold,
-                            fontSize: ty.sizes.xs,
-                          }
-                        ]}
-                      >
-                        {badgeLabel}
-                      </Text>
-                    </View>
-                  ) : null}
-                  <TabBarIcon name="chevron-forward" color={c.textSubtle} size={18} />
-                </Pressable>
-              );
-            })()
-          ))}
-        </View>
-
+        <Pressable
+          style={({ pressed }) => [
+            styles.closeBtn,
+            {
+              backgroundColor: c.primary,
+              borderColor: c.bg,
+              shadowColor: c.primary,
+              opacity: pressed ? 0.82 : 1,
+            },
+          ]}
+          onPress={handleDismiss}
+          accessibilityLabel="Close quick add"
+          accessibilityRole="button"
+        >
+          <TabBarIcon name="close" color={c.bg} size={26} />
+        </Pressable>
       </Animated.View>
     </Modal>
   );
@@ -330,77 +373,63 @@ export function QuickAddSheet({ isVisible, onClose }: QuickAddSheetProps) {
 const styles = StyleSheet.create({
   backdrop: {
     ...StyleSheet.absoluteFillObject,
-    backgroundColor: 'rgba(0,0,0,0.6)',
+    backgroundColor: 'rgba(3, 6, 13, 0.82)',
   },
-  backdropPressable: {
-    flex: 1,
-  },
-  sheet: {
+  // Each item row — full width, icon pinned to right column
+  itemRow: {
     position: 'absolute',
-    bottom: 0,
-    left: 0,
-    right: 0,
-    minHeight: SHEET_HEIGHT,
   },
-  handleContainer: {
-    alignItems: 'center',
-    paddingVertical: 12,
-  },
-  handle: {
-    width: 40,
-    height: 4,
-    borderRadius: 2,
-    opacity: 0.4,
-  },
-  header: {
+  // [label pill + icon] rendered as a natural-width row, centered by the parent
+  itemPressable: {
     flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'space-between',
+    gap: 12,
+  },
+  labelGroup: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    backgroundColor: 'rgba(10, 17, 40, 0.72)',
+    paddingHorizontal: 14,
     paddingVertical: 8,
-    marginBottom: 8,
+    borderRadius: 100,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: 'rgba(255,255,255,0.08)',
   },
-  title: {
-    letterSpacing: -0.3,
+  itemLabel: {
+    letterSpacing: 0.1,
   },
-  closeButton: {
-    width: 36,
-    height: 36,
-    borderRadius: 18,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  actionsList: {
-    flex: 1,
-  },
-  actionItem: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingVertical: 12,
-    paddingHorizontal: 12,
-  },
-  actionIcon: {
-    width: 44,
-    height: 44,
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginRight: 14,
-  },
-  actionText: {
-    flex: 1,
-  },
-  actionLabel: {
-    marginBottom: 2,
-  },
-  actionDescription: {
-    opacity: 0.85,
-  },
-  eliteBadge: {
-    paddingHorizontal: 8,
-    paddingVertical: 4,
+  badge: {
+    paddingHorizontal: 6,
+    paddingVertical: 2,
     borderRadius: 4,
-    marginRight: 8,
   },
-  eliteText: {
-    letterSpacing: 0.5,
+  badgeText: {
+    fontSize: 9,
+    letterSpacing: 0.8,
+  },
+  iconCircle: {
+    width: ICON_BTN_SIZE,
+    height: ICON_BTN_SIZE,
+    borderRadius: ICON_BTN_SIZE / 2,
+    alignItems: 'center',
+    justifyContent: 'center',
+    elevation: 4,
+  },
+  closeBtnWrap: {
+    position: 'absolute',
+    alignItems: 'center',
+  },
+  closeBtn: {
+    width: CLOSE_BTN_SIZE,
+    height: CLOSE_BTN_SIZE,
+    borderRadius: CLOSE_BTN_SIZE / 2,
+    borderWidth: 4,
+    alignItems: 'center',
+    justifyContent: 'center',
+    elevation: 12,
+    shadowOffset: { width: 0, height: 0 },
+    shadowOpacity: 0.55,
+    shadowRadius: 16,
   },
 });

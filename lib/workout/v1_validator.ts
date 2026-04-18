@@ -60,11 +60,12 @@ function validateEquipment(
       return true; // All gear available
       
     case SessionEnvironment.AptHotel:
-      // Typically no barbells or heavy machines, but has DBs and Cables
+      // Typically no barbells, but has DBs, Machines, and Cables
       return [
         EquipmentCategory.DB, 
         EquipmentCategory.Cable, 
         EquipmentCategory.BW, 
+        EquipmentCategory.Machine,
         EquipmentCategory.Misc
       ].includes(category);
 

@@ -21,6 +21,7 @@ import type { MacroTargets } from './target-calculator';
 import {
   type FoodItem,
   type MealTiming,
+  type GoalPreference,
   proteinFoods,
   carbFoods,
   fatFoods,
@@ -37,7 +38,7 @@ import {
   isTrainingMeal,
 } from './meal-timing-engine';
 
-export type GoalType = 'bulk' | 'cut';
+export type GoalType = 'bulk' | 'cut' | 'maintain' | 'recomp';
 
 export interface MealGenerationConfig {
   // User preferences
@@ -51,7 +52,8 @@ export interface MealGenerationConfig {
   cookingLevel: CookingLevel;
   
   // Targets
-  dailyTargets: MacroTargets;
+  trainingDayTargets: MacroTargets;
+  restDayTargets: MacroTargets;
   
   // Optional
   customWakeTime?: string;
@@ -102,6 +104,18 @@ export interface GeneratedDayPlan {
     carbs: number;
     fat: number;
   };
+}
+
+// ============================================
+// GOAL MATCHING HELPER
+// ============================================
+
+function foodMatchesGoal(foodGoal: GoalPreference, userGoal: GoalType): boolean {
+  if (foodGoal === 'both') return true;
+  if (userGoal === 'bulk') return foodGoal === 'bulk';
+  if (userGoal === 'cut') return foodGoal === 'cut';
+  // maintain and recomp accept any food preference
+  return true;
 }
 
 // ============================================
@@ -166,15 +180,13 @@ function selectProtein(
   candidates = candidates.filter(p => p.timingAppropriate.includes(timing));
   
   // Filter by goal preference
-  candidates = candidates.filter(p => 
-    p.goalPreference === goal || p.goalPreference === 'both'
-  );
+  candidates = candidates.filter(p => foodMatchesGoal(p.goalPreference, goal));
   
   if (candidates.length === 0) {
     // Fallback: any protein that fits timing
     candidates = proteinFoods.filter(p => 
       p.timingAppropriate.includes(timing) &&
-      (p.goalPreference === goal || p.goalPreference === 'both')
+      foodMatchesGoal(p.goalPreference, goal)
     );
   }
   
@@ -190,7 +202,14 @@ function selectProtein(
  * Get appropriate form for protein based on goal
  */
 function getProteinForm(protein: FoodItem, goal: GoalType): string {
-  const goalForm = protein.defaultFormForGoal[goal];
+  // Map maintain/recomp to a concrete form since the DB only stores bulk/cut
+  const mappedGoal: 'bulk' | 'cut' =
+    goal === 'bulk' ? 'bulk' :
+    goal === 'cut' ? 'cut' :
+    goal === 'recomp' ? 'cut' : // lean form for recomp
+    'bulk'; // maintain defaults to whole/bulk form
+  
+  const goalForm = protein.defaultFormForGoal[mappedGoal];
   
   if (protein.availableForms.includes(goalForm)) {
     return goalForm;
@@ -229,29 +248,40 @@ function selectCarb(
     );
   } else if (slot === 'breakfast') {
     // Breakfast: based on goal
-    if (goal === 'cut') {
-      // Cutting: slow-acting, high satiety
+    if (goal === 'cut' || goal === 'recomp') {
+      // Cutting / recomp: slow-acting, high satiety
       candidates = carbFoods.filter(c => 
-        c.digestionSpeed === 'slow' || c.tags.includes('high-fiber')
+        c.digestionSpeed === 'slow' || c.tags.includes('high-fiber') || c.goalPreference === 'both'
       );
-    } else {
+    } else if (goal === 'bulk') {
       // Bulking: any good carb
       candidates = carbFoods.filter(c => 
         c.goalPreference === 'bulk' || c.goalPreference === 'both'
       );
+    } else {
+      // Maintenance: balanced
+      candidates = carbFoods.filter(c => foodMatchesGoal(c.goalPreference, goal));
     }
   } else {
     // Regular meals: goal-based
     if (goal === 'cut') {
       // Cutting: prefer vegetables and low-calorie options
       candidates = carbFoods.filter(c => 
-        c.goalPreference === 'cut' || c.tags.includes('vegetable')
+        c.goalPreference === 'cut' || c.tags.includes('vegetable') || c.goalPreference === 'both'
       );
-    } else {
+    } else if (goal === 'recomp') {
+      // Recomp: favor balanced and cut-friendly carbs
+      candidates = carbFoods.filter(c => 
+        c.goalPreference !== 'bulk' || c.tags.includes('high-fiber')
+      );
+    } else if (goal === 'bulk') {
       // Bulking: energy-dense carbs
       candidates = carbFoods.filter(c => 
         c.goalPreference === 'bulk' || c.goalPreference === 'both'
       );
+    } else {
+      // Maintenance: balanced
+      candidates = carbFoods.filter(c => foodMatchesGoal(c.goalPreference, goal));
     }
   }
   
@@ -282,8 +312,8 @@ function selectFat(
   
   let candidates = fatFoods;
   
-  if (goal === 'cut') {
-    // Cutting: controlled portions, avoid calorie bombs
+  if (goal === 'cut' || goal === 'recomp') {
+    // Cutting / recomp: controlled portions, avoid calorie bombs
     candidates = fatFoods.filter(f => 
       !f.tags.includes('calorie-dense') || f.id === 'olive_oil'
     );
@@ -558,9 +588,10 @@ export function generateDayMealPlan(
   const mealSlots = calculateMealTimes(timeConfig);
   
   // Calculate macro distribution
+  const dailyTargets = isTrainingDay ? config.trainingDayTargets : config.restDayTargets;
   const macroDistribution = calculateMealMacros(
     mealSlots,
-    config.dailyTargets,
+    dailyTargets,
     isTrainingDay
   );
   

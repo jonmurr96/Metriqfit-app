@@ -17,6 +17,8 @@ import { TabBarIcon } from '../../../components/navigation/TabBarIcon';
 import { getFoodById, calculateMacros, logFood } from '../../../services/nutritionService';
 import { GlassCard } from '../../../components/premium/GlassCard';
 import { MacroRow } from '../../../components/nutrition/MacroRow';
+import { useProfile } from '../../../hooks/useUser';
+import { formatMacroDisplay, detectFoodCategory, getDefaultFoodMeasurement } from '../../../lib/nutrition/displayUnits';
 
 export default function FoodDetailScreen() {
   const { c, s, ty, r, shadow } = useTokens();
@@ -63,6 +65,10 @@ export default function FoodDetailScreen() {
   const goToNutritionHome = () => {
     router.replace('/(tabs)/nutrition');
   };
+
+  const { data: profile } = useProfile();
+  const foodMeasurement = getDefaultFoodMeasurement(profile?.unit_system);
+  const displayFoodMeasurement = (profile?.display_preferences?.food_measurement as any) ?? foodMeasurement;
 
   const [grams, setGrams] = useState('100');
   const [mealSlot, setMealSlot] = useState<'breakfast' | 'lunch' | 'dinner' | 'snack'>(normalizedMealSlot);
@@ -382,6 +388,11 @@ export default function FoodDetailScreen() {
               />
               <Text style={{ color: c.textMuted, fontSize: ty.sizes.lg, marginLeft: 8 }}>g</Text>
             </View>
+            {displayFoodMeasurement === 'imperial_mixed' && detectFoodCategory(food?.name || '') === 'protein' && (
+              <Text style={{ color: c.textMuted, fontFamily: ty.body.family, fontSize: ty.sizes.sm, marginTop: 4 }}>
+                ≈ {((parseFloat(grams) || 0) * (1 / 28.3495)).toFixed(1)} oz
+              </Text>
+            )}
           </View>
         </GlassCard>
 
@@ -404,9 +415,9 @@ export default function FoodDetailScreen() {
               emphasis="soft"
               items={[
                 { macro: 'calories', value: macros.calories, unit: 'kcal' },
-                { macro: 'protein', value: macros.protein, unit: 'g' },
-                { macro: 'carbs', value: macros.carbs, unit: 'g' },
-                { macro: 'fat', value: macros.fat, unit: 'g' },
+                { macro: 'protein', value: parseFloat(formatMacroDisplay(macros.protein, 'protein', displayFoodMeasurement).value), unit: formatMacroDisplay(macros.protein, 'protein', displayFoodMeasurement).unit },
+                { macro: 'carbs', value: parseFloat(formatMacroDisplay(macros.carbs, 'carbs', displayFoodMeasurement).value), unit: formatMacroDisplay(macros.carbs, 'carbs', displayFoodMeasurement).unit },
+                { macro: 'fat', value: parseFloat(formatMacroDisplay(macros.fat, 'fat', displayFoodMeasurement).value), unit: formatMacroDisplay(macros.fat, 'fat', displayFoodMeasurement).unit },
               ]}
             />
 
@@ -546,7 +557,14 @@ export default function FoodDetailScreen() {
                 }}
                 numberOfLines={1}
               >
-                Log {grams}g to {getMealSlotLabel(mealSlot)}
+                {(() => {
+                  const category = detectFoodCategory(food?.name || '');
+                  const isImperialProtein = displayFoodMeasurement === 'imperial_mixed' && category === 'protein';
+                  const gramsNum = parseFloat(grams) || 0;
+                  const displayValue = isImperialProtein ? (gramsNum / 28.3495).toFixed(1) : grams;
+                  const unit = isImperialProtein ? 'oz' : 'g';
+                  return `Log ${displayValue}${unit} to ${getMealSlotLabel(mealSlot)}`;
+                })()}
               </Text>
             </>
           )}

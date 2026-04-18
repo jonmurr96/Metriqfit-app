@@ -6,6 +6,8 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useTokens } from '../../lib/theme';
 import { TabBarIcon } from '../../components/navigation/TabBarIcon';
 import { useProfile, useUpdateProfile } from '../../hooks/useUser';
+import { FoodMeasurement } from '../../lib/nutrition/displayUnits';
+import { DisplayPreferences } from '../../lib/preferences';
 
 export default function UnitsSettingsScreen() {
   const { c, s, ty, r } = useTokens();
@@ -16,12 +18,14 @@ export default function UnitsSettingsScreen() {
   const updateProfile = useUpdateProfile();
 
   const currentUnit = profile?.unit_system ?? 'imperial';
+  const currentFoodMeasurement: FoodMeasurement =
+    profile?.display_preferences?.food_measurement ??
+    (currentUnit === 'imperial' ? 'imperial_mixed' : 'metric');
 
-  const handleSelect = async (unit: 'imperial' | 'metric') => {
+  const handleSelectUnit = async (unit: 'imperial' | 'metric') => {
     if (unit === currentUnit || updateProfile.isPending) {
       return;
     }
-
     try {
       await updateProfile.mutateAsync({ unit_system: unit });
       Alert.alert('Units updated', `Now using ${unit === 'imperial' ? 'Imperial (lbs)' : 'Metric (kg)'} units.`);
@@ -30,20 +34,36 @@ export default function UnitsSettingsScreen() {
     }
   };
 
+  const handleSelectFoodMeasurement = async (measurement: FoodMeasurement) => {
+    if (measurement === currentFoodMeasurement || updateProfile.isPending) {
+      return;
+    }
+    try {
+      await updateProfile.mutateAsync({
+        display_preferences: {
+          ...(profile?.display_preferences ?? {}),
+          food_measurement: measurement,
+        } as DisplayPreferences,
+      });
+    } catch (error: any) {
+      Alert.alert('Update failed', error?.message || 'Could not save food measurement preference.');
+    }
+  };
+
   const UnitCard = ({
     title,
     subtitle,
-    value,
+    selected,
+    onPress,
   }: {
     title: string;
     subtitle: string;
-    value: 'imperial' | 'metric';
+    selected: boolean;
+    onPress: () => void;
   }) => {
-    const selected = currentUnit === value;
-
     return (
       <Pressable
-        onPress={() => handleSelect(value)}
+        onPress={onPress}
         style={[
           styles.option,
           {
@@ -76,20 +96,41 @@ export default function UnitsSettingsScreen() {
         <View style={styles.backButton} />
       </View>
 
-      <View style={{ paddingHorizontal: s.lg, marginTop: s.xl, gap: s.md }}>
-        <UnitCard
-          title="Imperial"
-          subtitle="Weight in lbs, height in ft/in"
-          value="imperial"
-        />
-        <UnitCard
-          title="Metric"
-          subtitle="Weight in kg, height in cm"
-          value="metric"
-        />
+      <View style={{ paddingHorizontal: s.lg, marginTop: s.xl, gap: s.xl }}>
+        <View style={{ gap: s.md }}>
+          <Text style={{ color: c.text, fontFamily: ty.heading.familySemibold, fontSize: 16 }}>Body units</Text>
+          <UnitCard
+            title="Imperial"
+            subtitle="Weight in lbs, height in ft/in"
+            selected={currentUnit === 'imperial'}
+            onPress={() => handleSelectUnit('imperial')}
+          />
+          <UnitCard
+            title="Metric"
+            subtitle="Weight in kg, height in cm"
+            selected={currentUnit === 'metric'}
+            onPress={() => handleSelectUnit('metric')}
+          />
+        </View>
 
-        <Text style={{ color: c.textMuted, fontFamily: ty.body.family, marginTop: s.md, lineHeight: 20 }}>
-          We store canonical values and convert display units automatically.
+        <View style={{ gap: s.md }}>
+          <Text style={{ color: c.text, fontFamily: ty.heading.familySemibold, fontSize: 16 }}>Food quantities</Text>
+          <UnitCard
+            title="Metric"
+            subtitle="Grams for everything"
+            selected={currentFoodMeasurement === 'metric'}
+            onPress={() => handleSelectFoodMeasurement('metric')}
+          />
+          <UnitCard
+            title="Imperial"
+            subtitle="Ounces for protein, grams for carbs & fats"
+            selected={currentFoodMeasurement === 'imperial_mixed'}
+            onPress={() => handleSelectFoodMeasurement('imperial_mixed')}
+          />
+        </View>
+
+        <Text style={{ color: c.textMuted, fontFamily: ty.body.family, lineHeight: 20 }}>
+          We store canonical values in grams and convert display units automatically.
         </Text>
 
         {updateProfile.isPending && (

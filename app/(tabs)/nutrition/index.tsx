@@ -13,16 +13,17 @@ import { TodayMealPlanList } from '../../../components/nutrition/TodayMealPlanLi
 import { RingIconButton } from '../../../components/common/RingIconButton';
 import { useDailyWaterSummary } from '../../../hooks/useWater';
 import { useCopyMeals, useDailyMeals, useDailyTotals, useLogPlannedMeal } from '../../../hooks/useNutrition';
-import { getUserTargets, useStreak } from '../../../hooks/useUser';
+import { getUserTargets, useStreak, useProfile } from '../../../hooks/useUser';
 import { useActiveNutritionPlan, useNutritionPlanDay } from '../../../hooks/usePlan';
 import { useFormattedMealTimes } from '../../../hooks/useMealTimes';
 import { usePrepCoachState } from '../../../hooks/usePrepCoach';
 import { buildHomeMealPreviewItems } from '../../../lib/nutrition/home-meal-preview';
+import { getDefaultFoodMeasurement } from '../../../lib/nutrition/displayUnits';
 import { getMealSlotLabel, MEAL_SLOT_ORDER } from '../../../lib/nutrition/meal-slots';
 import type { MealSlot } from '../../../services/nutritionService';
 import { toLocalDateKey } from '../../../lib/home/dashboard-state';
 
-import { VoiceInput } from '../../../components/ai/VoiceInput';
+
 
 export default function NutritionHomeScreen() {
   const { c, s, ty, r, animation } = useTokens();
@@ -31,6 +32,7 @@ export default function NutritionHomeScreen() {
   const { user } = useAuth();
   const { data: streak } = useStreak();
   const { data: prepState } = usePrepCoachState();
+  const { data: profile } = useProfile();
 
   const { mutate: copyMeals } = useCopyMeals();
   const logPlannedMealMutation = useLogPlannedMeal();
@@ -63,17 +65,12 @@ export default function NutritionHomeScreen() {
   // Fetch actual logs for today
   const { data: dailyMeals } = useDailyMeals(today);
 
-  const mealPreviewItems = React.useMemo(
-    () => buildHomeMealPreviewItems(dayPlan?.meals, dailyMeals),
-    [dayPlan?.meals, dailyMeals],
-  );
+  const displayFoodMeasurement = (profile?.display_preferences?.food_measurement as any) ?? getDefaultFoodMeasurement(profile?.unit_system);
 
-  const handleTranscription = (text: string) => {
-    router.push({
-      pathname: '/(tabs)/nutrition/food-search',
-      params: { query: text, autoAdd: 'true' }
-    });
-  };
+  const mealPreviewItems = React.useMemo(
+    () => buildHomeMealPreviewItems(dayPlan?.meals, dailyMeals, displayFoodMeasurement),
+    [dayPlan?.meals, dailyMeals, displayFoodMeasurement],
+  );
 
   const handleCopyYesterday = () => {
     const yesterday = new Date();
@@ -154,6 +151,7 @@ export default function NutritionHomeScreen() {
         isLogged: preview?.isLogged || false,
         planMealId: preview?.planMealId,
         hasPlannedMeal: !!preview?.planMealId,
+        foods: preview?.foods || [],
       };
     });
   }, [mealPreviewItems, mealTimes, slotTimeMap]);
@@ -266,8 +264,6 @@ export default function NutritionHomeScreen() {
         </View>
 
         <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12 }}>
-          <VoiceInput onTranscription={handleTranscription} />
-
           {/* Ring-style Search button */}
           <Pressable
             style={({ pressed }) => [

@@ -10,6 +10,7 @@
  */
 
 import { supabase } from '../lib/supabase';
+import { invokeFunction } from '../lib/supabase/invokeFunction';
 import { DeviceEventEmitter } from 'react-native';
 import {
   getLevelFromXP,
@@ -52,11 +53,13 @@ export async function awardXP(
     // This safely catches and initializes new users, preventing the Edge Function from throwing a 404
     await getUserXPLevel(userId);
 
-    const { data, error } = await supabase.functions.invoke('award-xp', {
-      body: { userId, eventType, metadata },
-    });
+    const { data, parsedError, rawError } = await invokeFunction(() =>
+      supabase.functions.invoke('award-xp', {
+        body: { userId, eventType, metadata },
+      })
+    );
 
-    if (error) throw error;
+    if (rawError) throw new Error(parsedError?.error || parsedError?.message || rawError?.message || 'Failed to award XP');
 
     const result = data as XPAwardResult;
 
@@ -266,11 +269,13 @@ export async function updateStreak(
   try {
     await ensureUserStreakRow(userId, streakType);
 
-    const { data, error } = await supabase.functions.invoke('update-streak', {
-      body: { userId, streakType, activityDate },
-    });
+    const { data, parsedError, rawError } = await invokeFunction(() =>
+      supabase.functions.invoke('update-streak', {
+        body: { userId, streakType, activityDate },
+      })
+    );
 
-    if (error) throw error;
+    if (rawError) throw new Error(parsedError?.error || parsedError?.message || rawError?.message || 'Failed to update streak');
 
     return data as StreakUpdateResult;
   } catch (error) {
@@ -410,11 +415,13 @@ export async function useFreezeToken(
 ): Promise<boolean> {
   try {
     // Call Edge Function to handle freeze token logic
-    const { data, error } = await supabase.functions.invoke('use-freeze-token', {
-      body: { userId, streakType, date },
-    });
+    const { data, parsedError, rawError } = await invokeFunction(() =>
+      supabase.functions.invoke('use-freeze-token', {
+        body: { userId, streakType, date },
+      })
+    );
 
-    if (error) throw error;
+    if (rawError) throw new Error(parsedError?.error || parsedError?.message || rawError?.message || 'Failed to use freeze token');
 
     return data?.success || false;
   } catch (error) {
@@ -509,11 +516,13 @@ export async function checkAchievements(
   metadata?: Record<string, any>
 ): Promise<Achievement[]> {
   try {
-    const { data, error } = await supabase.functions.invoke('check-achievements', {
-      body: { userId, eventType, metadata },
-    });
+    const { data, parsedError, rawError } = await invokeFunction(() =>
+      supabase.functions.invoke('check-achievements', {
+        body: { userId, eventType, metadata },
+      })
+    );
 
-    if (error) throw error;
+    if (rawError) throw new Error(parsedError?.error || parsedError?.message || rawError?.message || 'Failed to check achievements');
 
     return (data?.unlocked || []) as Achievement[];
   } catch (error) {

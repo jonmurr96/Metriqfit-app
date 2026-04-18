@@ -2,6 +2,7 @@ import * as ExpoLinking from 'expo-linking';
 import { Platform, Share } from 'react-native';
 
 import { supabase } from '../lib/supabase';
+import { invokeFunction } from '../lib/supabase/invokeFunction';
 import { getSubscription } from './subscriptionService';
 import { getMealTimes } from './mealTimesService';
 import {
@@ -82,11 +83,13 @@ export async function exportMyData(userId: string) {
 }
 
 export async function deleteMyAccount() {
-  const { data, error } = await supabase.functions.invoke('delete-account', {
-    body: { confirm: true },
-  });
+  const { data, parsedError, rawError } = await invokeFunction(() =>
+    supabase.functions.invoke('delete-account', {
+      body: { confirm: true },
+    })
+  );
 
-  if (error) throw error;
+  if (rawError) throw new Error(parsedError?.error || parsedError?.message || rawError?.message || 'Account deletion failed.');
   if (!data?.success) {
     throw new Error(data?.error || 'Account deletion failed.');
   }

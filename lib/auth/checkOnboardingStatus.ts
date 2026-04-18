@@ -4,6 +4,7 @@ export interface OnboardingStatus {
   hasCompletedOnboarding: boolean;
   hasTargets: boolean;
   hasPlans: boolean;
+  hasSubscription: boolean;
 }
 
 /**
@@ -14,7 +15,7 @@ export interface OnboardingStatus {
 export async function checkOnboardingStatus(
   userId: string
 ): Promise<OnboardingStatus> {
-  const [answersRes, targetsRes, plansRes] = await Promise.all([
+  const [answersRes, targetsRes, plansRes, subscriptionRes] = await Promise.all([
     supabase
       .from('onboarding_answers')
       .select('completed_at')
@@ -31,6 +32,11 @@ export async function checkOnboardingStatus(
       .eq('user_id', userId)
       .eq('is_active', true)
       .maybeSingle(),
+    supabase
+      .from('subscriptions')
+      .select('id')
+      .eq('user_id', userId)
+      .maybeSingle(),
   ]);
 
   return {
@@ -38,5 +44,6 @@ export async function checkOnboardingStatus(
       !answersRes.error && !!(answersRes.data as any)?.completed_at,
     hasTargets: !targetsRes.error && !!targetsRes.data,
     hasPlans: !plansRes.error && !!plansRes.data,
+    hasSubscription: !subscriptionRes.error && !!subscriptionRes.data,
   };
 }

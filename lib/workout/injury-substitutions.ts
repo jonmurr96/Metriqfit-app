@@ -422,7 +422,7 @@ export function findSubstitutionRules(
   
   SUBSTITUTION_RULES.forEach((rule) => {
     // Check if rule applies to any of the user's injuries
-    const injuryMatch = rule.forInjuries.some((inj) => injuries.includes(ij));
+    const injuryMatch = rule.forInjuries.some((inj) => injuries.includes(inj));
     if (!injuryMatch) return;
     
     // Check if exercise matches the rule pattern

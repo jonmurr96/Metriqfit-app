@@ -119,7 +119,7 @@ export function resolveCoachDayRecipe(input: ResolveCoachDayRecipeInput): CoachD
   const explicitSlots = EXPLICIT_SLOT_OVERRIDES[recipeId]?.map((slot, index) => ({
     slot,
     priority: index < 2 ? 1 : index < 4 ? 2 : 3,
-  }));
+  })) as Array<{ slot: PatternSlot; priority: 1 | 2 | 3 }> | undefined;
 
   if (explicitSlots?.length) {
     return {

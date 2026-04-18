@@ -79,10 +79,12 @@ function humanGoal(value: string | undefined | null) {
   const map: Record<string, string> = {
     lose_weight: 'fat loss',
     gain_weight: 'lean mass gain',
+    build_muscle: 'lean mass gain',
     maintain_weight: 'weight maintenance',
     recomp: 'body recomposition',
     increase_endurance: 'endurance',
     general_fitness: 'general fitness',
+    get_fitter: 'general fitness',
   };
   return map[String(value || '')] || 'general fitness';
 }

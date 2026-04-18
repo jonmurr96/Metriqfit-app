@@ -1,13 +1,10 @@
-import React, { useState } from 'react';
+import React from 'react';
 import {
   View,
   Text,
   StyleSheet,
   ScrollView,
   Pressable,
-  TextInput,
-  KeyboardAvoidingView,
-  Platform,
 } from 'react-native';
 import { router } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -47,12 +44,9 @@ type ExperienceConfig = {
 };
 
 const GOALS: GoalConfig[] = [
-  { value: 'lose_weight',       label: 'Lose Weight',          description: 'Burn fat, get lean',           icon: 'flame-outline',        color: ORANGE },
-  { value: 'gain_weight',       label: 'Build Mass',           description: 'Gain size and strength',       icon: 'trending-up-outline',  color: '#22C55E' },
-  { value: 'maintain_weight',   label: 'Maintain',             description: 'Stay at your current weight',  icon: 'analytics-outline',    color: CYAN },
-  { value: 'recomp',            label: 'Body Recomp',          description: 'Lose fat, build muscle',       icon: 'body-outline',         color: PURPLE },
-  { value: 'increase_endurance',label: 'Endurance',            description: 'Cardio & stamina focus',       icon: 'heart-outline',        color: '#EF4444' },
-  { value: 'general_fitness',   label: 'General Fitness',      description: 'Get healthier overall',        icon: 'fitness-outline',      color: '#38BDF8' },
+  { value: 'lose_weight',  label: 'Lose Weight', description: 'Burn fat, get lean',         icon: 'flame-outline',       color: ORANGE },
+  { value: 'build_muscle', label: 'Build Muscle', description: 'Gain size and strength',     icon: 'trending-up-outline', color: '#22C55E' },
+  { value: 'get_fitter',   label: 'Get Fitter',  description: 'Get healthier overall',      icon: 'fitness-outline',     color: '#38BDF8' },
 ];
 
 const ACTIVITIES: ActivityConfig[] = [
@@ -70,7 +64,15 @@ const EXPERIENCE: ExperienceConfig[] = [
 
 export default function GoalsScreen() {
   const { data, updateData, setCurrentStep } = useOnboarding();
-  const [stepsInput, setStepsInput] = useState(data.avg_steps?.toString() || '');
+
+  // Backward-compat: map old goal values to simplified UI values once
+  React.useEffect(() => {
+    const g = data.goal_type;
+    if (g === 'gain_weight') updateData({ goal_type: 'build_muscle' });
+    else if (g && ['maintain_weight', 'recomp', 'increase_endurance', 'general_fitness'].includes(g)) {
+      updateData({ goal_type: 'get_fitter' });
+    }
+  }, []);
 
   const isValid =
     !!data.goal_type &&
@@ -89,144 +91,113 @@ export default function GoalsScreen() {
     router.back();
   };
 
-  const handleStepsChange = (val: string) => {
-    setStepsInput(val);
-    const parsed = parseInt(val, 10);
-    updateData({ avg_steps: isNaN(parsed) ? null : parsed, step_tracking: !isNaN(parsed) });
-  };
-
   return (
     <SafeAreaView style={styles.container} edges={['top']}>
-      <KeyboardAvoidingView style={styles.flex} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
-        <PremiumHeader currentStep={5} totalSteps={7} />
+      <PremiumHeader currentStep={5} totalSteps={7} />
 
-        <ScrollView
-          contentContainerStyle={styles.scrollContent}
-          showsVerticalScrollIndicator={false}
-          keyboardShouldPersistTaps="handled"
+      <ScrollView
+        contentContainerStyle={styles.scrollContent}
+        showsVerticalScrollIndicator={false}
+        keyboardShouldPersistTaps="handled"
+      >
+        <MotiView
+          from={{ opacity: 0, translateY: 24 }}
+          animate={{ opacity: 1, translateY: 0 }}
+          transition={{ type: 'timing', duration: 400 } as any}
+          style={styles.content}
         >
-          <MotiView
-            from={{ opacity: 0, translateY: 24 }}
-            animate={{ opacity: 1, translateY: 0 }}
-            transition={{ type: 'timing', duration: 400 } as any}
-            style={styles.content}
-          >
-            {/* Title */}
-            <View style={styles.titleBlock}>
-              <Text style={styles.titleLine1}>What's your</Text>
-              <Text style={[styles.titleAccent, { color: CYAN }]}>main goal?</Text>
-            </View>
+          {/* Title */}
+          <View style={styles.titleBlock}>
+            <Text style={styles.titleLine1}>What's your</Text>
+            <Text style={[styles.titleAccent, { color: CYAN }]}>main goal?</Text>
+          </View>
 
-            {/* Goals */}
-            <View style={styles.goalGrid}>
-              {GOALS.map((g) => {
-                const sel = data.goal_type === g.value;
+          {/* Goals */}
+          <View style={styles.goalGrid}>
+            {GOALS.map((g) => {
+              const sel = data.goal_type === g.value;
+              return (
+                <Pressable
+                  key={g.value}
+                  style={[styles.goalCard, sel && { borderColor: g.color, backgroundColor: `${g.color}10` }]}
+                  onPress={() => updateData({ goal_type: g.value })}
+                >
+                  <View style={[styles.goalIcon, { backgroundColor: sel ? g.color : `${g.color}20` }]}>
+                    <Ionicons name={g.icon} size={22} color={sel ? BG : g.color} />
+                  </View>
+                  <Text style={[styles.goalLabel, sel && { color: g.color }]}>{g.label}</Text>
+                  <Text style={styles.goalDesc}>{g.description}</Text>
+                  {sel && <View style={[styles.goalDot, { backgroundColor: g.color }]} />}
+                </Pressable>
+              );
+            })}
+          </View>
+
+          {/* Activity Level */}
+          <View style={styles.section}>
+            <Text style={styles.sectionLabel}>Daily Activity Level</Text>
+            <Text style={styles.sectionHint}>Outside of structured workouts</Text>
+            {ACTIVITIES.map((a) => {
+              const sel = data.activity_level === a.value;
+              return (
+                <Pressable
+                  key={a.value}
+                  style={[styles.listCard, sel && styles.listCardSelected]}
+                  onPress={() => updateData({ activity_level: a.value })}
+                >
+                  <View style={[styles.listIcon, sel && styles.listIconSelected]}>
+                    <Ionicons name={a.icon} size={20} color={sel ? BG : `${CYAN}80`} />
+                  </View>
+                  <View style={styles.listText}>
+                    <Text style={[styles.listLabel, sel && styles.listLabelSelected]}>{a.label}</Text>
+                    <Text style={styles.listDesc}>{a.description}</Text>
+                  </View>
+                  {sel && (
+                    <View style={styles.radioSelected}>
+                      <View style={styles.radioDot} />
+                    </View>
+                  )}
+                  {!sel && <View style={styles.radio} />}
+                </Pressable>
+              );
+            })}
+          </View>
+
+          {/* Experience Level */}
+          <View style={styles.section}>
+            <Text style={styles.sectionLabel}>Training Experience</Text>
+            <Text style={styles.sectionHint}>Affects your protein targets</Text>
+            <View style={styles.expRow}>
+              {EXPERIENCE.map((e) => {
+                const sel = data.experience_level === e.value;
                 return (
                   <Pressable
-                    key={g.value}
-                    style={[styles.goalCard, sel && { borderColor: g.color, backgroundColor: `${g.color}10` }]}
-                    onPress={() => updateData({ goal_type: g.value })}
+                    key={e.value}
+                    style={[styles.expCard, sel && { borderColor: e.color, backgroundColor: `${e.color}10` }]}
+                    onPress={() => updateData({ experience_level: e.value })}
                   >
-                    <View style={[styles.goalIcon, { backgroundColor: sel ? g.color : `${g.color}20` }]}>
-                      <Ionicons name={g.icon} size={22} color={sel ? BG : g.color} />
-                    </View>
-                    <Text style={[styles.goalLabel, sel && { color: g.color }]}>{g.label}</Text>
-                    <Text style={styles.goalDesc}>{g.description}</Text>
-                    {sel && <View style={[styles.goalDot, { backgroundColor: g.color }]} />}
+                    <Text style={[styles.expLabel, sel && { color: e.color }]}>{e.label}</Text>
+                    <Text style={styles.expSub}>{e.sub}</Text>
+                    {sel && <View style={[styles.expDot, { backgroundColor: e.color }]} />}
                   </Pressable>
                 );
               })}
             </View>
+          </View>
+        </MotiView>
+      </ScrollView>
 
-            {/* Activity Level */}
-            <View style={styles.section}>
-              <Text style={styles.sectionLabel}>Daily Activity Level</Text>
-              <Text style={styles.sectionHint}>Outside of structured workouts</Text>
-              {ACTIVITIES.map((a) => {
-                const sel = data.activity_level === a.value;
-                return (
-                  <Pressable
-                    key={a.value}
-                    style={[styles.listCard, sel && styles.listCardSelected]}
-                    onPress={() => updateData({ activity_level: a.value })}
-                  >
-                    <View style={[styles.listIcon, sel && styles.listIconSelected]}>
-                      <Ionicons name={a.icon} size={20} color={sel ? BG : `${CYAN}80`} />
-                    </View>
-                    <View style={styles.listText}>
-                      <Text style={[styles.listLabel, sel && styles.listLabelSelected]}>{a.label}</Text>
-                      <Text style={styles.listDesc}>{a.description}</Text>
-                    </View>
-                    {sel && (
-                      <View style={styles.radioSelected}>
-                        <View style={styles.radioDot} />
-                      </View>
-                    )}
-                    {!sel && <View style={styles.radio} />}
-                  </Pressable>
-                );
-              })}
-            </View>
-
-            {/* Experience Level */}
-            <View style={styles.section}>
-              <Text style={styles.sectionLabel}>Training Experience</Text>
-              <Text style={styles.sectionHint}>Affects your protein targets</Text>
-              <View style={styles.expRow}>
-                {EXPERIENCE.map((e) => {
-                  const sel = data.experience_level === e.value;
-                  return (
-                    <Pressable
-                      key={e.value}
-                      style={[styles.expCard, sel && { borderColor: e.color, backgroundColor: `${e.color}10` }]}
-                      onPress={() => updateData({ experience_level: e.value })}
-                    >
-                      <Text style={[styles.expLabel, sel && { color: e.color }]}>{e.label}</Text>
-                      <Text style={styles.expSub}>{e.sub}</Text>
-                      {sel && <View style={[styles.expDot, { backgroundColor: e.color }]} />}
-                    </Pressable>
-                  );
-                })}
-              </View>
-            </View>
-
-            {/* Avg Steps (optional) */}
-            <View style={styles.section}>
-              <Text style={styles.sectionLabel}>Average Daily Steps</Text>
-              <Text style={styles.sectionHint}>Optional · Used to fine-tune your hydration target</Text>
-              <View style={styles.stepsInputWrapper}>
-                <Ionicons name="footsteps-outline" size={18} color={`${CYAN}60`} style={styles.stepsIcon} />
-                <TextInput
-                  style={styles.stepsInput}
-                  placeholder="e.g. 8000"
-                  placeholderTextColor="rgba(255,255,255,0.2)"
-                  keyboardType="number-pad"
-                  value={stepsInput}
-                  onChangeText={handleStepsChange}
-                  maxLength={6}
-                  returnKeyType="done"
-                />
-                {stepsInput.length > 0 && (
-                  <Text style={styles.stepsUnit}>steps/day</Text>
-                )}
-              </View>
-            </View>
-          </MotiView>
-        </ScrollView>
-
-        <PremiumFooter
-          onBack={handleBack}
-          onContinue={handleContinue}
-          canContinue={isValid}
-        />
-      </KeyboardAvoidingView>
+      <PremiumFooter
+        onBack={handleBack}
+        onContinue={handleContinue}
+        canContinue={isValid}
+      />
     </SafeAreaView>
   );
 }
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: BG },
-  flex: { flex: 1 },
   scrollContent: { flexGrow: 1, paddingBottom: 32 },
   content: { paddingHorizontal: s.xl, paddingTop: s.lg },
   titleBlock: { marginBottom: 28 },
@@ -386,29 +357,5 @@ const styles = StyleSheet.create({
     width: 7,
     height: 7,
     borderRadius: 4,
-  },
-
-  // Steps input
-  stepsInputWrapper: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: SURFACE,
-    borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.08)',
-    borderRadius: 14,
-    paddingHorizontal: 16,
-    height: 56,
-  },
-  stepsIcon: { marginRight: 10 },
-  stepsInput: {
-    flex: 1,
-    fontSize: 17,
-    fontFamily: 'Sora_500Medium',
-    color: '#FFFFFF',
-  },
-  stepsUnit: {
-    fontSize: 13,
-    fontFamily: 'Sora_400Regular',
-    color: 'rgba(255,255,255,0.3)',
   },
 });

@@ -12,7 +12,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { MotiView } from 'moti';
 import { Ionicons } from '@expo/vector-icons';
 import { metriqfitTheme } from '../../lib/theme';
-import { useOnboarding, EquipmentAccess, MinutesPerWorkout, Injury, Weekday, SessionEmphasis, ProgressionPreference } from '../../lib/onboarding';
+import { useOnboarding, EquipmentAccess, MinutesPerWorkout, Injury, Weekday } from '../../lib/onboarding';
 import { PremiumHeader, PremiumFooter } from '../../components/onboarding/premium';
 
 const { spacing: s } = metriqfitTheme;
@@ -40,17 +40,15 @@ const MINUTES: { value: MinutesPerWorkout; label: string }[] = [
   { value: '90_plus', label: '90+ min' },
 ];
 
-const INJURIES: { value: Injury; label: string }[] = [
-  { value: 'none', label: 'None' },
-  { value: 'shoulders', label: 'Shoulders' },
-  { value: 'knees', label: 'Knees' },
-  { value: 'back', label: 'Back' },
-  { value: 'wrists', label: 'Wrists' },
-  { value: 'ankles', label: 'Ankles' },
-  { value: 'hips', label: 'Hips' },
-  { value: 'elbows', label: 'Elbows' },
-  { value: 'neck', label: 'Neck' },
-  { value: 'other', label: 'Other' },
+const INJURIES_UI: { key: string; label: string; mapsTo: Injury[] }[] = [
+  { key: 'none', label: 'None', mapsTo: ['none'] },
+  { key: 'shoulders', label: 'Shoulders', mapsTo: ['shoulders'] },
+  { key: 'lower_body_joints', label: 'Lower body (knees/hips)', mapsTo: ['knees', 'hips'] },
+  { key: 'back', label: 'Back', mapsTo: ['back'] },
+  { key: 'upper_body_joints', label: 'Upper body (wrists/elbows)', mapsTo: ['wrists', 'elbows'] },
+  { key: 'ankles', label: 'Ankles', mapsTo: ['ankles'] },
+  { key: 'neck', label: 'Neck', mapsTo: ['neck'] },
+  { key: 'other', label: 'Other', mapsTo: ['other'] },
 ];
 
 type EquipmentConfig = {
@@ -60,46 +58,34 @@ type EquipmentConfig = {
   color: string;
 };
 
-type EmphasisConfig = {
-  value: SessionEmphasis;
-  label: string;
-  description: string;
-  icon: keyof typeof Ionicons.glyphMap;
-  color: string;
-};
-
-type ProgressionConfig = {
-  value: ProgressionPreference;
-  label: string;
-  description: string;
-};
-
-const EMPHASIS: EmphasisConfig[] = [
-  { value: 'strength',      label: 'Strength',      description: 'Max force, heavy compound lifts',       icon: 'barbell-outline',      color: ORANGE },
-  { value: 'hypertrophy',   label: 'Hypertrophy',   description: 'Muscle size, moderate rep ranges',      icon: 'body-outline',         color: PURPLE },
-  { value: 'balanced',      label: 'Balanced',      description: 'Mix of strength and muscle building',   icon: 'analytics-outline',    color: CYAN },
-  { value: 'conditioning',  label: 'Conditioning',  description: 'Endurance, metabolic work, circuits',   icon: 'heart-outline',        color: '#22C55E' },
-  { value: 'no_preference', label: 'No Preference', description: 'Let the AI decide what fits you best',  icon: 'sparkles-outline',     color: '#71717A' },
-];
-
-const PROGRESSIONS: ProgressionConfig[] = [
-  { value: 'linear_overload', label: 'Linear Overload', description: 'Add weight each week — structured and simple' },
-  { value: 'undulating',      label: 'Undulating',      description: 'Vary reps/load daily — keeps the body guessing' },
-  { value: 'autoregulated',   label: 'Autoregulated',   description: 'Progress by feel — RPE-driven adjustments' },
-  { value: 'no_preference',   label: 'No Preference',   description: 'AI selects based on your goal and experience' },
-];
-
 const EQUIPMENT: EquipmentConfig[] = [
   { value: 'full_gym',           label: 'Full Gym',         icon: 'barbell-outline',         color: PURPLE },
-  { value: 'dumbbells_plus_bench',label: 'Dumbbells + Bench',icon: 'apps-outline',            color: CYAN },
-  { value: 'dumbbells_only',     label: 'Dumbbells Only',   icon: 'fitness-outline',          color: '#38BDF8' },
-  { value: 'bands_only',         label: 'Resistance Bands', icon: 'infinite-outline',         color: '#22C55E' },
-  { value: 'bodyweight_only',    label: 'Bodyweight Only',  icon: 'body-outline',             color: ORANGE },
-  { value: 'other',              label: 'Other',            icon: 'ellipsis-horizontal-outline', color: '#71717A' },
+  { value: 'dumbbells_only',     label: 'Dumbbells',        icon: 'fitness-outline',         color: CYAN },
+  { value: 'bands_only',         label: 'Resistance Bands', icon: 'infinite-outline',        color: '#22C55E' },
+  { value: 'bodyweight_only',    label: 'Bodyweight Only',  icon: 'body-outline',            color: ORANGE },
 ];
 
 export default function TrainingScreen() {
   const { data, updateData, setCurrentStep } = useOnboarding();
+
+  // Backward-compat migrations
+  React.useEffect(() => {
+    // Merge old dumbbells options into single value
+    if (data.equipment_access === 'dumbbells_plus_bench' || data.equipment_access === 'other') {
+      updateData({ equipment_access: 'dumbbells_only' });
+    }
+    // Complete combined injury sets if user has partial legacy selections
+    const hasKnees = data.injuries.includes('knees');
+    const hasHips = data.injuries.includes('hips');
+    const hasWrists = data.injuries.includes('wrists');
+    const hasElbows = data.injuries.includes('elbows');
+    if ((hasKnees || hasHips) && !(hasKnees && hasHips)) {
+      updateData({ injuries: Array.from(new Set([...data.injuries, 'knees', 'hips'])) });
+    }
+    if ((hasWrists || hasElbows) && !(hasWrists && hasElbows)) {
+      updateData({ injuries: Array.from(new Set([...data.injuries, 'wrists', 'elbows'])) });
+    }
+  }, []);
 
   // Derive count and rest-day summary from explicit training_days selection
   const selectedDays = (data.training_days || []) as Weekday[];
@@ -112,32 +98,34 @@ export default function TrainingScreen() {
     !!data.minutes_per_workout &&
     data.injuries.length > 0 &&
     !!data.equipment_access &&
-    (data.equipment_access !== 'other' || !!data.equipment_other_text) &&
-    (!data.injuries.includes('other') || !!data.injuries_other_text) &&
-    !!data.session_emphasis;
+    (!data.injuries.includes('other') || !!data.injuries_other_text);
 
   const handleDayToggle = (day: Weekday) => {
     const current = selectedDays;
     if (current.includes(day)) {
-      // Don't allow dropping below 1 (UX guard — 2 is the min for valid)
       updateData({ training_days: current.filter((d) => d !== day) });
     } else {
-      // Don't allow selecting more than 6
       if (current.length >= 6) return;
       updateData({ training_days: [...current, day] });
     }
   };
 
-  const handleInjurySelect = (val: Injury) => {
-    if (val === 'none') {
+  const isInjurySelected = (mapsTo: Injury[]) => {
+    if (mapsTo.length === 1) return data.injuries.includes(mapsTo[0]);
+    return mapsTo.every((i) => data.injuries.includes(i));
+  };
+
+  const handleInjurySelect = (mapsTo: Injury[]) => {
+    if (mapsTo.includes('none')) {
       updateData({ injuries: ['none'] });
       return;
     }
+    const hasAll = mapsTo.every((i) => data.injuries.includes(i));
     let next = data.injuries.filter((i) => i !== 'none');
-    if (next.includes(val)) {
-      next = next.filter((i) => i !== val);
+    if (hasAll) {
+      next = next.filter((i) => !mapsTo.includes(i));
     } else {
-      next = [...next, val];
+      next = Array.from(new Set([...next, ...mapsTo]));
     }
     updateData({ injuries: next });
   };
@@ -205,7 +193,7 @@ export default function TrainingScreen() {
                       atMax && styles.weekdayChipDisabled,
                     ]}
                     onPress={() => !atMax && handleDayToggle(d.value)}
-                    accessibilityLabel={`${d.label}${sel ? ' — training day' : ' — rest day'}`}
+                    accessibilityLabel={`${d.label}${sel ? ' \u2014 training day' : ' \u2014 rest day'}`}
                   >
                     <Text style={[styles.weekdayChipText, sel && styles.weekdayChipTextSelected]}>
                       {d.abbr}
@@ -250,16 +238,16 @@ export default function TrainingScreen() {
             <Text style={styles.sectionLabel}>Injuries / Limitations</Text>
             <Text style={styles.sectionHint}>We'll modify exercises to protect you</Text>
             <View style={styles.chipRowWrap}>
-              {INJURIES.map((inj) => {
-                const sel = data.injuries.includes(inj.value);
+              {INJURIES_UI.map((inj) => {
+                const sel = isInjurySelected(inj.mapsTo);
                 return (
                   <Pressable
-                    key={inj.value}
+                    key={inj.key}
                     style={[
                       styles.chip,
-                      sel && (inj.value === 'none' ? styles.chipSelectedGreen : styles.chipSelectedOrange),
+                      sel && (inj.key === 'none' ? styles.chipSelectedGreen : styles.chipSelectedOrange),
                     ]}
-                    onPress={() => handleInjurySelect(inj.value)}
+                    onPress={() => handleInjurySelect(inj.mapsTo)}
                   >
                     <Text style={[styles.chipText, sel && styles.chipTextSelected]}>{inj.label}</Text>
                   </Pressable>
@@ -301,65 +289,6 @@ export default function TrainingScreen() {
                 </Pressable>
               );
             })}
-            {data.equipment_access === 'other' && (
-              <TextInput
-                style={styles.otherInput}
-                placeholder="Describe your equipment..."
-                placeholderTextColor="rgba(255,255,255,0.2)"
-                value={data.equipment_other_text || ''}
-                onChangeText={(t) => updateData({ equipment_other_text: t })}
-              />
-            )}
-          </View>
-          {/* Training Emphasis */}
-          <View style={styles.section}>
-            <Text style={styles.sectionLabel}>Training Emphasis</Text>
-            <Text style={styles.sectionHint}>What should your workouts prioritise?</Text>
-            {EMPHASIS.map((e) => {
-              const sel = data.session_emphasis === e.value;
-              return (
-                <Pressable
-                  key={e.value}
-                  style={[styles.listCard, sel && { borderColor: e.color, backgroundColor: `${e.color}0D` }]}
-                  onPress={() => updateData({ session_emphasis: e.value })}
-                >
-                  <View style={[styles.listIcon, { backgroundColor: sel ? e.color : `${e.color}20` }]}>
-                    <Ionicons name={e.icon} size={20} color={sel ? BG : e.color} />
-                  </View>
-                  <View style={{ flex: 1 }}>
-                    <Text style={[styles.listLabel, sel && { color: e.color }]}>{e.label}</Text>
-                    <Text style={styles.emphasisDesc}>{e.description}</Text>
-                  </View>
-                  {sel && (
-                    <View style={[styles.radioSelected, { borderColor: e.color }]}>
-                      <View style={[styles.radioDot, { backgroundColor: e.color }]} />
-                    </View>
-                  )}
-                  {!sel && <View style={styles.radio} />}
-                </Pressable>
-              );
-            })}
-          </View>
-
-          {/* Progression Style */}
-          <View style={styles.section}>
-            <Text style={styles.sectionLabel}>Progression Style</Text>
-            <Text style={styles.sectionHint}>Optional · How should your plan advance week to week?</Text>
-            <View style={styles.chipRowWrap}>
-              {PROGRESSIONS.map((p) => {
-                const sel = data.progression_preference === p.value;
-                return (
-                  <Pressable
-                    key={p.value}
-                    style={[styles.progressionCard, sel && styles.progressionCardSelected]}
-                    onPress={() => updateData({ progression_preference: p.value })}
-                  >
-                    <Text style={[styles.progressionLabel, sel && styles.progressionLabelSelected]}>{p.label}</Text>
-                    <Text style={[styles.progressionDesc, sel && styles.progressionDescSelected]}>{p.description}</Text>
-                  </Pressable>
-                );
-              })}
-            </View>
           </View>
         </MotiView>
       </ScrollView>
@@ -521,36 +450,4 @@ const styles = StyleSheet.create({
     fontFamily: 'Sora_400Regular',
     color: '#FFFFFF',
   },
-  emphasisDesc: {
-    fontSize: 12,
-    fontFamily: 'Sora_400Regular',
-    color: 'rgba(255,255,255,0.35)',
-    marginTop: 2,
-  },
-  progressionCard: {
-    width: '100%',
-    padding: 14,
-    borderRadius: 14,
-    borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.07)',
-    backgroundColor: SURFACE,
-    marginBottom: 8,
-  },
-  progressionCardSelected: {
-    borderColor: CYAN,
-    backgroundColor: `${CYAN}0D`,
-  },
-  progressionLabel: {
-    fontSize: 14,
-    fontFamily: 'Sora_600SemiBold',
-    color: 'rgba(255,255,255,0.7)',
-    marginBottom: 3,
-  },
-  progressionLabelSelected: { color: CYAN },
-  progressionDesc: {
-    fontSize: 12,
-    fontFamily: 'Sora_400Regular',
-    color: 'rgba(255,255,255,0.3)',
-  },
-  progressionDescSelected: { color: `${CYAN}99` },
 });

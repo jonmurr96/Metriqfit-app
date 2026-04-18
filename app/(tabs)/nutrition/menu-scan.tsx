@@ -23,6 +23,8 @@ import { useActiveNutritionPlan, useNutritionPlanDay } from '../../../hooks/useP
 import { upsertImportedRecipe } from '../../../services/recipeService';
 import { searchFoods } from '../../../services/nutritionService';
 import type { MenuGoal, MenuCandidate } from '../../../services/menuScanService';
+import { useProfile } from '../../../hooks/useUser';
+import { formatMacroDisplay, getDefaultFoodMeasurement } from '../../../lib/nutrition/displayUnits';
 
 const GOAL_OPTIONS: Array<{ id: MenuGoal; label: string }> = [
   { id: 'cut', label: 'Cut' },
@@ -35,6 +37,9 @@ const GOAL_OPTIONS: Array<{ id: MenuGoal; label: string }> = [
 export default function MenuScanScreen() {
   const { c, s, ty, r } = useTokens();
   const router = useRouter();
+  const { data: profile } = useProfile();
+  const foodMeasurement = getDefaultFoodMeasurement(profile?.unit_system);
+  const displayFoodMeasurement = (profile?.display_preferences?.food_measurement as any) ?? foodMeasurement;
   const insets = useSafeAreaInsets();
   const { user } = useAuth();
 
@@ -330,9 +335,9 @@ export default function MenuScanScreen() {
                           size="sm"
                           items={[
                             { macro: 'calories', value: item.macros.calories, unit: ' kcal' },
-                            { macro: 'protein', value: item.macros.protein, unit: 'g' },
-                            { macro: 'carbs', value: item.macros.carbs, unit: 'g' },
-                            { macro: 'fat', value: item.macros.fat, unit: 'g' },
+                            { macro: 'protein', value: parseFloat(formatMacroDisplay(item.macros.protein, 'protein', displayFoodMeasurement).value), unit: formatMacroDisplay(item.macros.protein, 'protein', displayFoodMeasurement).unit },
+                            { macro: 'carbs', value: parseFloat(formatMacroDisplay(item.macros.carbs, 'carbs', displayFoodMeasurement).value), unit: formatMacroDisplay(item.macros.carbs, 'carbs', displayFoodMeasurement).unit },
+                            { macro: 'fat', value: parseFloat(formatMacroDisplay(item.macros.fat, 'fat', displayFoodMeasurement).value), unit: formatMacroDisplay(item.macros.fat, 'fat', displayFoodMeasurement).unit },
                           ]}
                         />
                         <Text style={{ color: c.textMuted, fontFamily: ty.body.family, fontSize: ty.sizes.xs }}>

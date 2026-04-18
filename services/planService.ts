@@ -6,6 +6,7 @@
 
 import { supabase } from '../lib/supabase';
 import { Database } from '../lib/supabase/types';
+import { invokeFunction } from '../lib/supabase/invokeFunction';
 import {
   assertExerciseMatchesPlanDayFocus,
   getWorkoutPlanCoherenceReport as loadWorkoutPlanCoherenceReport,
@@ -1124,20 +1125,22 @@ export async function getNutritionPlanMeal(
  * Apply swap/customization to nutrition meal plan and return updated day totals.
  */
 export async function applyMealPlanChange(input: ApplyMealPlanChangeInput): Promise<NutritionPlanDayDetails> {
-  const { data, error } = await supabase.functions.invoke('apply-meal-plan-change', {
-    body: {
-      plan_meal_id: input.planMealId,
-      operation: input.operation,
-      variant_id: input.variantId,
-      name: input.name,
-      description: input.description,
-      items: input.items,
-    },
-  });
+  const { data, parsedError, rawError } = await invokeFunction(() =>
+    supabase.functions.invoke('apply-meal-plan-change', {
+      body: {
+        plan_meal_id: input.planMealId,
+        operation: input.operation,
+        variant_id: input.variantId,
+        name: input.name,
+        description: input.description,
+        items: input.items,
+      },
+    })
+  );
 
-  if (error) {
-    console.error('apply-meal-plan-change error:', error);
-    throw new Error(error.message || 'Failed to update meal plan');
+  if (rawError) {
+    console.error('apply-meal-plan-change error:', { rawError, parsedError });
+    throw new Error(parsedError?.error || parsedError?.message || rawError?.message || 'Failed to update meal plan');
   }
 
   if (!data?.success) {
@@ -1173,17 +1176,19 @@ export async function applyMealPlanBatchChange(input: ApplyMealPlanBatchInput): 
   dayOfWeek: number;
   changedMealIds: string[];
 }> {
-  const { data, error } = await supabase.functions.invoke('apply-meal-plan-batch-change', {
-    body: {
-      plan_id: input.planId,
-      day_of_week: input.dayOfWeek,
-      meals: input.meals,
-    },
-  });
+  const { data, parsedError, rawError } = await invokeFunction(() =>
+    supabase.functions.invoke('apply-meal-plan-batch-change', {
+      body: {
+        plan_id: input.planId,
+        day_of_week: input.dayOfWeek,
+        meals: input.meals,
+      },
+    })
+  );
 
-  if (error) {
-    console.error('apply-meal-plan-batch-change error:', error);
-    throw new Error(error.message || 'Failed to apply meal batch change');
+  if (rawError) {
+    console.error('apply-meal-plan-batch-change error:', { rawError, parsedError });
+    throw new Error(parsedError?.error || parsedError?.message || rawError?.message || 'Failed to apply meal batch change');
   }
 
   if (!data?.success) {
@@ -1681,24 +1686,18 @@ export async function regeneratePlans(
     throw new Error('Authentication required. Please sign in again.');
   }
 
-  const { data, error } = await supabase.functions.invoke('generate-user-plans', {
-    headers: {
-      Authorization: `Bearer ${session.access_token}`,
-    },
-    body: {
-      user_id: userId,
-      ...options,
-    },
-  });
+  const { data, parsedError, rawError } = await invokeFunction(() =>
+    supabase.functions.invoke('generate-user-plans', {
+      headers: { Authorization: `Bearer ${session.access_token}` },
+      body: { user_id: userId, ...options },
+    })
+  );
 
-  if (error) {
-    console.error('Plan regeneration error:', error);
-    // Try to extract the actual error message from the Edge Function response
-    const errorMessage = error?.message || 'Failed to regenerate plans. Please try again.';
-    throw new Error(errorMessage);
+  if (rawError) {
+    console.error('Plan regeneration error:', { rawError, parsedError });
+    throw new Error(parsedError?.error || parsedError?.message || rawError?.message || 'Failed to regenerate plans. Please try again.');
   }
 
-  // Handle structured error responses from Edge Function
   if (data?.success === false) {
     console.error('Edge Function returned error:', data.error, data.details);
     throw new Error(data.error || 'Plan generation failed. Please try again.');
@@ -1896,40 +1895,229 @@ export async function triggerPlanGeneration(
     throw new Error('Authentication required. Please sign in again.');
   }
 
-  try {
-    const { data, error } = await supabase.functions.invoke('generate-user-plans', {
-      headers: {
-        Authorization: `Bearer ${session.access_token}`,
-      },
-      body: {
-        user_id: userId,
-        plan_type: planType,
-        generation_version: options.generation_version || 'v1',
-        ...options,
-      },
-    });
+  // Pre-flight: verify required DB rows exist AND content is valid before invoking
+  // the Edge Function. This surfaces actionable errors immediately rather than letting
+  // the Edge Function fail deep in generation with an opaque 500.
+  // Fix 1: fetch content (not just existence) so we can validate field-level completeness.
+  const [profileCheck, answersCheck, targetsCheck] = await Promise.all([
+    supabase.from('profiles').select('id').eq('id', userId).single(),
+    supabase.from('onboarding_answers').select('user_id, answers').eq('user_id', userId).single(),
+    supabase.from('user_targets').select('user_id, calories').eq('user_id', userId).single(),
+  ]);
 
-    if (error) {
-      console.error('Plan generation edge function error:', error);
-      throw new Error(error.message || 'Plan generation failed');
-    }
-
-    // Handle structured error responses from Edge Function
-    if (data?.success === false) {
-      console.error('Edge Function returned error:', data.error, data.details);
-      throw new Error(data.error || 'Plan generation failed. Please try again.');
-    }
-
-    return {
-      runId: data?.runId || data?.run_id,
-      workoutPlanId: data?.workoutPlanId || data?.workout_plan_id,
-      nutritionPlanId: data?.nutritionPlanId || data?.nutrition_plan_id,
-      warnings: data?.warnings || [],
-    };
-  } catch (err: any) {
-    console.error('Plan generation failed with exception:', err);
-    throw new Error(`Failed to generate plans: ${err.message || 'Unknown error'}`);
+  if (profileCheck.error || !profileCheck.data) {
+    throw new Error('Your profile is not set up. Please sign out and complete onboarding again.');
   }
+  if (answersCheck.error || !answersCheck.data) {
+    throw new Error('Your onboarding answers were not saved. Please go back and complete the questionnaire.');
+  }
+  if (targetsCheck.error || !targetsCheck.data) {
+    throw new Error('Your nutrition targets were not calculated. Please go back and complete onboarding.');
+  }
+
+  // Fix 1: Content validation — assert required onboarding answer fields are present.
+  const rawAnswers = (answersCheck.data as any)?.answers;
+  if (rawAnswers != null) {
+    const parsed: Record<string, any> = typeof rawAnswers === 'string'
+      ? JSON.parse(rawAnswers)
+      : rawAnswers;
+    const requiredAnswerFields = [
+      'goal_type',
+      'experience_level',
+      'training_days_per_week',
+      'equipment_access',
+    ] as const;
+    for (const field of requiredAnswerFields) {
+      if (parsed[field] == null) {
+        const err = new Error(
+          `Onboarding is incomplete: "${field}" is missing. Please go back and re-answer that step.`,
+        );
+        (err as any).step = 'content_validation';
+        (err as any).details = `Required onboarding field "${field}" is null or absent from your saved answers.`;
+        throw err;
+      }
+    }
+  }
+
+  // Fix 1: Assert calories > 0 before wasting an Edge Function invocation.
+  const preflightCalories = (targetsCheck.data as any)?.calories;
+  if (typeof preflightCalories !== 'number' || preflightCalories <= 0) {
+    const err = new Error(
+      'Your nutrition targets have 0 calories. Please go back and re-enter your body stats (age, weight, height, activity level).',
+    );
+    (err as any).step = 'content_validation';
+    (err as any).details = `user_targets.calories is ${preflightCalories}. This usually means vital stats were not saved correctly.`;
+    throw err;
+  }
+
+  // Generate correlation ID for end-to-end tracing
+  const correlationId = `${Date.now()}-${Math.random().toString(36).substring(2, 11)}`;
+
+  // Fix 11: Retry configuration — up to 2 total attempts with 1.5 s delay.
+  // 4xx errors are not retried (client-side problem, retrying won't help).
+  const MAX_INVOKE_ATTEMPTS = 2;
+  const RETRY_DELAY_MS = 1500;
+
+  let lastInvokeErr: any = null;
+
+  for (let attempt = 1; attempt <= MAX_INVOKE_ATTEMPTS; attempt++) {
+    try {
+      if (attempt > 1) {
+        console.warn(
+          `[PlanService] [${correlationId}] Retry attempt ${attempt}/${MAX_INVOKE_ATTEMPTS} after ${RETRY_DELAY_MS}ms...`,
+        );
+        await new Promise<void>((resolve) => setTimeout(resolve, RETRY_DELAY_MS));
+      }
+
+      console.log(
+        `[PlanService] [${correlationId}] Invoking generate-user-plans (attempt ${attempt}/${MAX_INVOKE_ATTEMPTS}) for user ${userId}`,
+      );
+
+      const { data, error } = await supabase.functions.invoke('generate-user-plans', {
+        headers: {
+          Authorization: `Bearer ${session.access_token}`,
+          'X-Correlation-Id': correlationId,
+        },
+        body: {
+          user_id: userId,
+          plan_type: planType,
+          generation_version: options.generation_version || 'v1',
+          correlation_id: correlationId,
+          ...options,
+        },
+      });
+
+      if (error) {
+        // @supabase/functions-js v2.91+ returns data=null on non-2xx; the raw Response
+        // object is in error.context. Parse it to recover the Edge Function's JSON body.
+        let parsedErrorBody: any = data; // may already be populated in older SDK versions
+        const contextResponse = (error as any)?.context;
+        if (!parsedErrorBody && contextResponse && typeof contextResponse.json === 'function') {
+          try {
+            parsedErrorBody = await (contextResponse as Response).json();
+          } catch {
+            // Non-JSON response body — fall through to generic error message
+          }
+        }
+
+        const actualError = parsedErrorBody?.error || parsedErrorBody?.message || (data as any)?.error || error.message || 'Plan generation failed';
+        const errorStep = parsedErrorBody?.step || (data as any)?.step || 'unknown';
+        const errorRequestId = parsedErrorBody?.requestId || parsedErrorBody?.request_id || (data as any)?.requestId || (data as any)?.request_id || correlationId;
+        const errorDetails = parsedErrorBody?.details || (data as any)?.details;
+        const errorCode = parsedErrorBody?.error_code || parsedErrorBody?.errorCode || (data as any)?.error_code || (data as any)?.errorCode;
+        const errorContext = parsedErrorBody?.error_context || parsedErrorBody?.errorContext || (data as any)?.error_context || (data as any)?.errorContext;
+        const httpStatus: number = contextResponse?.status || (error as any)?.status || (error as any)?.code || 0;
+
+        // Always log raw response body on non-2xx before anything else.
+        console.error(`[PlanService] [${correlationId}] Edge Function non-2xx (attempt ${attempt}):`, {
+          supabaseError: error.message,
+          httpStatus,
+          rawData: data,
+          parsedErrorBody,
+          functionError: actualError,
+          errorCode,
+          step: errorStep,
+          requestId: errorRequestId,
+          details: errorDetails,
+          errorContext,
+        });
+
+        const enhancedError = new Error(actualError);
+        (enhancedError as any).step = errorStep;
+        (enhancedError as any).requestId = errorRequestId;
+        (enhancedError as any).details = errorDetails;
+        (enhancedError as any).errorCode = errorCode;
+        (enhancedError as any).errorContext = errorContext;
+        (enhancedError as any).httpStatus = httpStatus;
+
+        // Fix 11: Don't retry 4xx — those are client errors.
+        if (httpStatus >= 400 && httpStatus < 500) {
+          throw enhancedError;
+        }
+
+        // Network / 5xx — retry if we have attempts left.
+        if (attempt < MAX_INVOKE_ATTEMPTS) {
+          lastInvokeErr = enhancedError;
+          continue;
+        }
+
+        throw enhancedError;
+      }
+
+      // Handle structured error responses from Edge Function (2xx with success:false).
+      if (data?.success === false) {
+        const errorMessage = data.error || data.message || 'Plan generation failed. Please try again.';
+        const errorStep = data.step || 'unknown';
+        const errorRequestId = data.requestId || data.request_id || correlationId;
+        const errorCode = data.error_code || data.errorCode;
+        const errorContext = data.error_context || data.errorContext;
+
+        console.error(`[PlanService] [${correlationId}] Edge Function returned success:false:`, {
+          error: errorMessage,
+          errorCode,
+          step: errorStep,
+          requestId: errorRequestId,
+          details: data.details,
+          errorContext,
+        });
+
+        const enhancedError = new Error(errorMessage);
+        (enhancedError as any).step = errorStep;
+        (enhancedError as any).requestId = errorRequestId;
+        (enhancedError as any).details = data.details;
+        (enhancedError as any).errorCode = errorCode;
+        (enhancedError as any).errorContext = errorContext;
+        // success:false responses are application-level errors — don't retry.
+        throw enhancedError;
+      }
+
+      console.log(`[PlanService] [${correlationId}] Plan generation successful:`, {
+        runId: data?.runId || data?.run_id,
+        hasWorkoutPlan: !!data?.workoutPlanId,
+        hasNutritionPlan: !!data?.nutritionPlanId,
+      });
+
+      return {
+        runId: data?.runId || data?.run_id,
+        workoutPlanId: data?.workoutPlanId || data?.workout_plan_id,
+        nutritionPlanId: data?.nutritionPlanId || data?.nutrition_plan_id,
+        warnings: data?.warnings || [],
+      };
+    } catch (err: any) {
+      // If this is a 4xx or application-level error, don't retry — rethrow immediately.
+      const httpStatus = err?.httpStatus || 0;
+      const isClientError = httpStatus >= 400 && httpStatus < 500;
+      const isAppLevelError = !!(err.step && err.requestId);
+      if (isClientError || isAppLevelError || attempt >= MAX_INVOKE_ATTEMPTS) {
+        console.error(`[PlanService] [${correlationId}] Plan generation failed (attempt ${attempt}):`, err);
+
+        // If it's already an enhanced error, re-throw it.
+        if (err.step && err.requestId) {
+          throw err;
+        }
+
+        // Otherwise wrap it with correlation ID.
+        const wrappedError = new Error(
+          `Failed to generate plans: ${err.message || 'Unknown error'} (requestId: ${correlationId})`,
+        );
+        (wrappedError as any).requestId = correlationId;
+        (wrappedError as any).originalError = err;
+        throw wrappedError;
+      }
+
+      // Network/transient error, retry
+      lastInvokeErr = err;
+      console.warn(`[PlanService] [${correlationId}] Transient error on attempt ${attempt}, will retry:`, err.message);
+    }
+  }
+
+  // Should not reach here, but if somehow loop exhausted without return/throw:
+  const finalError = new Error(
+    `Plan generation failed after ${MAX_INVOKE_ATTEMPTS} attempts: ${lastInvokeErr?.message || 'Unknown error'} (requestId: ${correlationId})`,
+  );
+  (finalError as any).requestId = correlationId;
+  (finalError as any).originalError = lastInvokeErr;
+  throw finalError;
 }
 
 export async function buildNutritionPlanComparableSnapshot(
@@ -2088,26 +2276,25 @@ export async function generateNutritionPlanPreview(
     throw new Error('Authentication required. Please sign in again.');
   }
 
-  const { data, error } = await supabase.functions.invoke('generate-user-plans', {
-    headers: {
-      Authorization: `Bearer ${session.access_token}`,
-    },
-    body: {
-      user_id: userId,
-      plan_type: 'nutrition',
-      generation_horizon_days: { nutrition: 7 },
-      generation_mode: 'regenerate',
-      activation_mode: 'preview',
-      nutrition_regeneration: nutritionRegeneration,
-    } satisfies PlanGenerationOptions & Record<string, unknown>,
-  });
+  const { data, parsedError, rawError } = await invokeFunction(() =>
+    supabase.functions.invoke('generate-user-plans', {
+      headers: { Authorization: `Bearer ${session.access_token}` },
+      body: {
+        user_id: userId,
+        plan_type: 'nutrition',
+        generation_horizon_days: { nutrition: 7 },
+        generation_mode: 'regenerate',
+        activation_mode: 'preview',
+        nutrition_regeneration: nutritionRegeneration,
+      } satisfies PlanGenerationOptions & Record<string, unknown>,
+    })
+  );
 
-  if (error) {
-    console.error('Nutrition preview generation failed:', error);
-    throw new Error(error.message || 'Failed to generate nutrition preview');
+  if (rawError) {
+    console.error('Nutrition preview generation failed:', { rawError, parsedError });
+    throw new Error(parsedError?.error || parsedError?.message || rawError?.message || 'Failed to generate nutrition preview');
   }
 
-  // Handle structured error responses from Edge Function
   if (data?.success === false) {
     console.error('Edge Function returned error:', data.error, data.details);
     throw new Error(data.error || 'Failed to generate nutrition preview');
@@ -2332,26 +2519,25 @@ export async function generateWorkoutPlanPreview(
     throw new Error('Authentication required. Please sign in again.');
   }
 
-  const { data, error } = await supabase.functions.invoke('generate-user-plans', {
-    headers: {
-      Authorization: `Bearer ${session.access_token}`,
-    },
-    body: {
-      user_id: userId,
-      plan_type: 'workout',
-      generation_horizon_days: { workout: 28 },
-      generation_mode: 'regenerate',
-      activation_mode: 'preview',
-      workout_regeneration: workoutRegeneration,
-    } satisfies PlanGenerationOptions & Record<string, unknown>,
-  });
+  const { data, parsedError, rawError } = await invokeFunction(() =>
+    supabase.functions.invoke('generate-user-plans', {
+      headers: { Authorization: `Bearer ${session.access_token}` },
+      body: {
+        user_id: userId,
+        plan_type: 'workout',
+        generation_horizon_days: { workout: 28 },
+        generation_mode: 'regenerate',
+        activation_mode: 'preview',
+        workout_regeneration: workoutRegeneration,
+      } satisfies PlanGenerationOptions & Record<string, unknown>,
+    })
+  );
 
-  if (error) {
-    console.error('Workout preview generation failed:', error);
-    throw new Error(error.message || 'Failed to generate workout preview');
+  if (rawError) {
+    console.error('Workout preview generation failed:', { rawError, parsedError });
+    throw new Error(parsedError?.error || parsedError?.message || rawError?.message || 'Failed to generate workout preview');
   }
 
-  // Handle structured error responses from Edge Function
   if (data?.success === false) {
     console.error('Edge Function returned error:', data.error, data.details);
     throw new Error(data.error || 'Failed to generate workout preview');
@@ -2463,19 +2649,16 @@ export async function repairWorkoutPlanCoherencePreview(
     throw new Error('Authentication required. Please sign in again.');
   }
 
-  const { data, error } = await supabase.functions.invoke('repair-workout-plan-coherence', {
-    headers: {
-      Authorization: `Bearer ${session.access_token}`,
-    },
-    body: {
-      plan_id: planId,
-      mode: 'preview',
-    },
-  });
+  const { data, parsedError, rawError } = await invokeFunction(() =>
+    supabase.functions.invoke('repair-workout-plan-coherence', {
+      headers: { Authorization: `Bearer ${session.access_token}` },
+      body: { plan_id: planId, mode: 'preview' },
+    })
+  );
 
-  if (error) {
-    console.error('Workout coherence repair preview failed:', error);
-    throw new Error(error.message || 'Failed to build repair preview');
+  if (rawError) {
+    console.error('Workout coherence repair preview failed:', { rawError, parsedError });
+    throw new Error(parsedError?.error || parsedError?.message || rawError?.message || 'Failed to build repair preview');
   }
 
   if (data?.status === 'no_violations') {
@@ -3111,19 +3294,21 @@ export async function rescheduleWorkoutDay(input: {
   toDate: string;
   notes?: string;
 }): Promise<WorkoutScheduleEntry[]> {
-  const { data, error } = await supabase.functions.invoke('reschedule-workout-day', {
-    body: {
-      plan_id: input.planId,
-      schedule_id: input.scheduleId,
-      from_date: input.fromDate,
-      to_date: input.toDate,
-      notes: input.notes,
-    },
-  });
+  const { data, parsedError, rawError } = await invokeFunction(() =>
+    supabase.functions.invoke('reschedule-workout-day', {
+      body: {
+        plan_id: input.planId,
+        schedule_id: input.scheduleId,
+        from_date: input.fromDate,
+        to_date: input.toDate,
+        notes: input.notes,
+      },
+    })
+  );
 
-  if (error) {
-    console.error('reschedule-workout-day error:', error);
-    throw new Error(error.message || 'Failed to reschedule workout');
+  if (rawError) {
+    console.error('reschedule-workout-day error:', { rawError, parsedError });
+    throw new Error(parsedError?.error || parsedError?.message || rawError?.message || 'Failed to reschedule workout');
   }
 
   if (!data?.success) {
@@ -3141,17 +3326,19 @@ export async function computePlanConsistency(input: {
   endDate?: string;
   days?: number;
 } = {}): Promise<{ averageOverallScore: number; days: any[]; latestRecommendation: any }> {
-  const { data, error } = await supabase.functions.invoke('compute-plan-consistency', {
-    body: {
-      start_date: input.startDate,
-      end_date: input.endDate,
-      days: input.days,
-    },
-  });
+  const { data, parsedError, rawError } = await invokeFunction(() =>
+    supabase.functions.invoke('compute-plan-consistency', {
+      body: {
+        start_date: input.startDate,
+        end_date: input.endDate,
+        days: input.days,
+      },
+    })
+  );
 
-  if (error) {
-    console.error('compute-plan-consistency error:', error);
-    throw new Error(error.message || 'Failed to compute consistency');
+  if (rawError) {
+    console.error('compute-plan-consistency error:', { rawError, parsedError });
+    throw new Error(parsedError?.error || parsedError?.message || rawError?.message || 'Failed to compute consistency');
   }
 
   if (!data?.success) {

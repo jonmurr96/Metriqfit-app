@@ -6,7 +6,7 @@
  * user. The checks are intentionally rules-first and deterministic.
  */
 
-import type { PoolExercise } from './exercise-pool';
+import type { PoolExercise } from './exercise-pool.ts';
 import {
   buildExerciseMetadata,
   buildExerciseQualityPolicy,
@@ -67,6 +67,7 @@ export type QualityGateInput = {
     | 'trainingStylePreference'
     | 'sessionDurationMin'
     | 'injuries'
+    | 'recoveryBurden'
   >;
 };
 
@@ -169,6 +170,25 @@ const POPULARITY_FLOOR: Record<string, number> = {
   intermediate: 55,
   advanced: 45,
 };
+
+// Map common synonyms to canonical volume muscles
+function mapToVolumeMuscle(muscle: string): MuscleGroup | null {
+  const normalized = muscle.toLowerCase();
+  if (normalized === 'lats' || normalized === 'back') return 'back';
+  if (normalized === 'quads' || normalized === 'quadriceps') return 'quads';
+  if (normalized === 'chest' || normalized === 'pectorals') return 'chest';
+  if (normalized === 'biceps' || normalized === 'bicep') return 'biceps';
+  if (normalized === 'triceps' || normalized === 'tricep') return 'triceps';
+  if (normalized === 'glutes' || normalized === 'glute') return 'glutes';
+  if (normalized === 'hamstrings' || normalized === 'hamstring') return 'hamstrings';
+  if (normalized === 'shoulders' || normalized === 'shoulder') return 'shoulders';
+  if (normalized === 'calves' || normalized === 'calf') return 'calves';
+  if (normalized === 'abs' || normalized === 'abdominals') return 'abs';
+  if (normalized === 'forearms' || normalized === 'forearm') return 'forearms';
+  if (normalized === 'traps' || normalized === 'trapezius') return 'traps';
+  if (normalized === 'rear_delts' || normalized === 'rear_delt') return 'rear_delts';
+  return null;
+}
 
 function isPushExercise(ex: PoolExercise) {
   if (ex.pattern && PUSH_PATTERNS.has(ex.pattern)) return true;
@@ -350,6 +370,7 @@ function buildQualityContext(input: QualityGateInput): ExercisePriorityContext {
     trainingStylePreference: profile?.trainingStylePreference,
     sessionDurationMin: profile?.sessionDurationMin,
     injuries: profile?.injuries || [],
+    recoveryBurden: profile?.recoveryBurden,
   };
 }
 
@@ -426,8 +447,8 @@ export function runQualityGates(input: QualityGateInput): QualityGateResult {
   const progressionScores: number[] = [];
   const nonStapleSelections: QualityGateResult['nonStapleSelections'] = [];
 
-  for (const day of workoutDays) {
-    for (const exercise of day.exercises) {
+  for (const [dayIdx, day] of workoutDays.entries()) {
+    for (const [exerciseIdx, exercise] of day.exercises.entries()) {
       const sets = 3;
       const metadata = buildExerciseMetadata(exercise, qualityContext);
 
@@ -448,10 +469,11 @@ export function runQualityGates(input: QualityGateInput): QualityGateResult {
       if (metadata.isSmithMachine) smithMachineCount += 1;
       
       // Sprint 3: Track volume by muscle group (assume 3 sets per exercise)
-      const sets = 3;
-      exercise.primary_muscles?.forEach((muscle) => {
-        if (muscleVolumes[muscle as MuscleGroup] !== undefined) {
-          muscleVolumes[muscle as MuscleGroup] += sets;
+      const primaryMuscles = exercise.primary_muscles || (exercise.primary_muscle ? [exercise.primary_muscle] : []);
+      primaryMuscles.forEach((muscle) => {
+        const canonical = mapToVolumeMuscle(muscle);
+        if (canonical && Object.prototype.hasOwnProperty.call(muscleVolumes, canonical)) {
+          muscleVolumes[canonical as MuscleGroup] += sets;
         }
       });
       
@@ -466,7 +488,7 @@ export function runQualityGates(input: QualityGateInput): QualityGateResult {
           injuryConflicts.push({
             dayIndex: dayIdx,
             exerciseIndex: exerciseIdx,
-            exerciseName: exercise.name,
+            exerciseName: exercise.name || 'Unknown',
             conflictingInjuries: conflicts.conflictingInjuries,
           });
         }
@@ -565,7 +587,7 @@ export function runQualityGates(input: QualityGateInput): QualityGateResult {
       if (!metadata.isFoundationalDefault) {
         nonStapleSelections.push({
           dayName: day.dayName,
-          exerciseName: exercise.name,
+          exerciseName: exercise.name || 'Unknown',
           tier: metadata.tier,
           reasons: metadata.reasons,
         });
@@ -596,7 +618,7 @@ export function runQualityGates(input: QualityGateInput): QualityGateResult {
       }
 
       if (metadata.stabilityScore <= 2 || metadata.progressionClarityScore <= 2) {
-        dayLowQualitySelections.push(exercise.name);
+        dayLowQualitySelections.push(exercise.name || 'Unknown');
       }
 
       // Check for complexity mismatch
@@ -706,11 +728,14 @@ export function runQualityGates(input: QualityGateInput): QualityGateResult {
       );
       fixes.push({ dayIndex: 0, type: 'reduce_excessive_volume', muscleGroup: status.muscle });
     } else if (status.status === 'below_mev' && ['chest', 'back', 'quads'].includes(status.muscle)) {
-      musclesBelowMEV += 1;
-      warnings.push(
-        `Volume: ${status.muscle} has only ${status.currentSets} sets, below MEV (${status.target.mev}). ${status.recommendation}`
-      );
-      fixes.push({ dayIndex: 0, type: 'increase_insufficient_volume', muscleGroup: status.muscle });
+      // Only warn about missing major muscles if we have at least 3 days (heuristic for a "full" program)
+      if (workoutDays.length >= 3) {
+        musclesBelowMEV += 1;
+        warnings.push(
+          `Volume: ${status.muscle} has only ${status.currentSets} sets, below MEV (${status.target.mev}). ${status.recommendation}`
+        );
+        fixes.push({ dayIndex: 0, type: 'increase_insufficient_volume', muscleGroup: status.muscle });
+      }
     }
   });
   

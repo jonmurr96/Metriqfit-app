@@ -9,6 +9,8 @@ import React from 'react';
 import { View, Text, StyleSheet } from 'react-native';
 import { FoodPortion } from '@/lib/nutrition';
 import { useTokens } from '@/lib/theme';
+import { useProfile } from '@/hooks/useUser';
+import { formatFoodQuantity, detectFoodCategory, getDefaultFoodMeasurement } from '@/lib/nutrition/displayUnits';
 
 interface FoodItemRowProps {
   food: FoodPortion;
@@ -72,6 +74,9 @@ export function FoodItemRow({ food, showMacros = false }: FoodItemRowProps) {
   const emoji = getFoodEmoji(food.food.category, food.food.displayName);
   const categoryColor = getCategoryColor(food.food.category);
   const { c, ty, r } = useTokens();
+  const { data: profile } = useProfile();
+  const foodMeasurement = getDefaultFoodMeasurement(profile?.unit_system);
+  const displayFoodMeasurement = (profile?.display_preferences?.food_measurement as any) ?? foodMeasurement;
   
   // Add form note if relevant (e.g., "(ground)" for cutting)
   const formNote = food.form && food.form !== 'whole' 
@@ -82,7 +87,8 @@ export function FoodItemRow({ food, showMacros = false }: FoodItemRowProps) {
   const portionString = food.displayPortion;
   const gramsMatch = portionString.match(/(\d+)\s*g/i);
   const gramsNumber = gramsMatch ? parseInt(gramsMatch[1], 10) : null;
-  const ozString = gramsNumber ? (gramsNumber / 28.3495).toFixed(1) : null;
+  const category = detectFoodCategory(food.food.displayName);
+  const fmt = gramsNumber ? formatFoodQuantity(gramsNumber, category, displayFoodMeasurement) : null;
 
   return (
     <View style={styles.container}>
@@ -102,18 +108,11 @@ export function FoodItemRow({ food, showMacros = false }: FoodItemRowProps) {
 
         <View style={{ flexDirection: 'row', alignItems: 'center', marginTop: 4 }}>
           <View style={{ flexDirection: 'row', alignItems: 'baseline', backgroundColor: c.surface2, paddingHorizontal: 6, paddingVertical: 2, borderRadius: r.sm, borderWidth: 1, borderColor: `${c.textMuted}20` }}>
-            {gramsNumber ? (
-              <>
-                <Text style={{ color: c.text, fontFamily: ty.body.familySemibold, fontSize: ty.sizes.xs }}>
-                  {gramsNumber}
-                  <Text style={{ color: c.textMuted, fontFamily: ty.body.family, fontSize: ty.sizes.xs - 2 }}>g</Text>
-                </Text>
-                <Text style={{ color: `${c.textMuted}50`, marginHorizontal: 4, fontSize: ty.sizes.xs - 2 }}>|</Text>
-                <Text style={{ color: c.textMuted, fontFamily: ty.body.family, fontSize: ty.sizes.xs }}>
-                  {ozString}
-                  <Text style={{ fontSize: ty.sizes.xs - 2 }}>oz</Text>
-                </Text>
-              </>
+            {fmt ? (
+              <Text style={{ color: c.text, fontFamily: ty.body.familySemibold, fontSize: ty.sizes.xs }}>
+                {fmt.value}
+                <Text style={{ color: c.textMuted, fontFamily: ty.body.family, fontSize: ty.sizes.xs - 2 }}>{fmt.unit}</Text>
+              </Text>
             ) : (
               <Text style={{ color: c.textMuted, fontFamily: ty.body.family, fontSize: ty.sizes.xs }}>
                 {portionString}

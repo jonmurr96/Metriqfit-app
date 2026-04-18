@@ -16,6 +16,8 @@ import { useTokens } from '../../../lib/theme';
 import { MacroStatCard } from '../../../components/nutrition/MacroStatCard';
 import { useApplyMealPlanChange, useNutritionPlanMeal } from '../../../hooks/usePlan';
 import { useSetReviewSectionAccepted } from '../../../hooks/useOnboardingReview';
+import { useProfile } from '../../../hooks/useUser';
+import { toOunces, formatMacroDisplay, detectFoodCategory, getDefaultFoodMeasurement } from '../../../lib/nutrition/displayUnits';
 
 type EditableItem = {
   key: string;
@@ -68,6 +70,9 @@ export default function NutritionPlanMealEditorScreen() {
   const { data: meal, isLoading } = useNutritionPlanMeal(mealId, { enabled: !!mealId });
   const applyChangeMutation = useApplyMealPlanChange();
   const setSectionAccepted = useSetReviewSectionAccepted();
+  const { data: profile } = useProfile();
+  const foodMeasurement = getDefaultFoodMeasurement(profile?.unit_system);
+  const displayFoodMeasurement = (profile?.display_preferences?.food_measurement as any) ?? foodMeasurement;
 
   const [name, setName] = useState('');
   const [description, setDescription] = useState('');
@@ -340,25 +345,25 @@ export default function NutritionPlanMealEditorScreen() {
             <MacroStatCard
               macro="protein"
               label="Protein"
-              primaryValue={`${round1(totals.protein)}g / ${round1(target.protein)}g`}
-              secondaryValue={`${delta.protein >= 0 ? '+' : ''}${round1(delta.protein)}g`}
-              statusText={buildDeltaStatus(delta.protein, 'g')}
+              primaryValue={`${formatMacroDisplay(totals.protein, 'protein', displayFoodMeasurement).value}${formatMacroDisplay(totals.protein, 'protein', displayFoodMeasurement).unit} / ${formatMacroDisplay(target.protein, 'protein', displayFoodMeasurement).value}${formatMacroDisplay(target.protein, 'protein', displayFoodMeasurement).unit}`}
+              secondaryValue={`${delta.protein >= 0 ? '+' : ''}${formatMacroDisplay(delta.protein, 'protein', displayFoodMeasurement).value}${formatMacroDisplay(delta.protein, 'protein', displayFoodMeasurement).unit}`}
+              statusText={buildDeltaStatus(delta.protein, formatMacroDisplay(delta.protein, 'protein', displayFoodMeasurement).unit)}
               compact
             />
             <MacroStatCard
               macro="carbs"
               label="Carbs"
-              primaryValue={`${round1(totals.carbs)}g / ${round1(target.carbs)}g`}
-              secondaryValue={`${delta.carbs >= 0 ? '+' : ''}${round1(delta.carbs)}g`}
-              statusText={buildDeltaStatus(delta.carbs, 'g')}
+              primaryValue={`${formatMacroDisplay(totals.carbs, 'carbs', displayFoodMeasurement).value}${formatMacroDisplay(totals.carbs, 'carbs', displayFoodMeasurement).unit} / ${formatMacroDisplay(target.carbs, 'carbs', displayFoodMeasurement).value}${formatMacroDisplay(target.carbs, 'carbs', displayFoodMeasurement).unit}`}
+              secondaryValue={`${delta.carbs >= 0 ? '+' : ''}${formatMacroDisplay(delta.carbs, 'carbs', displayFoodMeasurement).value}${formatMacroDisplay(delta.carbs, 'carbs', displayFoodMeasurement).unit}`}
+              statusText={buildDeltaStatus(delta.carbs, formatMacroDisplay(delta.carbs, 'carbs', displayFoodMeasurement).unit)}
               compact
             />
             <MacroStatCard
               macro="fat"
               label="Fat"
-              primaryValue={`${round1(totals.fat)}g / ${round1(target.fat)}g`}
-              secondaryValue={`${delta.fat >= 0 ? '+' : ''}${round1(delta.fat)}g`}
-              statusText={buildDeltaStatus(delta.fat, 'g')}
+              primaryValue={`${formatMacroDisplay(totals.fat, 'fat', displayFoodMeasurement).value}${formatMacroDisplay(totals.fat, 'fat', displayFoodMeasurement).unit} / ${formatMacroDisplay(target.fat, 'fat', displayFoodMeasurement).value}${formatMacroDisplay(target.fat, 'fat', displayFoodMeasurement).unit}`}
+              secondaryValue={`${delta.fat >= 0 ? '+' : ''}${formatMacroDisplay(delta.fat, 'fat', displayFoodMeasurement).value}${formatMacroDisplay(delta.fat, 'fat', displayFoodMeasurement).unit}`}
+              statusText={buildDeltaStatus(delta.fat, formatMacroDisplay(delta.fat, 'fat', displayFoodMeasurement).unit)}
               compact
             />
           </View>
@@ -396,13 +401,18 @@ export default function NutritionPlanMealEditorScreen() {
 
             <View style={{ flexDirection: 'row', gap: s.sm, marginTop: s.sm }}>
               <View style={{ flex: 1 }}>
-                <Text style={[styles.fieldLabel, { color: c.textMuted, fontFamily: ty.mono.family }]}>grams</Text>
+                <Text style={[styles.fieldLabel, { color: c.textMuted, fontFamily: ty.mono.family }]}>{displayFoodMeasurement === 'imperial_mixed' && detectFoodCategory(item.item_name) === 'protein' ? 'oz (grams)' : 'grams'}</Text>
                 <TextInput
                   keyboardType="decimal-pad"
                   value={String(item.grams)}
                   onChangeText={(value) => updateItem(item.key, { grams: safeNum(value) })}
                   style={[styles.input, { color: c.text, borderColor: c.border, fontFamily: ty.body.family }]}
                 />
+                {displayFoodMeasurement === 'imperial_mixed' && detectFoodCategory(item.item_name) === 'protein' && (
+                  <Text style={{ color: c.textMuted, fontFamily: ty.body.family, fontSize: ty.sizes.xs, marginTop: 2 }}>
+                    ≈ {round1(toOunces(item.grams))} oz
+                  </Text>
+                )}
               </View>
               <View style={{ flex: 1 }}>
                 <Text style={[styles.fieldLabel, { color: c.textMuted, fontFamily: ty.mono.family }]}>cal</Text>

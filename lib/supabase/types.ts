@@ -761,6 +761,9 @@ export interface Database {
           generation_version: number
           planner_mode: 'deterministic' | 'ai' | 'hybrid'
           warnings_json: Json | null
+          error_step: string | null
+          error_code: string | null
+          error_context: Json | null
           created_at: string
           completed_at: string | null
         }
@@ -777,6 +780,9 @@ export interface Database {
           generation_version?: number
           planner_mode?: 'deterministic' | 'ai' | 'hybrid'
           warnings_json?: Json | null
+          error_step?: string | null
+          error_code?: string | null
+          error_context?: Json | null
           created_at?: string
           completed_at?: string | null
         }
@@ -793,6 +799,9 @@ export interface Database {
           generation_version?: number
           planner_mode?: 'deterministic' | 'ai' | 'hybrid'
           warnings_json?: Json | null
+          error_step?: string | null
+          error_code?: string | null
+          error_context?: Json | null
           created_at?: string
           completed_at?: string | null
         }

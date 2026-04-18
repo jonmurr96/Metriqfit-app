@@ -1,4 +1,5 @@
 import { supabase } from '../lib/supabase';
+import { invokeFunction } from '../lib/supabase/invokeFunction';
 
 export interface BuiltMeal {
   name: string;
@@ -74,14 +75,13 @@ export async function buildMealsFromConstraints(input: {
     selected_indexes?: number[];
   };
 }): Promise<MealBuilderResult> {
-  const { data, error } = await supabase.functions.invoke('build-meals-from-constraints', {
-    body: input,
-  });
+  const { data, parsedError, rawError } = await invokeFunction(() =>
+    supabase.functions.invoke('build-meals-from-constraints', {
+      body: input,
+    })
+  );
 
-  if (error) {
-    throw new Error(error.message || 'Meal builder failed');
-  }
-
+  if (rawError) throw new Error(parsedError?.error || parsedError?.message || rawError?.message || 'Meal builder failed');
   if (!data?.success) {
     throw new Error(data?.error || 'Meal builder failed');
   }
@@ -121,18 +121,17 @@ export async function applyMealsBatch(input: {
     }>;
   }>;
 }) {
-  const { data, error } = await supabase.functions.invoke('apply-meal-plan-batch-change', {
-    body: {
-      plan_id: input.planId,
-      day_of_week: input.dayOfWeek,
-      meals: input.meals,
-    },
-  });
+  const { data, parsedError, rawError } = await invokeFunction(() =>
+    supabase.functions.invoke('apply-meal-plan-batch-change', {
+      body: {
+        plan_id: input.planId,
+        day_of_week: input.dayOfWeek,
+        meals: input.meals,
+      },
+    })
+  );
 
-  if (error) {
-    throw new Error(error.message || 'Failed to apply meal batch');
-  }
-
+  if (rawError) throw new Error(parsedError?.error || parsedError?.message || rawError?.message || 'Failed to apply meal batch');
   if (!data?.success) {
     throw new Error(data?.error || 'Failed to apply meal batch');
   }

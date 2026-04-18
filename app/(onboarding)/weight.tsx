@@ -8,8 +8,7 @@ import {
 } from 'react-native';
 import { router } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { MotiView, AnimatePresence } from 'moti';
-import { Ionicons } from '@expo/vector-icons';
+import { MotiView } from 'moti';
 import { metriqfitTheme } from '../../lib/theme';
 import { useOnboarding } from '../../lib/onboarding';
 import { PremiumHeader, PremiumFooter } from '../../components/onboarding/premium';
@@ -33,20 +32,17 @@ export default function WeightScreen() {
   const { data, updateData, setCurrentStep } = useOnboarding();
 
   const storedLb = data.current_weight_lb ?? 175;
-  const storedTargetLb = data.target_weight_lb ?? null;
+  const storedTargetLb = data.target_weight_lb ?? storedLb;
 
   const [unit, setUnit] = useState<'lb' | 'kg'>('lb');
   const [rulerValue, setRulerValue] = useState(
     unit === 'lb' ? storedLb : lbToKg(storedLb),
   );
-  const [showTarget, setShowTarget] = useState(!!storedTargetLb);
   const [targetRulerValue, setTargetRulerValue] = useState(
-    storedTargetLb != null
-      ? (unit === 'lb' ? storedTargetLb : lbToKg(storedTargetLb))
-      : (unit === 'lb' ? 160 : lbToKg(160)),
+    unit === 'lb' ? storedTargetLb : lbToKg(storedTargetLb),
   );
 
-  const isValid = data.current_weight_lb != null;
+  const isValid = data.current_weight_lb != null && data.target_weight_lb != null;
 
   const handleSwitchUnit = (newUnit: 'lb' | 'kg') => {
     if (newUnit === unit) return;
@@ -77,21 +73,6 @@ export default function WeightScreen() {
     },
     [unit, updateData],
   );
-
-  const handleToggleTarget = () => {
-    if (showTarget) {
-      setShowTarget(false);
-      updateData({ target_weight_lb: null, target_weight_enabled: false });
-    } else {
-      setShowTarget(true);
-      // Set a sensible default target (current - 10%)
-      const currentLb = data.current_weight_lb ?? 175;
-      const defaultTarget = Math.max(LB_MIN, Math.round(currentLb * 0.9));
-      const targetDisplay = unit === 'lb' ? defaultTarget : lbToKg(defaultTarget);
-      setTargetRulerValue(targetDisplay);
-      updateData({ target_weight_lb: defaultTarget, target_weight_enabled: true });
-    }
-  };
 
   const formatDisplay = useCallback(
     (value: number): string => `${value}`,
@@ -161,45 +142,20 @@ export default function WeightScreen() {
           />
           <Text style={styles.unitHint}>{unit === 'lb' ? 'pounds' : 'kilograms'}</Text>
 
-          {/* Target weight toggle */}
-          <Pressable style={styles.targetToggle} onPress={handleToggleTarget}>
-            <View style={[styles.targetToggleIcon, showTarget && styles.targetToggleIconActive]}>
-              <Ionicons
-                name={showTarget ? 'close' : 'add'}
-                size={18}
-                color={showTarget ? BG : CYAN}
-              />
-            </View>
-            <Text style={[styles.targetToggleText, showTarget && styles.targetToggleTextActive]}>
-              {showTarget ? 'Remove goal weight' : 'Set a goal weight (optional)'}
-            </Text>
-          </Pressable>
-
-          {/* Target weight ruler (conditional) */}
-          <AnimatePresence>
-            {showTarget && (
-              <MotiView
-                from={{ opacity: 0, height: 0 }}
-                animate={{ opacity: 1, height: 'auto' }}
-                exit={{ opacity: 0, height: 0 }}
-                transition={{ type: 'timing', duration: 300 } as any}
-              >
-                <View style={styles.targetSection}>
-                  <Text style={styles.targetLabel}>Goal Weight</Text>
-                  <RulerPicker
-                    min={unit === 'lb' ? LB_MIN : KG_MIN}
-                    max={unit === 'lb' ? LB_MAX : KG_MAX}
-                    step={1}
-                    initialValue={targetRulerValue}
-                    onChangeEnd={handleTargetChange}
-                    formatDisplay={formatDisplay}
-                    accentColor={CYAN}
-                  />
-                  <Text style={styles.unitHint}>{unit === 'lb' ? 'pounds' : 'kilograms'}</Text>
-                </View>
-              </MotiView>
-            )}
-          </AnimatePresence>
+          {/* Target weight ruler */}
+          <View style={styles.targetSection}>
+            <Text style={styles.targetLabel}>Goal Weight</Text>
+            <RulerPicker
+              min={unit === 'lb' ? LB_MIN : KG_MIN}
+              max={unit === 'lb' ? LB_MAX : KG_MAX}
+              step={1}
+              initialValue={targetRulerValue}
+              onChangeEnd={handleTargetChange}
+              formatDisplay={formatDisplay}
+              accentColor={CYAN}
+            />
+            <Text style={styles.unitHint}>{unit === 'lb' ? 'pounds' : 'kilograms'}</Text>
+          </View>
         </MotiView>
       </ScrollView>
 
@@ -269,39 +225,6 @@ const styles = StyleSheet.create({
     textTransform: 'uppercase',
     marginBottom: 28,
   },
-  targetToggle: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 12,
-    marginHorizontal: 24,
-    marginBottom: 16,
-    paddingVertical: 16,
-    paddingHorizontal: 20,
-    borderRadius: 14,
-    borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.06)',
-    backgroundColor: '#0A1128',
-  },
-  targetToggleIcon: {
-    width: 30,
-    height: 30,
-    borderRadius: 15,
-    backgroundColor: `${CYAN}15`,
-    borderWidth: 1,
-    borderColor: `${CYAN}40`,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  targetToggleIconActive: {
-    backgroundColor: CYAN,
-    borderColor: CYAN,
-  },
-  targetToggleText: {
-    fontSize: 14,
-    fontFamily: 'Sora_500Medium',
-    color: 'rgba(255,255,255,0.5)',
-  },
-  targetToggleTextActive: { color: CYAN },
   targetSection: { paddingTop: 8 },
   targetLabel: {
     fontSize: 12,

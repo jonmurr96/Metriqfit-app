@@ -24,6 +24,14 @@ const CONSTRAINED_FAMILY_SUPPORTED_DAYS: Record<string, number[]> = {
   fam_minimalist_2_day_strength: [2],
   fam_minimalist_2_day_aesthetics: [2],
   fam_minimalist_2_day_athletic: [2],
+  fam_recomp_fb: [3],
+  fam_recomp_ul: [4],
+  fam_str_5_day: [5],
+  fam_hyp_5_day: [5],
+  fam_athletic_ul: [4],
+  fam_fatloss_ul: [4],
+  fam_db_only_ul: [4],
+  fam_bw_skill_ul: [4],
 };
 
 const supportsRequestedDays = (familyIdRef: string, daysPerWeek: number): boolean => {
@@ -61,12 +69,21 @@ export const routeUserToPlan = (profile: OnboardingProfileInput): LibrarianRecom
 
   // 1. Environment Hard Overrides
   // Bodyweight is the absolute constraint
-  if (environment === SessionEnvironment.Bodyweight && supportsRequestedDays('fam_at_home_bw', daysPerWeek)) {
-    return {
-      familyIdRef: 'fam_at_home_bw',
-      confidence: 'HIGH',
-      notes: 'Strict Bodyweight routing mandated by environment.',
-    };
+  if (environment === SessionEnvironment.Bodyweight) {
+    if (daysPerWeek === 4 && supportsRequestedDays('fam_bw_skill_ul', daysPerWeek)) {
+      return {
+        familyIdRef: 'fam_bw_skill_ul',
+        confidence: 'HIGH',
+        notes: 'Bodyweight Skill routing for 4-day frequency.',
+      };
+    }
+    if (supportsRequestedDays('fam_at_home_bw', daysPerWeek)) {
+      return {
+        familyIdRef: 'fam_at_home_bw',
+        confidence: 'HIGH',
+        notes: 'Strict Bodyweight routing mandated by environment.',
+      };
+    }
   }
 
   // 2. Specialized 2-Day Routing
@@ -104,11 +121,19 @@ export const routeUserToPlan = (profile: OnboardingProfileInput): LibrarianRecom
       };
     }
 
-    // Default Fallback for GenFitness, FatLoss, Recomp, Bodyweight constraints, etc.
+    if (primaryGoal === GoalBucket.Recomp) {
+      return {
+        familyIdRef: 'fam_minimalist_2_day_aesthetics',
+        confidence: 'HIGH',
+        notes: 'Body Recomp goal at 2 days/week maps to Minimalist Aesthetics (closest physiological match).',
+      };
+    }
+
+    // Default Fallback for GenFitness, FatLoss, Maintain, Bodyweight constraints, etc.
     return {
       familyIdRef: 'fam_minimalist_2_day',
       confidence: 'HIGH',
-      notes: 'General or non-specific 2-day requests route to standard Minimalist.',
+      notes: 'General, Fat Loss, or non-specific 2-day requests route to standard Minimalist Full Body.',
     };
   }
 
@@ -140,6 +165,13 @@ export const routeUserToPlan = (profile: OnboardingProfileInput): LibrarianRecom
       };
     }
     // Otherwise, they get the high-volume DB path
+    if (daysPerWeek === 4 && supportsRequestedDays('fam_db_only_ul', daysPerWeek)) {
+      return {
+        familyIdRef: 'fam_db_only_ul',
+        confidence: 'HIGH',
+        notes: 'User avoids barbells in commercial gym -> DB UL specialist.',
+      };
+    }
     if (supportsRequestedDays('fam_min_equip_db', daysPerWeek)) {
       return {
         familyIdRef: 'fam_min_equip_db',
@@ -204,11 +236,18 @@ export const routeUserToPlan = (profile: OnboardingProfileInput): LibrarianRecom
 
   // Strength Tracks
   if (primaryGoal === GoalBucket.Strength) {
+    if (daysPerWeek === 5) {
+      return {
+        familyIdRef: 'fam_str_5_day',
+        confidence: 'HIGH',
+        notes: 'Strength 5-day maps to optimized PPL-UL Strength split.',
+      };
+    }
     if (daysPerWeek >= 4) {
       return {
         familyIdRef: 'fam_str_ul',
         confidence: 'HIGH',
-        notes: 'Strength 4-day maps to Upper/Lower.',
+        notes: 'Strength 4-day (or 6-day fallback) maps to Upper/Lower.',
       };
     }
     return {
@@ -220,6 +259,13 @@ export const routeUserToPlan = (profile: OnboardingProfileInput): LibrarianRecom
 
   // Fat Loss Tracks
   if (primaryGoal === GoalBucket.FatLoss) {
+    if (daysPerWeek === 4 && supportsRequestedDays('fam_fatloss_ul', daysPerWeek)) {
+      return {
+        familyIdRef: 'fam_fatloss_ul',
+        confidence: 'HIGH',
+        notes: 'Fat Loss 4-day routes to specialized Upper/Lower metabolic density.',
+      };
+    }
     return {
       familyIdRef: 'fam_fatloss_fb',
       confidence: 'MODERATE',
@@ -227,27 +273,60 @@ export const routeUserToPlan = (profile: OnboardingProfileInput): LibrarianRecom
     };
   }
 
-  // General Fitness / Recomp / Athletic
+  // Recomposition Tracks (High Density)
+  if (primaryGoal === GoalBucket.Recomp) {
+    if (daysPerWeek === 3) {
+      return {
+        familyIdRef: 'fam_recomp_fb',
+        confidence: 'HIGH',
+        notes: 'Recomp 3-day maps to specialized density-based Full Body.',
+      };
+    }
+    if (daysPerWeek === 4) {
+      return {
+        familyIdRef: 'fam_recomp_ul',
+        confidence: 'HIGH',
+        notes: 'Recomp 4-day maps to specialized density-based Upper/Lower.',
+      };
+    }
+  }
+
+  // General Fitness / Athletic / Recomp (5-6 day fallback)
   if (primaryGoal === GoalBucket.GenFitness || primaryGoal === GoalBucket.Recomp || primaryGoal === GoalBucket.Athletic) {
     if (daysPerWeek === 5) {
       return {
         familyIdRef: 'fam_hyp_5_day',
         confidence: 'MODERATE',
-        notes: '5-Day GenFit/Recomp routes to optimized Hypertrophy PPL-UL.',
+        notes: '5-Day requests route to optimized Hypertrophy PPL-UL.',
       };
     }
     if (daysPerWeek >= 6) {
       return {
         familyIdRef: 'fam_hyp_ppl',
         confidence: 'MODERATE',
-        notes: '6+ Day GenFit/Recomp routes to Hypertrophy PPL.',
+        notes: '6+ Day requests route to Hypertrophy PPL.',
       };
     }
     if (daysPerWeek >= 4) {
+      if (primaryGoal === GoalBucket.Athletic && daysPerWeek === 4 && supportsRequestedDays('fam_athletic_ul', daysPerWeek)) {
+        return {
+          familyIdRef: 'fam_athletic_ul',
+          confidence: 'HIGH',
+          notes: 'Athletic 4-day routes to performance-focused Upper/Lower.',
+        };
+      }
       return {
         familyIdRef: 'fam_hyp_ul',
         confidence: 'MODERATE',
-        notes: '4-Day GenFit/Recomp routes to Hypertrophy Upper/Lower.',
+        notes: '4-Day GenFit/Athletic routes to Hypertrophy Upper/Lower.',
+      };
+    }
+    // 3-Day cases for Athletic/GenFit
+    if (daysPerWeek === 3) {
+      return {
+        familyIdRef: 'fam_hyp_fb',
+        confidence: 'MODERATE',
+        notes: '3-Day Athletic/GenFit routes to Hypertrophy Full Body.',
       };
     }
   }

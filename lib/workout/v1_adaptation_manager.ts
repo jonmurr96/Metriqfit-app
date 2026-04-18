@@ -1,5 +1,7 @@
 import { Database, Q } from '@nozbe/watermelondb';
 import V1ExerciseSubstitution from '../database/models/V1ExerciseSubstitution';
+import V1UserSwap from '../database/models/V1UserSwap';
+import { ContinuityMethod } from '../../types/v1_engine';
 
 /**
  * Manages user exercise preferences and adaptations.
@@ -66,11 +68,11 @@ export class V1AdaptationManager {
   /**
    * Clears a previously saved substitution.
    */
-  async clearUserSubstitution(userId: string, exerciseId: string) {
+  async clearUserSubstitution(userId: string, exercise_id: string) {
     const results = await this.db.get<V1ExerciseSubstitution>('v1_exercise_substitutions')
       .query(
         Q.where('user_id', userId),
-        Q.where('exercise_id', exerciseId)
+        Q.where('exercise_id', exercise_id)
       )
       .fetch();
 
@@ -79,5 +81,28 @@ export class V1AdaptationManager {
         await results[0].destroyPermanently();
       });
     }
+  }
+
+  /**
+   * Logs a user swap event.
+   */
+  async logUserSwap(
+    userId: string,
+    originalExId: string,
+    newExId: string,
+    group: string,
+    reason: string,
+    continuity: ContinuityMethod
+  ) {
+    await this.db.write(async () => {
+      await this.db.get<V1UserSwap>('v1_user_swaps').create(record => {
+        record.userId = userId;
+        record.originalExerciseId = originalExId;
+        record.newExerciseId = newExId;
+        record.replacementGroup = group;
+        record.reason = reason;
+        record.continuityMethod = continuity;
+      });
+    });
   }
 }

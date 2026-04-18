@@ -26,8 +26,13 @@ import {
 } from '../../../services/foodPhotoService';
 import { createUserFood, searchFoods } from '../../../services/nutritionService';
 import { getTierLabel } from '../../../lib/subscription/plans';
+import { useProfile } from '../../../hooks/useUser';
+import { formatFoodQuantity, formatMacroDisplay, detectFoodCategory, getDefaultFoodMeasurement } from '../../../lib/nutrition/displayUnits';
 
 export default function FoodCameraScreen() {
+  const { data: profile } = useProfile();
+  const foodMeasurement = getDefaultFoodMeasurement(profile?.unit_system);
+  const displayFoodMeasurement = (profile?.display_preferences?.food_measurement as any) ?? foodMeasurement;
   const { c, s, ty, r } = useTokens();
   const router = useRouter();
   const insets = useSafeAreaInsets();
@@ -260,7 +265,7 @@ export default function FoodCameraScreen() {
         carbsPer100g: (selectedFood.carbs / selectedFood.estimatedGrams) * 100,
         fatPer100g: (selectedFood.fat / selectedFood.estimatedGrams) * 100,
         servingSizeG: selectedFood.estimatedGrams,
-        servingDescription: `${Math.round(selectedFood.estimatedGrams)}g serving`,
+        servingDescription: `${formatFoodQuantity(selectedFood.estimatedGrams, detectFoodCategory(selectedFood.name), displayFoodMeasurement).value}${formatFoodQuantity(selectedFood.estimatedGrams, detectFoodCategory(selectedFood.name), displayFoodMeasurement).unit} serving`,
       });
 
       router.replace({
@@ -449,7 +454,7 @@ export default function FoodCameraScreen() {
                       {food.name}
                     </Text>
                     <Text style={{ color: c.textMuted, fontFamily: ty.mono.family, fontSize: ty.sizes.sm, marginTop: 2 }}>
-                      ~{food.estimatedGrams}g
+                      ~{formatFoodQuantity(food.estimatedGrams, detectFoodCategory(food.name), displayFoodMeasurement).value}{formatFoodQuantity(food.estimatedGrams, detectFoodCategory(food.name), displayFoodMeasurement).unit}
                     </Text>
                   </View>
                   <View style={{ alignItems: 'flex-end' }}>
@@ -461,9 +466,9 @@ export default function FoodCameraScreen() {
                       style={{ marginTop: 2, justifyContent: 'flex-end' }}
                       textStyle={{ fontFamily: ty.mono.family, fontSize: ty.sizes.xs }}
                       items={[
-                        { macro: 'protein', value: food.protein, unit: 'g' },
-                        { macro: 'carbs', value: food.carbs, unit: 'g' },
-                        { macro: 'fat', value: food.fat, unit: 'g' },
+                        { macro: 'protein', value: parseFloat(formatMacroDisplay(food.protein, 'protein', displayFoodMeasurement).value), unit: formatMacroDisplay(food.protein, 'protein', displayFoodMeasurement).unit },
+                        { macro: 'carbs', value: parseFloat(formatMacroDisplay(food.carbs, 'carbs', displayFoodMeasurement).value), unit: formatMacroDisplay(food.carbs, 'carbs', displayFoodMeasurement).unit },
+                        { macro: 'fat', value: parseFloat(formatMacroDisplay(food.fat, 'fat', displayFoodMeasurement).value), unit: formatMacroDisplay(food.fat, 'fat', displayFoodMeasurement).unit },
                       ]}
                     />
                   </View>
@@ -508,9 +513,9 @@ export default function FoodCameraScreen() {
                     emphasis="outlined"
                     style={{ justifyContent: 'flex-end' }}
                     items={[
-                      { macro: 'protein', value: analysis.totalProtein, unit: 'g' },
-                      { macro: 'carbs', value: analysis.totalCarbs, unit: 'g' },
-                      { macro: 'fat', value: analysis.totalFat, unit: 'g' },
+                      { macro: 'protein', value: parseFloat(formatMacroDisplay(analysis.totalProtein, 'protein', displayFoodMeasurement).value), unit: formatMacroDisplay(analysis.totalProtein, 'protein', displayFoodMeasurement).unit },
+                      { macro: 'carbs', value: parseFloat(formatMacroDisplay(analysis.totalCarbs, 'carbs', displayFoodMeasurement).value), unit: formatMacroDisplay(analysis.totalCarbs, 'carbs', displayFoodMeasurement).unit },
+                      { macro: 'fat', value: parseFloat(formatMacroDisplay(analysis.totalFat, 'fat', displayFoodMeasurement).value), unit: formatMacroDisplay(analysis.totalFat, 'fat', displayFoodMeasurement).unit },
                     ]}
                   />
                 </View>

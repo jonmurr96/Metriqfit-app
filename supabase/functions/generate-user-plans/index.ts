@@ -6,6 +6,7 @@ import {
   exerciseMatchesWorkoutFocus,
   inferWorkoutFocusTags,
   type WorkoutFocusTag,
+  type ExerciseFocusTag,
 } from "../../../lib/workout/programMappingRules.ts";
 import {
   auditDayExerciseMappings,
@@ -26,6 +27,10 @@ import {
   getSlotTemplate,
   type FoodWithMetadata,
   type UserNutritionSelections,
+  type ScheduleConfig,
+  type GenerationOptions,
+  type GeneratedMeal,
+  type MealSlot,
 } from "./scientificMealEngine.ts";
 import { routeUserToPlan, type OnboardingProfileInput } from "../../../lib/workout/v1_librarian_router.ts";
 import { hydrateTemplate } from "../../../lib/workout/v1_architect.ts";
@@ -40,13 +45,69 @@ import {
   ProgressionModel,
   ReplacementGroup,
   SlotArchetype,
-  DayType,
+
   MovementPattern,
   EquipmentCategory,
   SetupComplexity,
   FatigueCost,
   ExerciseTier
 } from "../../../types/v1_engine.ts";
+
+/**
+ * ✅ QUALITY GATE: Deep validation of generated plan JSON to ensure UI renderability.
+ * Catches "empty shell" plans and structural issues.
+ */
+function performRenderCheck(data: any, requestedDays: number = 0): { passed: boolean; details: Record<string, any> } {
+  // We'll normalize inputs — data could have workout_days or nested workout_plan
+  const details: any = {
+    workout: {
+      has_plan: !!(data.workout_plan || data.workout_days || data.workoutDays),
+      weeks_passed: false,
+      exercises_passed: false,
+      day_count: 0
+    },
+    nutrition: {
+       has_plan: !!(data.nutrition_plan || data.nutritionPlan),
+       calories_valid: false,
+       meals_valid: false,
+    }
+  };
+
+  if (details.workout.has_plan) {
+    const rawWorkout = data.workout_plan || data.workoutPlan;
+    const days = data.workout_days || data.workoutDays || rawWorkout?.days || rawWorkout?.weeks?.flatMap((w: any) => w.days);
+    
+    const isV1 = !!rawWorkout?.family_id;
+    details.workout.day_count = days?.length || 0;
+    
+    // Check structure — V1 must match the user's requested frequency exactly.
+    // V2 snapshots are usually a full 7-day layout.
+    const minDays = requestedDays || (isV1 ? 1 : 7);
+    details.workout.weeks_passed = isV1 
+      ? (details.workout.day_count === requestedDays) // 100% Match for V1
+      : (details.workout.day_count >= 7); 
+    
+    // Check for "empty shell" — no exercises in the first workout day
+    const firstWorkoutDay = days?.find((d: any) => Array.isArray(d.exercises) && d.exercises.length > 0);
+    if (firstWorkoutDay) {
+       const firstEx = firstWorkoutDay.exercises[0];
+       // Must have sets and either reps or rep_range/reps_min to be renderable
+       details.workout.exercises_passed = !!(firstEx.sets && (firstEx.reps || firstEx.rep_range || firstEx.reps_min));
+    }
+  }
+
+  if (details.nutrition.has_plan) {
+    const plan = data.nutrition_plan || data.nutritionPlan;
+    details.nutrition.calories_valid = typeof plan.calories === 'number' && plan.calories > 0;
+    // Must have meals with actual food items
+    details.nutrition.meals_valid = Array.isArray(plan.meals) && plan.meals.length > 0 && plan.meals.some((m: any) => Array.isArray(m.items) && m.items.length > 0);
+  }
+
+  const passed = (details.workout.has_plan ? (details.workout.weeks_passed && details.workout.exercises_passed) : true) &&
+                 (details.nutrition.has_plan ? (details.nutrition.calories_valid && details.nutrition.meals_valid) : true);
+
+  return { passed, details };
+}
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -103,7 +164,7 @@ async function storeV1WorkoutPlan(
     description: "Personalized plan generated using the new V1 Architect and Librarian Engine.",
     start_date: formatDate(new Date()),
     total_weeks: Math.max(4, Math.ceil(horizonDays / 7)),
-    days_per_week: v1Plan.days.filter((d: any) => d.day_type !== DayType.Recovery && d.day_type !== DayType.Conditioning).length,
+    days_per_week: v1Plan.days.filter((d: any) => d.day_type !== 'Recovery' && d.day_type !== 'Conditioning').length,
   });
 
   const planId = workoutPlan.id;
@@ -130,7 +191,7 @@ async function storeV1WorkoutPlan(
   }
 
   for (const day of v1Plan.days) {
-    if (day.day_type === DayType.Recovery) continue;
+    if (day.day_type === 'Recovery') continue;
 
     const dayInsert = await insertWorkoutPlanDayWithFallback(supabase, {
       plan_id: planId,
@@ -167,6 +228,10 @@ async function storeV1WorkoutPlan(
           warnings.push(`V1 exercise "${exercise.name}" (${exercise.external_id}) not found in public.exercises — skipped`);
           continue;
         }
+        const v1RepsMin = clamp(Number(exercise.reps_min || 8), 1, 100);
+        const v1RepsMax = clamp(Number(exercise.reps_max || Math.max(10, v1RepsMin)), v1RepsMin, 100);
+        const v1SetsTarget = clamp(Number(exercise.sets || 3), 1, 20);
+        const v1RestSeconds = clamp(Number(exercise.rest_seconds || 90), 20, 300);
         const { error: exerciseError } = await supabase
           .from("user_workout_plan_exercises")
           .insert({
@@ -174,10 +239,10 @@ async function storeV1WorkoutPlan(
             block_id: blockInsert.id,
             exercise_id: publicExerciseId,
             order_index: exerciseIndex + 1,
-            sets_target: exercise.sets,
-            reps_min: exercise.reps_min,
-            reps_max: exercise.reps_max,
-            rest_seconds: exercise.rest_seconds,
+            sets_target: v1SetsTarget,
+            reps_min: v1RepsMin,
+            reps_max: v1RepsMax,
+            rest_seconds: v1RestSeconds,
             user_notes: `Progression: ${exercise.progression_model}`,
           });
 
@@ -204,13 +269,15 @@ async function storeV1WorkoutPlan(
 
   await syncLegacyPlanDayScheduledDates(supabase, dayRecords, weeklyLayout);
 
-  return { planId, warnings, scheduleCount };
+  return { planId, plan: v1Plan, warnings, scheduleCount };
 }
 
 type PlanType = "workout" | "nutrition" | "both";
 type GenerationMode = "initial" | "regenerate";
 type ActivationMode = "preview" | "activate";
-type NutritionMealSlot = "breakfast" | "lunch" | "dinner" | "snack";
+// Extended to match the DB CHECK constraint in migration 084 which allows
+// scientific engine slots alongside the four legacy slots.
+type NutritionMealSlot = "breakfast" | "lunch" | "dinner" | "snack" | "pre-workout" | "post-workout" | "evening";
 
 type WorkoutRegenerationReason =
   | "not_seeing_results"
@@ -319,6 +386,17 @@ type OnboardingAnswers = {
   dietary_preference?: string;
   allergies_exclusions?: string[];
   refused_foods?: string[];
+  preferred_proteins?: string[];
+  preferred_carbs?: string[];
+  preferred_fats?: string[];
+  traditional_meals?: boolean;
+  training_time?: string;
+  wake_time?: string;
+  first_meal_delay?: string;
+  last_meal_before_bed?: string;
+  carb_tolerance?: string;
+  cooking_level?: string;
+  target_weight_lb?: number | null;
 };
 
 type UserContext = {
@@ -346,6 +424,12 @@ type UserContext = {
     preferred_fats: string[];
     traditional_meals: boolean;
     training_time: string | null;
+    wake_time: string | null;
+    first_meal_delay: string | null;
+    last_meal_before_bed: string | null;
+    carb_tolerance: string | null;
+    cooking_level: string | null;
+    target_weight_lb: number | null;
   };
   targets: {
     calories: number;
@@ -362,6 +446,7 @@ type UserContext = {
     primary_muscle: string | null;
     pattern: string | null;
     difficulty: string | null;
+    popularity_score: number | null;
   }>;
   foods: Array<{
     id: string;
@@ -370,7 +455,7 @@ type UserContext = {
     protein_per_100g: number;
     carbs_per_100g: number;
     fat_per_100g: number;
-    fiber_per_100g: number | null;
+    fiber_per_100g: number;
     category: string | null;
     // Food metadata for scientific meal generation
     breakfast_score?: number;
@@ -385,6 +470,7 @@ type UserContext = {
     formality?: string;
     goal_form?: string;
     variety_family?: string;
+    tags?: string[];
   }>;
 };
 
@@ -400,7 +486,7 @@ type WorkoutDayTemplate = {
   cue?: string;
   primaryFocuses?: WorkoutFocusTag[];
   supportFocuses?: WorkoutFocusTag[];
-  disallowedFocuses?: string[];
+  disallowedFocuses?: ExerciseFocusTag[];
   targetExercises?: number | null;
   minExercises?: number | null;
   minPrimaryExercises?: number | null;
@@ -426,6 +512,69 @@ class WorkoutGenerationValidationError extends Error {
     super(message);
     this.name = "WorkoutGenerationValidationError";
     this.warnings = warnings;
+  }
+}
+
+class StrictTemplateSelectionError extends Error {
+  warnings: string[];
+  statusCode: number;
+  step: string;
+  errorCode: string;
+  details: Record<string, unknown>;
+
+  constructor(
+    message: string,
+    details: Record<string, unknown>,
+    warnings: string[] = [],
+  ) {
+    super(message);
+    this.name = "StrictTemplateSelectionError";
+    this.warnings = warnings;
+    this.statusCode = 422;
+    this.step = "template_selection";
+    this.errorCode = "template_selection_unsupported";
+    this.details = details;
+  }
+}
+
+async function updateGenerationRunFailure(
+  supabase: SupabaseClient,
+  runId: string,
+  params: {
+    status: "failed" | "validation_failed";
+    validationErrors: string[];
+    warnings: string[];
+    errorStep?: string | null;
+    errorCode?: string | null;
+    errorContext?: Record<string, unknown> | null;
+    aiResponse?: Record<string, unknown> | null;
+  },
+) {
+  const payload: Record<string, unknown> = {
+    status: params.status,
+    completed_at: new Date().toISOString(),
+    validation_errors: params.validationErrors,
+    warnings_json: params.warnings,
+    error_step: params.errorStep ?? null,
+    error_code: params.errorCode ?? null,
+    error_context: params.errorContext ?? null,
+  };
+
+  if (params.aiResponse !== undefined) {
+    payload.ai_response = params.aiResponse;
+  }
+
+  const { error } = await supabase
+    .from("plan_generation_runs")
+    .update(payload)
+    .eq("id", runId);
+
+  if (error) {
+    console.error("[generate-user-plans] Failed to update generation run failure metadata:", {
+      runId,
+      error: error.message,
+      params,
+    });
   }
 }
 
@@ -1130,11 +1279,11 @@ function scoreSplitForContext(split: SplitDefinition, context: UserContext, stri
   if (split.frequency === onboarding.training_days_per_week) score += strictDaysMatch ? 60 : 25;
   else score -= strictDaysMatch ? 40 : Math.abs(split.frequency - onboarding.training_days_per_week) * 8;
 
-  if (onboarding.goal_type === "increase_endurance" || onboarding.goal_type === "lose_weight") {
+  if (onboarding.goal_type === "increase_endurance" || onboarding.goal_type === "lose_weight" || onboarding.goal_type === "get_fitter") {
     if (split.frequency >= 4) score += 12;
   }
 
-  if (onboarding.goal_type === "gain_weight" || onboarding.goal_type === "recomp") {
+  if (onboarding.goal_type === "gain_weight" || onboarding.goal_type === "build_muscle" || onboarding.goal_type === "recomp") {
     if (split.days.some((day) => day.tags.includes("legs")) && split.days.some((day) => day.tags.includes("back"))) score += 10;
   }
 
@@ -1266,10 +1415,12 @@ function goalTagsForContext(goalType: string) {
   const map: Record<string, string[]> = {
     lose_weight: ["fat_loss", "conditioning", "general_fitness"],
     gain_weight: ["hypertrophy", "muscle_building", "strength"],
+    build_muscle: ["hypertrophy", "muscle_building", "strength"],
     maintain_weight: ["general_fitness", "consistency", "balanced"],
     recomp: ["recomp", "hypertrophy", "strength"],
     increase_endurance: ["endurance", "conditioning", "athletic_performance"],
     general_fitness: ["general_fitness", "consistency", "beginner_friendly"],
+    get_fitter: ["general_fitness", "consistency", "balanced", "conditioning"],
   };
   return map[goalType] || ["general_fitness"];
 }
@@ -1521,8 +1672,8 @@ async function chooseTemplateFromCatalog(
     progression_model: fullTemplate.progression_model,
     goal_tags: fullTemplate.goal_tags || [],
     training_style_tags: fullTemplate.training_style_tags || [],
-    family_key: fullTemplate.family?.external_key || null,
-    family_name: fullTemplate.family?.display_name || null,
+    family_key: (fullTemplate.family as any)?.[0]?.external_key || (fullTemplate.family as any)?.external_key || null,
+    family_name: (fullTemplate.family as any)?.[0]?.display_name || (fullTemplate.family as any)?.display_name || null,
     score: selected.score,
     rationale: selected.rationale,
     days: (fullTemplate.days || [])
@@ -1799,17 +1950,54 @@ async function fetchUserContext(supabase: SupabaseClient, userId: string): Promi
     supabase.from("profiles").select("first_name, sex, unit_system").eq("id", userId).single(),
     supabase.from("onboarding_answers").select("answers").eq("user_id", userId).single(),
     supabase.from("user_targets").select("calories, protein_g, carbs_g, fat_g, water_ml").eq("user_id", userId).single(),
-    supabase.from("exercises").select("id, name, category, equipment_required, primary_muscle, pattern, difficulty").limit(2000),
-    supabase.from("food_items").select("id, name, calories_per_100g, protein_per_100g, carbs_per_100g, fat_per_100g, fiber_per_100g, category, breakfast_score, lunch_dinner_score, preworkout_score, postworkout_score, evening_score, digestion_speed, fat_load, carb_speed, protein_leanness, formality, goal_form, variety_family").limit(400),
+    supabase.from("exercises").select("id, name, category, equipment_required, primary_muscle, pattern, difficulty, popularity_score").limit(2000),
+    supabase.from("food_items").select("id, name, calories_per_100g, protein_per_100g, carbs_per_100g, fat_per_100g, fiber_per_100g, category, breakfast_score, lunch_dinner_score, preworkout_score, postworkout_score, evening_score, digestion_speed, fat_load, carb_speed, protein_leanness, formality, goal_form, variety_family, tags").limit(400),
   ]);
 
-  if (profileRes.error || !profileRes.data) throw new Error(profileRes.error?.message || "Profile not found");
-  if (onboardingRes.error || !onboardingRes.data) throw new Error(onboardingRes.error?.message || "Onboarding answers not found");
-  if (targetsRes.error || !targetsRes.data) throw new Error(targetsRes.error?.message || "User targets not found");
-  if (exercisesRes.error) throw new Error(exercisesRes.error.message);
-  if (foodsRes.error) throw new Error(foodsRes.error.message);
+  if (profileRes.error || !profileRes.data) throw new Error(`Profile not found for user ${userId}. The auth trigger may not have created the profiles row. DB: ${profileRes.error?.message || "row missing"}`);
+  if (onboardingRes.error || !onboardingRes.data) throw new Error(`Onboarding answers not found for user ${userId}. Please complete onboarding. DB: ${onboardingRes.error?.message || "row missing"}`);
+  if (targetsRes.error || !targetsRes.data) throw new Error(`Nutrition targets not found for user ${userId}. Please complete onboarding. DB: ${targetsRes.error?.message || "row missing"}`);
+
+  if (!targetsRes.data?.calories || targetsRes.data.calories <= 0) {
+    throw new Error(`Invalid nutrition targets (0 calories). This usually means vital stats were not provided correctly. RETRY_ONBOARDING`);
+  }
+
+  if (exercisesRes.error) throw new Error(`Failed to load exercise library: ${exercisesRes.error.message}`);
+  if (foodsRes.error) throw new Error(`Failed to load food library: ${foodsRes.error.message}`);
+
+  // Fix 7: Assert minimum library sizes — fewer than 20 records indicates a seed/data problem.
+  const exerciseCount = exercisesRes.data?.length ?? 0;
+  const foodCount = foodsRes.data?.length ?? 0;
+  if (exerciseCount < 20) {
+    throw new Error(
+      `Exercise library too small: only ${exerciseCount} exercises found (minimum 20 required). Please contact support or check your database seed.`,
+    );
+  }
+  if (foodCount < 20) {
+    throw new Error(
+      `Food library too small: only ${foodCount} foods found (minimum 20 required). Please contact support or check your database seed.`,
+    );
+  }
 
   const answers = (onboardingRes.data.answers || {}) as OnboardingAnswers;
+
+  // Fix 2: Validate required onboarding answer fields before applying defaults.
+  // Throw a typed error (statusCode: 400) so the serve handler can return HTTP 400
+  // instead of letting it bubble up as a generic 500.
+  const requiredAnswerFields: (keyof OnboardingAnswers)[] = [
+    "goal_type",
+    "experience_level",
+    "training_days_per_week",
+    "equipment_access",
+  ];
+  for (const field of requiredAnswerFields) {
+    if (answers[field] == null) {
+      const err = new Error(`Missing required field: ${field}`);
+      (err as any).statusCode = 400;
+      (err as any).field = field;
+      throw err;
+    }
+  }
 
   return {
     profile: {
@@ -1836,10 +2024,24 @@ async function fetchUserContext(supabase: SupabaseClient, userId: string): Promi
       preferred_fats: answers.preferred_fats || [],
       traditional_meals: answers.traditional_meals !== false, // default true
       training_time: answers.training_time || null,
+      wake_time: answers.wake_time || null,
+      first_meal_delay: answers.first_meal_delay || null,
+      last_meal_before_bed: answers.last_meal_before_bed || null,
+      carb_tolerance: answers.carb_tolerance || null,
+      cooking_level: answers.cooking_level || null,
+      target_weight_lb: typeof answers.target_weight_lb === 'number' ? answers.target_weight_lb : null,
     },
     targets: targetsRes.data,
     exercises: exercisesRes.data || [],
-    foods: foodsRes.data || [],
+    foods: (foodsRes.data || []).map((f: any) => ({
+      ...f,
+      fiber_per_100g: f.fiber_per_100g ?? 0,
+      breakfast_score: f.breakfast_score ?? 0,
+      lunch_dinner_score: f.lunch_dinner_score ?? 0,
+      preworkout_score: f.preworkout_score ?? 0,
+      postworkout_score: f.postworkout_score ?? 0,
+      evening_score: f.evening_score ?? 0,
+    })),
   };
 }
 
@@ -1970,10 +2172,10 @@ async function fetchCurrentWorkoutPlanContext(
       .in("id", completedSessionIds);
     const durations = (sessions || [])
       .map((session: any) => Number(session.duration_sec || 0))
-      .filter((value) => Number.isFinite(value) && value > 0);
+      .filter((val: number) => Number.isFinite(val) && val > 0);
     if (durations.length) {
       avgLoggedDurationMin = Math.round(
-        durations.reduce((sum, value) => sum + value, 0) / durations.length / 60,
+        durations.reduce((sum: number, val: number) => sum + val, 0) / durations.length / 60,
       );
     }
   }
@@ -2194,10 +2396,10 @@ function buildWorkoutGenerationConfig(input: {
   const { generationMode, activationMode, workoutRegeneration, currentPlanContext } = input;
   const reason = workoutRegeneration?.reason || null;
   const avoidExerciseTerms = (workoutRegeneration?.avoid_exercise_names || [])
-    .map((value) => normalizeNameTerm(value))
+    .map((term: string) => normalizeNameTerm(term))
     .filter(Boolean);
   const keepExerciseTerms = (workoutRegeneration?.keep_exercise_names || [])
-    .map((value) => normalizeNameTerm(value))
+    .map((term: string) => normalizeNameTerm(term))
     .filter(Boolean);
 
   let excludeFamilyKey: string | null = null;
@@ -2250,6 +2452,17 @@ async function deleteWorkoutPlanTree(supabase: SupabaseClient, planId: string) {
   }
 }
 
+async function deleteNutritionPlanTree(supabase: SupabaseClient, planId: string) {
+  const { error } = await supabase
+    .from("user_nutrition_plans")
+    .delete()
+    .eq("id", planId);
+
+  if (error) {
+    throw new Error(`Failed to discard generated nutrition plan: ${error.message}`);
+  }
+}
+
 async function loadStoredWorkoutPlanValidationData(
   supabase: SupabaseClient,
   userId: string,
@@ -2295,7 +2508,7 @@ async function loadStoredWorkoutPlanValidationData(
     throw new Error(error?.message || "Generated workout plan could not be reloaded for validation.");
   }
 
-  return data as {
+  return (data as unknown) as {
     id: string;
     user_id: string;
     days_per_week: number;
@@ -2598,7 +2811,11 @@ function isMissingColumnError(error: unknown) {
 async function insertWorkoutPlanWithFallback(
   supabase: SupabaseClient,
   payload: Record<string, unknown>,
+  dryRun: boolean = false
 ) {
+  if (dryRun) {
+    return { id: crypto.randomUUID() };
+  }
   const attempts = [
     payload,
     {
@@ -2636,7 +2853,11 @@ async function insertWorkoutPlanWithFallback(
 async function insertWorkoutPlanDayWithFallback(
   supabase: SupabaseClient,
   payload: Record<string, unknown>,
+  dryRun: boolean = false
 ) {
+  if (dryRun) {
+    return { id: crypto.randomUUID() };
+  }
   const attempts = [
     payload,
     {
@@ -2815,20 +3036,28 @@ function pickReplacementExercise(
     ? candidatePool.filter((exercise) => matchesNamePreference(exercise.name, keepTerms))
     : [];
   const weightedPool = preferredPool.length ? preferredPool : candidatePool;
+  // Sort by popularity before picking to avoid obscure variations
+  const sortedWeightedPool = [...weightedPool].sort((a, b) => (b.popularity_score || 0) - (a.popularity_score || 0));
 
   if (!original) {
-    return deterministicPick(weightedPool, seed);
+    return deterministicPick(sortedWeightedPool.slice(0, 5), seed);
+  }
+
+  const pattern = normalizeToken(original.pattern || "");
+  if (pattern) {
+    const samePattern = sortedWeightedPool.filter((item) => normalizeToken(item.pattern || "") === pattern);
+    if (samePattern.length) return deterministicPick(samePattern.slice(0, 3), seed);
   }
 
   const primaryMuscle = normalizeToken(original.primary_muscle || "");
   const category = normalizeToken(original.category || "");
-  const sameMuscle = weightedPool.filter((item) => normalizeToken(item.primary_muscle || "") === primaryMuscle);
-  if (sameMuscle.length) return deterministicPick(sameMuscle, seed);
+  const sameMuscle = sortedWeightedPool.filter((item) => normalizeToken(item.primary_muscle || "") === primaryMuscle);
+  if (sameMuscle.length) return deterministicPick(sameMuscle.slice(0, 3), seed + 5);
 
-  const sameCategory = weightedPool.filter((item) => normalizeToken(item.category || "") === category);
-  if (sameCategory.length) return deterministicPick(sameCategory, seed + 11);
+  const sameCategory = sortedWeightedPool.filter((item) => normalizeToken(item.category || "") === category);
+  if (sameCategory.length) return deterministicPick(sameCategory.slice(0, 5), seed + 11);
 
-  return deterministicPick(weightedPool, seed + 19);
+  return deterministicPick(sortedWeightedPool.slice(0, 5), seed + 19);
 }
 
 function inferFocusTags(dayName: string, dayFocus: string | null): WorkoutFocusTag[] {
@@ -2874,6 +3103,7 @@ async function storeWorkoutPlanFromTemplateV2(
   template: SelectedTemplate,
   horizonDays: number,
   config: WorkoutGenerationConfig,
+  dryRun: boolean = false
 ) {
   const warnings: string[] = [];
   const { data: maxVersionData } = await supabase
@@ -2944,6 +3174,9 @@ async function storeWorkoutPlanFromTemplateV2(
 
     dayRecords.push({
       ...dayInsert,
+      day_number: (dayInsert as any).day_number ?? day.sequence_index,
+      name: (dayInsert as any).name ?? day.name,
+      focus: (dayInsert as any).focus ?? (day.focus || null),
       day_type: day.day_type || "workout",
       estimated_duration_min: config.sessionDurationTargetMin
         ? Math.min(day.estimated_duration_min ?? config.sessionDurationTargetMin, config.sessionDurationTargetMin)
@@ -3347,6 +3580,7 @@ async function storeWorkoutPlan(
   split: SplitDefinition,
   horizonDays: number,
   config: WorkoutGenerationConfig,
+  dryRun: boolean = false
 ) {
   const warnings: string[] = [];
 
@@ -3413,6 +3647,9 @@ async function storeWorkoutPlan(
 
     dayRecords.push({
       ...dayInsert,
+      day_number: (dayInsert as any).day_number ?? (index + 1),
+      name: (dayInsert as any).name ?? day.name,
+      focus: (dayInsert as any).focus ?? (day.focus || null),
       day_type: "workout",
       estimated_duration_min: config.sessionDurationTargetMin || 60,
     });
@@ -3429,7 +3666,7 @@ async function storeWorkoutPlan(
         minPrimaryExercises: config.maxExercisesPerDay
           ? Math.min(config.maxExercisesPerDay, Number(day.minPrimaryExercises || Math.min(3, config.maxExercisesPerDay)))
           : day.minPrimaryExercises,
-      } satisfies GeneratedSplitDayDefinition,
+      } as GeneratedSplitDayDefinition,
       familyKey: split.familyKey || split.key,
       dayIndex: index + 1,
       daysPerWeek: split.frequency,
@@ -3511,6 +3748,7 @@ async function storeWorkoutPlan(
 
   return {
     planId,
+    plan: split.days,
     warnings: Array.from(new Set(warnings)),
     splitName: split.name,
     scheduleCount: horizonDays,
@@ -3520,29 +3758,68 @@ async function storeWorkoutPlan(
 /**
  * Convert database food records to scientific engine format
  */
+function getDefaultPortionBounds(category: string | null): { min: number; max: number } {
+  switch (category) {
+    case "protein":
+      return { min: 50, max: 400 };
+    case "carb":
+      return { min: 30, max: 500 };
+    case "fat":
+      return { min: 5, max: 80 };
+    default:
+      return { min: 10, max: 300 };
+  }
+}
+
+function getFoodSpecificBounds(food: UserContext["foods"][number]): { min: number; max: number } {
+  const defaults = getDefaultPortionBounds(food.category);
+  const name = (food.name || "").toLowerCase();
+
+  // Tighten bounds for very calorie-dense foods
+  if (name.includes("oil")) return { min: 5, max: 30 };
+  if (name.includes("butter")) return { min: 5, max: 30 };
+  if (name.includes("nut") && !name.includes("coconut")) return { min: 10, max: 60 };
+  if (name.includes("seeds") || name.includes("chia") || name.includes("flax")) return { min: 5, max: 30 };
+  if (name.includes("peanut butter")) return { min: 10, max: 40 };
+  if (name.includes("avocado")) return { min: 30, max: 150 };
+  if (name.includes("cheese")) return { min: 15, max: 80 };
+  if (name.includes("egg white")) return { min: 100, max: 400 };
+  if (name.includes("whey") || name.includes("protein powder") || name.includes("casein")) {
+    return { min: 20, max: 100 };
+  }
+
+  return defaults;
+}
+
 function convertFoodsToScientificFormat(foods: UserContext["foods"]): FoodWithMetadata[] {
-  return foods.map((food) => ({
-    id: food.id,
-    name: food.name,
-    calories_per_100g: food.calories_per_100g,
-    protein_per_100g: food.protein_per_100g,
-    carbs_per_100g: food.carbs_per_100g,
-    fat_per_100g: food.fat_per_100g,
-    fiber_per_100g: food.fiber_per_100g,
-    category: food.category,
-    breakfast_score: food.breakfast_score || 0,
-    lunch_dinner_score: food.lunch_dinner_score || 0,
-    preworkout_score: food.preworkout_score || 0,
-    postworkout_score: food.postworkout_score || 0,
-    evening_score: food.evening_score || 0,
-    digestion_speed: food.digestion_speed || "moderate",
-    fat_load: food.fat_load || "medium",
-    carb_speed: food.carb_speed || "moderate",
-    protein_leanness: food.protein_leanness || "medium",
-    formality: food.formality || "neutral",
-    goal_form: food.goal_form || "both",
-    variety_family: food.variety_family || "",
-  }));
+  return foods.map((food) => {
+    const bounds = getFoodSpecificBounds(food);
+    return {
+      id: food.id,
+      name: food.name,
+      calories_per_100g: food.calories_per_100g,
+      protein_per_100g: food.protein_per_100g,
+      carbs_per_100g: food.carbs_per_100g,
+      fat_per_100g: food.fat_per_100g,
+      fiber_per_100g: food.fiber_per_100g ?? 0,
+      category: food.category,
+      breakfast_score: food.breakfast_score || 0,
+      lunch_dinner_score: food.lunch_dinner_score || 0,
+      preworkout_score: food.preworkout_score || 0,
+      postworkout_score: food.postworkout_score || 0,
+      evening_score: food.evening_score || 0,
+      digestion_speed: food.digestion_speed || "moderate",
+      fat_load: food.fat_load || "medium",
+      carb_speed: food.carb_speed || "moderate",
+      protein_leanness: food.protein_leanness || "medium",
+      formality: food.formality || "neutral",
+      goal_form: food.goal_form || "both",
+      variety_family: food.variety_family || "",
+      tags: food.tags || [],
+      min_grams: bounds.min,
+      max_grams: bounds.max,
+    };
+  });
 }
 
 /**
@@ -3578,11 +3855,24 @@ async function generateScientificMealPlan(
   // Convert foods to scientific format
   const scientificFoods = convertFoodsToScientificFormat(context.foods);
 
-  // Determine goal
-  const goal: "muscle_gain" | "fat_loss" | "maintenance" =
-    context.onboarding.goal_type === "gain_weight" ? "muscle_gain" :
-    context.onboarding.goal_type === "lose_weight" ? "fat_loss" :
-    "maintenance";
+  // Determine goal — exhaustive mapping from all onboarding goal types
+  function resolveGoalType(goalType: string): "muscle_gain" | "fat_loss" | "maintenance" {
+    switch (goalType) {
+      case "build_muscle":
+      case "gain_weight":
+        return "muscle_gain";
+      case "lose_weight":
+      case "get_fitter":
+        return "fat_loss";
+      case "maintain_weight":
+      case "recomp":
+      case "increase_endurance":
+      case "general_fitness":
+      default:
+        return "maintenance";
+    }
+  }
+  const goal = resolveGoalType(context.onboarding.goal_type);
 
   // Create plan
   const { data: maxVersionData } = await supabase
@@ -3636,20 +3926,45 @@ async function generateScientificMealPlan(
     throw new Error(`Failed to create nutrition plan: ${planError?.message || "unknown"}`);
   }
 
-  // Generate meals for each day
-  let variantCount = 0;
-  const groceryMap = new Map<string, { grams: number; calories: number; protein: number; carbs: number; fat: number; unit: string }>();
+  // Phase 1: Generate all days independently (with cross-day variety via previousDaysMeals)
+  const dayPlans: { meals: GeneratedMeal[]; slots: MealSlot[]; dayIndex: number }[] = [];
+  const allDayMeals: GeneratedMeal[][] = [];
 
   for (let dayIndex = 0; dayIndex < nutritionDays; dayIndex++) {
     const dayWorkout = workoutSchedule[dayIndex % workoutSchedule.length];
     const hasWorkout = dayWorkout?.hasWorkout || false;
     const workoutTime = dayWorkout?.time || null;
 
-    // Get slot template based on workout
-    const slots = getSlotTemplate(hasWorkout, workoutTime);
+    const scheduleConfig: ScheduleConfig = {
+      wake_time:
+        context.onboarding.wake_time === "5_6am" ? "05:30" :
+        context.onboarding.wake_time === "7_8am" ? "07:30" :
+        context.onboarding.wake_time === "9_10am" ? "09:30" :
+        "07:30",
+      first_meal_delay_minutes:
+        context.onboarding.first_meal_delay === "immediate" ? 15 :
+        context.onboarding.first_meal_delay === "3hrs_plus" ? 210 :
+        90,
+      last_meal_before_bed_minutes:
+        context.onboarding.last_meal_before_bed === "3_4hrs" ? 240 :
+        context.onboarding.last_meal_before_bed === "no_constraint" ? 30 :
+        120,
+      workout_time: workoutTime,
+    };
 
-    // Generate daily meals using scientific engine
-    const dailyMeals = generateDailyMeals(
+    const slots = getSlotTemplate(hasWorkout, workoutTime, scheduleConfig);
+
+    const mealGenOptions: GenerationOptions = {
+      carbTolerance: context.onboarding.carb_tolerance || undefined,
+      cookingLevel: context.onboarding.cooking_level || undefined,
+      isTrainingDay: hasWorkout,
+      dietaryPreference: context.onboarding.dietary_preference,
+      allergies: context.onboarding.allergies_exclusions,
+      refusedFoods: context.onboarding.refused_foods,
+      previousDaysMeals: allDayMeals.flat(),
+    };
+
+    const { meals: dailyMeals, warnings: dailyWarnings, logs: dailyLogs } = generateDailyMeals(
       scientificFoods,
       selections,
       slots,
@@ -3660,9 +3975,67 @@ async function generateScientificMealPlan(
         fat_g: context.targets.fat_g,
       },
       goal,
+      mealGenOptions,
     );
 
-    // Store meals in database
+    if (dailyWarnings?.length > 0) {
+      for (const dw of dailyWarnings) {
+        if (!warnings.includes(dw)) warnings.push(dw);
+      }
+    }
+
+    if (dailyLogs?.length > 0) {
+      for (const dl of dailyLogs) {
+        console.log(`[generate-user-plans] [day-${dayIndex}] ${dl}`);
+      }
+    }
+
+    dayPlans.push({ meals: dailyMeals, slots, dayIndex });
+    allDayMeals.push(dailyMeals);
+  }
+
+  // Phase 2: Weekly coherence pass (soft rebalance if chaotic)
+  const allSlots = dayPlans.map((d) => d.slots);
+  const baseOptions: GenerationOptions = {
+    carbTolerance: context.onboarding.carb_tolerance || undefined,
+    cookingLevel: context.onboarding.cooking_level || undefined,
+    dietaryPreference: context.onboarding.dietary_preference,
+    allergies: context.onboarding.allergies_exclusions,
+    refusedFoods: context.onboarding.refused_foods,
+  };
+
+  const { analyzeWeeklyCoherence, rebalanceWeeklyMeals } = await import("./scientificMealEngine.ts");
+  const preCoherence = analyzeWeeklyCoherence(allDayMeals);
+  console.log(`[generate-user-plans] Pre-coherence score: ${preCoherence.realismScore} (${preCoherence.realismLabel})`);
+
+  const { meals: rebalancedDays, warnings: rebalanceWarnings, logs: rebalanceLogs } = rebalanceWeeklyMeals(
+    scientificFoods,
+    selections,
+    allSlots,
+    {
+      calories: context.targets.calories,
+      protein_g: context.targets.protein_g,
+      carbs_g: context.targets.carbs_g,
+      fat_g: context.targets.fat_g,
+    },
+    goal,
+    baseOptions,
+    allDayMeals
+  );
+
+  for (const w of rebalanceWarnings) if (!warnings.includes(w)) warnings.push(w);
+  for (const l of rebalanceLogs) console.log(`[generate-user-plans] [weekly-rebalance] ${l}`);
+
+  const postCoherence = analyzeWeeklyCoherence(rebalancedDays);
+  console.log(`[generate-user-plans] Post-coherence score: ${postCoherence.realismScore} (${postCoherence.realismLabel})`);
+
+  // Phase 3: Store in database
+  let variantCount = 0;
+  const groceryMap = new Map<string, { grams: number; calories: number; protein: number; carbs: number; fat: number; unit: string }>();
+
+  for (let dayIndex = 0; dayIndex < nutritionDays; dayIndex++) {
+    const dailyMeals = rebalancedDays[dayIndex];
+
     for (const meal of dailyMeals) {
       const { data: mealRow, error: mealError } = await supabase
         .from("user_nutrition_plan_meals")
@@ -3670,13 +4043,13 @@ async function generateScientificMealPlan(
           plan_id: nutritionPlan.id,
           meal_slot: meal.slot as NutritionMealSlot,
           day_of_week: dayIndex,
-          name: `${meal.name}: ${meal.items.protein.food.name} + ${meal.items.carb.food.name}`,
-          description: meal.rationale,
+          name: meal.name,
+          description: meal.description,
           target_calories: Math.round(meal.macros.calories),
           target_protein: round1(meal.macros.protein),
           target_carbs: round1(meal.macros.carbs),
           target_fat: round1(meal.macros.fat),
-          prep_time_min: 15,
+          prep_time_min: meal.prep_time_min,
         })
         .select("id")
         .single();
@@ -3692,12 +4065,12 @@ async function generateScientificMealPlan(
           plan_meal_id: mealRow.id,
           variant_type: "default",
           name: meal.name,
-          description: meal.rationale,
+          description: meal.description,
           target_calories: Math.round(meal.macros.calories),
           target_protein: round1(meal.macros.protein),
           target_carbs: round1(meal.macros.carbs),
           target_fat: round1(meal.macros.fat),
-          prep_time_min: 15,
+          prep_time_min: meal.prep_time_min,
           source: "rule",
           is_active: true,
         })
@@ -3811,6 +4184,16 @@ async function generateScientificMealPlan(
     }
   }
 
+  // Guard: if no meals were stored at all, the plan is useless. Throw so the
+  // outer catch block can fall back to the legacy storeNutritionPlan generator.
+  if (variantCount === 0) {
+    throw new Error(
+      "Scientific meal engine produced 0 meal variants across all days. " +
+      "This likely means isFeasible rejected every food combination. " +
+      "Falling back to legacy meal generator."
+    );
+  }
+
   return {
     planId: nutritionPlan.id,
     variantCount,
@@ -3831,6 +4214,7 @@ async function storeNutritionPlan(
   activationMode: ActivationMode,
   currentPlanId: string | null,
   mealSlots: NutritionMealSlot[],
+  dryRun: boolean = false
 ) {
   const warnings: string[] = [];
   const nutritionDays = Math.max(7, Math.min(14, horizonDays));
@@ -3985,9 +4369,11 @@ async function storeNutritionPlan(
         veggie: defaultVeggie,
       };
 
+      // storeNutritionPlan only ever uses legacy slots — cast is safe here.
+      const legacySlot = meal.slot as "breakfast" | "lunch" | "dinner" | "snack";
       const variants: MealVariantPayload[] = [
         buildMealVariant(
-          meal.slot,
+          legacySlot,
           meal,
           workingFoods,
           dayIndex * 31 + meal.slot.length,
@@ -4013,7 +4399,7 @@ async function storeNutritionPlan(
 
         variants.push(
           buildMealVariant(
-            meal.slot,
+            legacySlot,
             meal,
             workingFoods,
             dayIndex * 37 + meal.slot.length,
@@ -4022,7 +4408,7 @@ async function storeNutritionPlan(
             { strictMacroMode, anchors: alt1Anchors },
           ),
           buildMealVariant(
-            meal.slot,
+            legacySlot,
             meal,
             workingFoods,
             dayIndex * 43 + meal.slot.length,
@@ -4251,54 +4637,143 @@ async function seedConsistency(supabase: SupabaseClient, userId: string) {
   return true;
 }
 
-serve(async (req) => {
-  console.log('[generate-user-plans] Function invoked:', req.method);
+serve(async (req: Request) => {
+  // Generate request ID for correlation across frontend/backend/logs
+  const requestId = crypto.randomUUID();
+  const startTime = Date.now();
+  
+  console.log(`[generate-user-plans] [${requestId}] Function invoked:`, req.method);
   
   if (req.method === "OPTIONS") {
     return new Response("ok", { headers: corsHeaders });
   }
 
   if (req.method !== "POST") {
-    return jsonResponse({ success: false, error: "Method not allowed" }, 405);
+    return jsonResponse({ 
+      success: false, 
+      error: "Method not allowed",
+      requestId,
+      step: 'validation'
+    }, 405);
   }
 
   try {
-    console.log('[generate-user-plans] Starting request processing...');
+    console.log(`[generate-user-plans] [${requestId}] Starting request processing...`);
     
-    const supabaseUrl = Deno.env.get("SUPABASE_URL");
-    const serviceRoleKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
+    // @ts-ignore: Deno is defined at runtime
+    const supabaseUrl = (Deno as any).env.get("SUPABASE_URL");
+    
+    // 🛡️ Robust Service Role Key Selection with validation
+    const env_sb_srk = (Deno as any).env.get("SUPABASE_SERVICE_ROLE_KEY");
+    const env_srk = (Deno as any).env.get("SERVICE_ROLE_KEY");
+    const env_m_srk = (Deno as any).env.get("METRIQFIT_SERVICE_ROLE_KEY");
+    
+    // JWTs are usually > 200 chars. Publishable keys are 41.
+    const isServiceRoleJwt = (key: string) => !!key && key.length > 100 && key.includes('.');
+    
+    let serviceRoleKey = env_sb_srk || env_srk || env_m_srk;
+    let keySource = "none";
+    
+    if (isServiceRoleJwt(env_sb_srk)) {
+      serviceRoleKey = env_sb_srk;
+      keySource = "SUPABASE_SERVICE_ROLE_KEY";
+    } else if (isServiceRoleJwt(env_srk)) {
+      serviceRoleKey = env_srk;
+      keySource = "SERVICE_ROLE_KEY";
+    } else if (isServiceRoleJwt(env_m_srk)) {
+      serviceRoleKey = env_m_srk;
+      keySource = "METRIQFIT_SERVICE_ROLE_KEY";
+    } else {
+      // Fallback to whatever exists if no valid JWT found (for legacy support or if all are wrong)
+      if (serviceRoleKey) {
+        console.warn(`[CRITICAL] No valid Service Role JWT found in environment. Using fallback key of length ${serviceRoleKey.length}. This will likely cause 401 errors.`);
+        keySource = "fallback_raw";
+        if (serviceRoleKey.length === 41) {
+          console.error(`[CRITICAL] Detected 41-character key. This looks like a PUBLISHABLE key, NOT a service role key. Please update Supabase secrets.`);
+        }
+      }
+    }
 
-    console.log('[generate-user-plans] Environment check:', { 
+    console.log(`[generate-user-plans] [${requestId}] Auth Key Check:`, { 
       hasSupabaseUrl: !!supabaseUrl, 
-      hasServiceRoleKey: !!serviceRoleKey 
+      hasServiceRoleKey: !!serviceRoleKey,
+      keySource,
+      keyLength: serviceRoleKey?.length || 0
     });
 
     if (!supabaseUrl || !serviceRoleKey) {
-      return jsonResponse({ success: false, error: "Missing Supabase config" }, 500);
+      console.error(`[generate-user-plans] [${requestId}] Environment missing:`, { 
+        hasUrl: !!supabaseUrl, 
+        hasKey: !!serviceRoleKey,
+        requestId 
+      });
+      return jsonResponse({ 
+        success: false, 
+        error: "Server configuration error: Missing Supabase credentials",
+        details: "The Edge Function is missing required environment variables. Contact support.",
+        requestId,
+        step: 'environment_check'
+      }, 500);
     }
 
     const authHeader = req.headers.get("Authorization") || "";
-    console.log('[generate-user-plans] Auth header present:', !!authHeader);
+    const jwt = (authHeader.split(" ")[1] ?? "").trim();
+    const xServiceKey = (req.headers.get("x-service-role") ?? "").trim();
+    const cleanServiceKey = (serviceRoleKey ?? "").trim();
     
-    if (!authHeader) {
-      return jsonResponse({ success: false, error: "Missing authorization header" }, 401);
+    // @ts-ignore: Deno is defined at runtime
+    const adminBypassSecret = (Deno as any).env.get("ADMIN_BYPASS_SECRET");
+    // @ts-ignore: Deno is defined at runtime
+    const environment = (Deno as any).env.get("SUPABASE_ENVIRONMENT") || "development";
+    const xBypass = req.headers.get("x-bypass");
+    
+    // 🛡️ SECURE BYPASS: Only if secret matches AND not in strict production gate
+    const isSecuredBypass = adminBypassSecret && xBypass === adminBypassSecret && environment !== "production";
+    
+    if (isSecuredBypass) {
+      console.warn(`[AUDIT] Administrative bypass triggered for request by ${req.headers.get("user-agent") || "unknown agent"}`);
     }
 
-    console.log('[generate-user-plans] Creating auth client...');
-    const authClient = createClient(supabaseUrl, serviceRoleKey, {
+    console.log(`[DEBUG] Auth check: jwt length=${jwt.length}, xServiceKey length=${xServiceKey.length}, cleanServiceKey length=${cleanServiceKey.length}`);
+    console.log(`[DEBUG] jwt match: ${jwt === cleanServiceKey}, xServiceKey match: ${xServiceKey === cleanServiceKey}`);
+    
+    const isServiceRole = ((jwt === cleanServiceKey || xServiceKey === cleanServiceKey) && cleanServiceKey.length > 0) || isSecuredBypass;
+    console.log(`[DEBUG] isServiceRole: ${isServiceRole}, isSecuredBypass: ${isSecuredBypass}`);
+    
+    // Create base client early for auth check
+    const baseClient = createClient(supabaseUrl, serviceRoleKey, {
       global: { headers: { Authorization: authHeader } },
     });
-
-    console.log('[generate-user-plans] Getting user...');
-    const { data: authData, error: authError } = await authClient.auth.getUser();
-    console.log('[generate-user-plans] Auth result:', { 
-      hasUser: !!authData?.user, 
-      authError: authError?.message 
-    });
     
-    if (authError || !authData?.user) {
-      return jsonResponse({ success: false, error: "Unauthorized" }, 401);
+    let user;
+    if (isServiceRole) {
+      console.log('[generate-user-plans] Service role access');
+      // For service role, we expect a user_id in the body or use a system-level target
+      user = { id: '6fd37fdd-34be-485e-80ea-42845e2f7689' }; // Jon's ID as default
+    } else {
+      if (!authHeader) {
+        return jsonResponse({ 
+          success: false, 
+          error: "Missing authorization header",
+          requestId,
+          step: 'auth_validation',
+          details: 'Authorization header is required'
+        }, 401);
+      }
+      const { data: authData, error: authErr } = await baseClient.auth.getUser(jwt);
+      if (authErr || !authData.user) {
+        return jsonResponse({ 
+          success: false, 
+          error: "Unauthorized",
+          requestId,
+          step: 'auth_validation',
+          details: authErr?.message || 'Invalid or expired authentication token'
+        }, 401);
+      }
+      user = authData.user;
     }
+
+    // proceed to body parsing
 
     console.log('[generate-user-plans] Parsing request body...');
     let body: any;
@@ -4311,8 +4786,14 @@ serve(async (req) => {
         generationVersion: body.generation_version
       });
     } catch (parseError: any) {
-      console.error('[generate-user-plans] Failed to parse body:', parseError.message);
-      return jsonResponse({ success: false, error: "Invalid request body" }, 400);
+      console.error(`[generate-user-plans] [${requestId}] Failed to parse body:`, parseError.message);
+      return jsonResponse({ 
+        success: false, 
+        error: "Invalid request body",
+        requestId,
+        step: 'body_parsing',
+        details: parseError.message
+      }, 400);
     }
     
     const typedBody = body as {
@@ -4334,16 +4815,32 @@ serve(async (req) => {
       workout_regeneration?: WorkoutRegenerationRequest | null;
       nutrition_regeneration?: NutritionRegenerationRequest | null;
       generation_version?: 'v1' | 'v2';
+      dry_run?: boolean;
     };
 
-    const userId = typedBody.user_id || authData.user.id;
-    if (!userId || userId !== authData.user.id) {
-      return jsonResponse({ success: false, error: "Invalid user context" }, 403);
+    const dryRun = !!typedBody.dry_run;
+
+    const userId = typedBody.user_id || user.id;
+    if (!isServiceRole && userId !== user.id) {
+      console.error(`[generate-user-plans] [${requestId}] User mismatch:`, { bodyUserId: typedBody.user_id, authUserId: user.id });
+      return jsonResponse({ 
+        success: false, 
+        error: "Invalid user context",
+        requestId,
+        step: 'user_validation',
+        details: 'User ID in request body does not match authenticated user'
+      }, 403);
     }
 
     const planType = typedBody.plan_type || "both";
     if (!["workout", "nutrition", "both"].includes(planType)) {
-      return jsonResponse({ success: false, error: "Invalid plan_type" }, 400);
+      return jsonResponse({ 
+        success: false, 
+        error: "Invalid plan_type",
+        requestId,
+        step: 'validation',
+        details: `plan_type must be 'workout', 'nutrition', or 'both', received: ${planType}`
+      }, 400);
     }
 
     const workoutHorizon = typeof typedBody.generation_horizon_days === "number"
@@ -4399,9 +4896,37 @@ serve(async (req) => {
     const macroTolerancePercent = clamp(Number(typedBody.macro_tolerance_percent ?? defaultTolerance), 5, 20);
     const includeVariants = typedBody.include_variants !== false;
 
-    const supabase = createClient(supabaseUrl, serviceRoleKey, {
-      global: { headers: { Authorization: authHeader } },
-    });
+    // Wrap Supabase client for dry run if requested
+    const supabase = dryRun ? new Proxy(baseClient, {
+      get(target, prop) {
+        if (prop === 'from') {
+          return (table: string) => {
+            const originalFrom = target.from(table);
+            return new Proxy(originalFrom, {
+              get(fromTarget, fromProp) {
+                if (['insert', 'update', 'upsert', 'delete'].includes(fromProp as string)) {
+                  return () => {
+                    const mock = {
+                      select: () => mock,
+                      eq: () => mock,
+                      match: () => mock,
+                      order: () => mock,
+                      limit: () => mock,
+                      single: () => Promise.resolve({ data: { id: crypto.randomUUID() }, error: null }),
+                      maybeSingle: () => Promise.resolve({ data: { id: crypto.randomUUID() }, error: null }),
+                      then: (onfulfilled: any) => onfulfilled({ data: { id: crypto.randomUUID() }, error: null }),
+                    };
+                    return mock;
+                  };
+                }
+                return (fromTarget as any)[fromProp];
+              }
+            });
+          };
+        }
+        return (target as any)[prop];
+      }
+    }) : baseClient;
 
     const currentPlanContext = (planType === "workout" || planType === "both")
       ? await fetchCurrentWorkoutPlanContext(supabase, userId, workoutRegeneration?.current_plan_id || null)
@@ -4411,72 +4936,100 @@ serve(async (req) => {
       : null;
 
     if (generationMode === "regenerate" && (planType === "workout" || planType === "both") && !currentPlanContext) {
-      return jsonResponse({ success: false, error: "No active workout plan found for regeneration" }, 400);
+      return jsonResponse({ 
+        success: false, 
+        error: "No active workout plan found for regeneration",
+        requestId,
+        step: 'regeneration_validation',
+        details: 'Cannot regenerate workout plan: no active plan found for this user'
+      }, 400);
     }
     if (generationMode === "regenerate" && (planType === "nutrition" || planType === "both") && !currentNutritionPlanContext) {
-      return jsonResponse({ success: false, error: "No active nutrition plan found for regeneration" }, 400);
+      return jsonResponse({ 
+        success: false, 
+        error: "No active nutrition plan found for regeneration",
+        requestId,
+        step: 'regeneration_validation',
+        details: 'Cannot regenerate nutrition plan: no active plan found for this user'
+      }, 400);
     }
 
     const startedAt = Date.now();
 
-    const { data: runData, error: runError } = await supabase
-      .from("plan_generation_runs")
-      .insert({
-        user_id: userId,
-        plan_type: planType,
-        status: "pending",
-        planner_mode: generationVersion === 'v1' ? 'deterministic' : 'hybrid',
-        generation_version: generationVersion === 'v1' ? 1 : 4,
-        input_context: {
-          generation_mode: generationMode,
-          activation_mode: activationMode,
-          trigger_source: generationMode === "regenerate" ? "my_plan_regenerate" : "system_generate",
-          workout_horizon_days: workoutHorizon,
-          nutrition_horizon_days: nutritionHorizon,
-          include_variants: includeVariants,
-          macro_tolerance_percent: macroTolerancePercent,
-          split_override: typedBody.split_override || null,
-          program_family_preference: programFamilyPreference,
-          training_style_preferences: trainingStylePreferences,
-          progression_preference: progressionPreference,
-          strict_days_match: strictDaysMatch,
-          strict_macro_mode: strictMacroMode,
-          strict_template_source: strictTemplateSource,
-          variety_profile: varietyProfile,
-          current_plan_snapshot: currentPlanContext
-            ? {
-                plan_id: currentPlanContext.planId,
-                family_key: currentPlanContext.familyKey,
-                progression_model: currentPlanContext.progressionModel,
-                days_per_week: currentPlanContext.daysPerWeek,
-                weekly_layout: currentPlanContext.weeklyLayout,
-              }
-            : null,
-          current_nutrition_plan_snapshot: currentNutritionPlanContext
-            ? {
-                plan_id: currentNutritionPlanContext.planId,
-                meal_slots: currentNutritionPlanContext.mealSlots,
-              }
-            : null,
-          adherence_summary: currentPlanContext?.adherenceSummary || null,
-          workout_regeneration: workoutRegeneration,
-          nutrition_regeneration: nutritionRegeneration,
-        },
-      })
-      .select("id")
-      .single();
+    // Create generation run record
+    let runId: string;
+    try {
+      const { data: runData, error: runError } = await supabase
+        .from("plan_generation_runs")
+        .insert({
+          user_id: userId,
+          plan_type: planType,
+          status: "pending",
+          planner_mode: generationVersion === 'v1' ? 'deterministic' : 'hybrid',
+          generation_version: generationVersion === 'v1' ? 1 : 4,
+          input_context: {
+            generation_mode: generationMode,
+            activation_mode: activationMode,
+            trigger_source: generationMode === "regenerate" ? "my_plan_regenerate" : "system_generate",
+            workout_horizon_days: workoutHorizon,
+            nutrition_horizon_days: nutritionHorizon,
+            include_variants: includeVariants,
+            macro_tolerance_percent: macroTolerancePercent,
+            split_override: typedBody.split_override || null,
+            program_family_preference: programFamilyPreference,
+            training_style_preferences: trainingStylePreferences,
+            progression_preference: progressionPreference,
+            strict_days_match: strictDaysMatch,
+            strict_macro_mode: strictMacroMode,
+            strict_template_source: strictTemplateSource,
+            variety_profile: varietyProfile,
+            current_plan_snapshot: currentPlanContext
+              ? {
+                  plan_id: currentPlanContext.planId,
+                  family_key: currentPlanContext.familyKey,
+                  progression_model: currentPlanContext.progressionModel,
+                  days_per_week: currentPlanContext.daysPerWeek,
+                  weekly_layout: currentPlanContext.weeklyLayout,
+                }
+              : null,
+            current_nutrition_plan_snapshot: currentNutritionPlanContext
+              ? {
+                  plan_id: currentNutritionPlanContext.planId,
+                  meal_slots: currentNutritionPlanContext.mealSlots,
+                }
+              : null,
+            adherence_summary: currentPlanContext?.adherenceSummary || null,
+            workout_regeneration: workoutRegeneration,
+            nutrition_regeneration: nutritionRegeneration,
+          },
+        })
+        .select("id")
+        .single();
 
-    if (runError || !runData) {
-      throw new Error(`Failed to create generation run: ${runError?.message || "unknown"}`);
+      if (runError || !runData) {
+        throw new Error(`Failed to create generation run: ${runError?.message || "unknown"}`);
+      }
+
+      runId = runData.id;
+      console.log(`[generate-user-plans] [${requestId}] Run created: ${runId}`);
+    } catch (runError: any) {
+      console.error(`[generate-user-plans] [${requestId}] Failed to create run:`, runError);
+      return jsonResponse({
+        success: false,
+        error: `Failed to initialize plan generation: ${runError.message}`,
+        requestId,
+        step: 'run_initialization',
+        details: runError.message,
+      }, 500);
     }
 
-    const runId = runData.id;
     const warnings: string[] = [];
 
     try {
-      console.log('[generate-user-plans] Fetching user context...');
+      // STEP 1: Fetch user context
+      console.log(`[generate-user-plans] [${requestId}] Step 1/5: Fetching user context...`);
       const context = await fetchUserContext(supabase, userId);
-      console.log('[generate-user-plans] User context fetched:', { 
+      console.log(`[generate-user-plans] [${requestId}] User context fetched:`, { 
         hasProfile: !!context.profile,
         hasOnboarding: !!context.onboarding,
         hasTargets: !!context.targets,
@@ -4484,13 +5037,14 @@ serve(async (req) => {
         foodCount: context.foods?.length
       });
       
-      console.log('[generate-user-plans] Applying workout regeneration...');
+      // STEP 2: Apply regeneration context
+      console.log(`[generate-user-plans] [${requestId}] Step 2/5: Applying workout regeneration...`);
       const workoutContext = applyWorkoutRegenerationToContext(
         context,
         workoutRegeneration,
         currentPlanContext,
       );
-      console.log('[generate-user-plans] Workout context ready:', {
+      console.log(`[generate-user-plans] [${requestId}] Workout context ready:`, {
         hasOnboarding: !!workoutContext.onboarding,
         trainingDays: workoutContext.onboarding?.training_days_per_week
       });
@@ -4566,13 +5120,35 @@ serve(async (req) => {
             selectedTemplate.template,
             workoutHorizon,
             attemptConfig,
+            dryRun
           );
           warnings.push(...result.warnings);
           return result;
         }
 
         if (strictTemplateSource) {
-          throw new Error("No v2 workout template matched strict requirements.");
+          throw new StrictTemplateSelectionError(
+            "No supported workout template matches your current training setup.",
+            {
+              generation_version: generationVersion,
+              requested_days_per_week: workoutContext.onboarding.training_days_per_week ?? null,
+              goal_type: workoutContext.onboarding.goal_type ?? null,
+              experience_level: workoutContext.onboarding.experience_level ?? null,
+              equipment_access: workoutContext.onboarding.equipment_access ?? null,
+              preferred_split_family: workoutContext.onboarding.preferred_split_family ?? null,
+              split_override: typedBody.split_override || null,
+              program_family_preference: effectiveProgramFamilyPreference || null,
+              progression_preference: effectiveProgressionPreference || null,
+              training_style_preferences: trainingStylePreferences,
+              strict_days_match: strictDaysMatch,
+              strict_template_source: strictTemplateSource,
+              exclude_family_key: attemptConfig.excludeFamilyKey || null,
+              recommended_onboarding_route: "/(onboarding)/training",
+              recommendation:
+                "Adjust training days, equipment access, or split preference and try again.",
+            },
+            selectedTemplate.warnings,
+          );
         }
 
         const split = chooseSplit(
@@ -4590,6 +5166,7 @@ serve(async (req) => {
           split,
           workoutHorizon,
           attemptConfig,
+          dryRun
         );
 
         warnings.push(...result.warnings);
@@ -4597,12 +5174,14 @@ serve(async (req) => {
       };
 
       if (planType === "workout" || planType === "both") {
-        console.log('[V1] Workout generation block entered:', { generationVersion, planType });
+        console.log(`[generate-user-plans] [${requestId}] Step 3/5: Starting workout generation (${generationVersion})...`);
         
         if (generationVersion === 'v1') {
-          console.log('[V1] Using V1 generation path');
+          console.log(`[V1] [${requestId}] Using V1 generation path`);
           
           try {
+          // STEP 3A: Map onboarding to V1 profile
+          console.log(`[V1] [${requestId}] Step 3A: Mapping onboarding to V1 profile...`);
           const mapOnboardingToV1 = (onboarding: any): OnboardingProfileInput => {
             let env = SessionEnvironment.Commercial;
             if (onboarding.equipment_access === 'bodyweight_only') env = SessionEnvironment.Bodyweight;
@@ -4615,14 +5194,25 @@ serve(async (req) => {
 
             let goal = GoalBucket.GenFitness;
             if (onboarding.goal_type === 'lose_weight') goal = GoalBucket.FatLoss;
-            else if (onboarding.goal_type === 'gain_weight') goal = GoalBucket.Hypertrophy;
+            else if (onboarding.goal_type === 'gain_weight' || onboarding.goal_type === 'build_muscle') goal = GoalBucket.Hypertrophy;
             else if (onboarding.goal_type === 'recomp') goal = GoalBucket.Recomp;
             else if (onboarding.goal_type === 'increase_endurance') goal = GoalBucket.Athletic;
+            // session_emphasis === 'strength' overrides broad goals into GoalBucket.Strength.
+            // This is the primary way to reach the dedicated strength families (2-day and 3-day).
+            // It is intentionally applied after goal_type so it can override gain_weight and general_fitness.
+            if (onboarding.session_emphasis === 'strength') goal = GoalBucket.Strength;
+
+            const weightDelta = typeof onboarding.target_weight_lb === 'number' && typeof onboarding.current_weight_lb === 'number'
+              ? onboarding.target_weight_lb - onboarding.current_weight_lb
+              : 0;
 
             let comfort = LiftComfort.BarbellBasic;
             if (env === SessionEnvironment.Bodyweight) comfort = LiftComfort.NoBarbell;
             else if (env === SessionEnvironment.AptHotel) comfort = LiftComfort.MachineDB;
+            else if (env === SessionEnvironment.Home) comfort = LiftComfort.MachineDB;
             else if (exp === ExperienceLevel.Advanced && onboarding.session_emphasis === 'strength') comfort = LiftComfort.BarbellAdv;
+            // Big bulk goal for advanced users signals comfort with barbell work
+            else if (exp === ExperienceLevel.Advanced && (onboarding.goal_type === 'build_muscle' || onboarding.goal_type === 'gain_weight') && weightDelta > 15) comfort = LiftComfort.BarbellAdv;
 
             return {
               experienceLevel: exp,
@@ -4639,54 +5229,130 @@ serve(async (req) => {
           }
           
           const profile = mapOnboardingToV1(workoutContext.onboarding);
-          console.log('[V1] Mapped profile:', JSON.stringify(profile));
+          console.log(`[V1] [${requestId}] Mapped profile:`, JSON.stringify(profile, null, 2));
           
+          // STEP 3B: Route to plan family
+          console.log(`[V1] [${requestId}] Step 3B: Routing to plan family...`);
           const recommendation = routeUserToPlan(profile);
-          console.log('[V1] Router recommendation:', JSON.stringify(recommendation));
+          console.log(`[V1] [${requestId}] Router recommendation:`, JSON.stringify(recommendation));
           
           if (!recommendation?.familyIdRef) {
             throw new Error("V1: routeUserToPlan returned invalid recommendation: " + JSON.stringify(recommendation));
           }
           
+          // Fix 3: Guard plan family lookup — remove silent fallback to planFamilies[0].
+          // If the recommended family is missing, something is wrong with the seed data;
+          // surfacing a clear 500 is better than silently using the wrong family.
           const family = planFamilies.find(f => f.external_id === recommendation.familyIdRef);
           if (!family) {
-            console.error('[V1] Available families:', planFamilies.map(f => f.external_id));
-            throw new Error("V1 Family Reference not found: " + recommendation.familyIdRef);
+            console.error(
+              `[V1] [${requestId}] Plan family not found: "${recommendation.familyIdRef}".`,
+              `Available families: [${planFamilies.map(f => f.external_id).join(", ")}]`,
+            );
+            await supabase
+              .from("plan_generation_runs")
+              .update({
+                status: "failed",
+                completed_at: new Date().toISOString(),
+                validation_errors: [`V1 plan family not found: ${recommendation.familyIdRef}`],
+                warnings_json: warnings,
+              })
+              .eq("id", runId);
+            return jsonResponse({
+              success: false,
+              error: `Plan family not found: ${recommendation.familyIdRef}`,
+              details: `The recommended plan family was not found in the library. This is a seed/configuration issue — please contact support.`,
+              requestId,
+              step: "v1_family_lookup",
+            }, 500);
           }
-          
+
+          // Fix 4: Guard template lookup before hydration — return structured 500 if missing.
           const template = coreTemplates.find(t => t.external_id === family.template_id);
           if (!template) {
-            console.error('[V1] Available templates:', coreTemplates.map(t => t.external_id));
-            throw new Error("V1 Template not found: " + family.template_id);
+            console.error(
+              `[V1] [${requestId}] Template not found: "${family.template_id}".`,
+              `Available templates: [${coreTemplates.map(t => t.external_id).join(", ")}]`,
+            );
+            await supabase
+              .from("plan_generation_runs")
+              .update({
+                status: "failed",
+                completed_at: new Date().toISOString(),
+                validation_errors: [`V1 template not found: ${family.template_id}`],
+                warnings_json: warnings,
+              })
+              .eq("id", runId);
+            return jsonResponse({
+              success: false,
+              error: "Plan template not found",
+              templateId: family.template_id,
+              details: `Template "${family.template_id}" was not found in the core template library. This is a seed/configuration issue.`,
+              requestId,
+              step: "v1_template_lookup",
+            }, 500);
           }
 
           const hydratorPersona = {
             goal: profile.primaryGoal,
             environment: profile.environment,
             comfort: profile.liftComfort,
-            injuries: workoutContext.onboarding.injuries || []
+            experience_level: profile.experienceLevel,
+            injuries: workoutContext.onboarding.injuries || [],
           };
           
-          // 🔍 DIAGNOSTIC: V1 Backend Verification Logging
-          console.log('\n=============================================');
-          console.log('🔄 V1 PLAN GENERATION: END-TO-END VERIFICATION');
-          console.log('---------------------------------------------');
-          console.log('1. Raw Onboarding Answers:');
-          console.log(JSON.stringify(workoutContext.onboarding, null, 2));
-          console.log('\n2. Mapped V1 Profile:');
-          console.log(JSON.stringify(profile, null, 2));
-          console.log('\n3. Routed Family ID:', recommendation.familyIdRef);
-          console.log('4. Resolved Template ID:', family.template_id);
+          // STEP 3C: Hydrate template
+          console.log(`[V1] [${requestId}] Step 3C: Hydrating template...`);
+          console.log(`[V1] [${requestId}] Routed Family ID:`, recommendation.familyIdRef);
+          console.log(`[V1] [${requestId}] Resolved Template ID:`, family.template_id);
           
           let v1Plan;
           try {
-            v1Plan = hydrateTemplate(template as any, family.external_id, hydratorPersona);
-            console.log('\n5. Hydration Success: TRUE');
+            v1Plan = hydrateTemplate(template as any, family.external_id, hydratorPersona, profile.daysPerWeek);
+            console.log(`[V1] [${requestId}] Hydration Success: TRUE`);
           } catch (e: any) {
-            console.log('\n5. Hydration Success: FALSE', e.message);
+            console.error(`[V1] [${requestId}] Hydration Success: FALSE -`, e.message);
             throw e;
           }
 
+          // Fix 8: Quality gate — validate V1 plan structure IN MEMORY before any DB writes.
+          // This prevents orphaned inactive plan rows when the generated content is unusable.
+          // Note: V1 plans include Recovery days, so we count only workout days for validation.
+          const v1WorkoutDays = (v1Plan.days || []).filter((d: any) => d.day_type !== "Recovery");
+          const v1HasExercises = v1WorkoutDays.some((d: any) =>
+            Array.isArray(d.exercises) && d.exercises.length > 0
+          );
+          const v1FirstEx = v1WorkoutDays.find((d: any) => d.exercises?.length > 0)?.exercises?.[0];
+          const v1ExercisesRenderable = !!(v1FirstEx?.sets && (v1FirstEx?.reps_min || v1FirstEx?.reps_max));
+          const v1PreStoreDetails = {
+            workout_day_count: v1WorkoutDays.length,
+            has_exercises: v1HasExercises,
+            exercises_renderable: v1ExercisesRenderable,
+          };
+          const v1PreStorePassed = v1WorkoutDays.length > 0 && v1HasExercises && v1ExercisesRenderable;
+          if (!v1PreStorePassed) {
+            console.error(`[V1] [${requestId}] Pre-store quality check FAILED — aborting DB writes:`, v1PreStoreDetails);
+            await supabase
+              .from("plan_generation_runs")
+              .update({
+                status: "failed",
+                completed_at: new Date().toISOString(),
+                validation_errors: ["Generated V1 plan failed pre-store quality check"],
+                warnings_json: warnings,
+              })
+              .eq("id", runId);
+            return jsonResponse({
+              success: false,
+              error: "Generated workout plan failed the pre-store quality gate and was not saved",
+              details: v1PreStoreDetails,
+              requestId,
+              step: "v1_quality_gate",
+            }, 500);
+          }
+          console.log(`[V1] [${requestId}] Pre-store quality check PASSED:`, v1PreStoreDetails);
+
+          // STEP 4: Store V1 workout plan
+          console.log(`[V1] [${requestId}] Step 4/5: Storing V1 workout plan...`);
           try {
             workoutResult = (await storeV1WorkoutPlan(
               supabase,
@@ -4698,42 +5364,40 @@ serve(async (req) => {
               workoutConfig
             )) as any;
             
-            console.log('\n6. DB Writes Success: TRUE');
-            console.log('   Stored Plan ID:', workoutResult!.planId);
+            console.log(`[V1] [${requestId}] DB Writes Success: TRUE, Plan ID:`, workoutResult!.planId);
           } catch (e: any) {
-            console.log('\n6. DB Writes Success: FALSE', e.message);
+            console.error(`[V1] [${requestId}] DB Writes Success: FALSE -`, e.message);
             throw e;
           }
 
-          // V1 Activation: Finalize activation after successful storage
-          console.log('[V1] Starting activation block:', { activationMode, hasPlanId: !!workoutResult?.planId });
+          // STEP 5: Activate plan
+          console.log(`[V1] [${requestId}] Step 5/5: Activating plan...`, { activationMode, hasPlanId: !!workoutResult?.planId });
           if (activationMode !== 'preview' && workoutResult?.planId) {
             try {
-              console.log('[V1] Calling finalizeStoredWorkoutPlanActivation...');
+              console.log(`[V1] [${requestId}] Calling finalizeStoredWorkoutPlanActivation...`);
               await finalizeStoredWorkoutPlanActivation(supabase, {
                 userId,
                 planId: workoutResult.planId,
                 activationMode,
                 currentPlanId: currentPlanContext?.planId || null,
               });
-              console.log('\n7. V1 Activation Success: TRUE');
-              console.log('   Activated Plan ID:', workoutResult.planId);
+              console.log(`[V1] [${requestId}] Activation Success: TRUE, Plan ID:`, workoutResult.planId);
             } catch (e: any) {
-              console.error('\n7. V1 Activation Success: FALSE', e.message);
-              console.error('[V1] Activation error stack:', e.stack);
+              console.error(`[V1] [${requestId}] Activation Success: FALSE -`, e.message);
+              console.error(`[V1] [${requestId}] Activation error stack:`, e.stack);
               warnings.push(`V1 activation warning: ${e.message}`);
             }
           } else {
-            console.log('[V1] Skipping activation:', { activationMode, planId: workoutResult?.planId });
+            console.log(`[V1] [${requestId}] Skipping activation:`, { activationMode, planId: workoutResult?.planId });
           }
           
-          console.log('=============================================\n');
+          console.log(`[V1] [${requestId}] =============================================`);
 
           warnings.push(...workoutResult!.warnings);
           
           } catch (v1Error: any) {
-            console.error('[V1] CRITICAL ERROR in V1 generation:', v1Error.message);
-            console.error('[V1] Error stack:', v1Error.stack);
+            console.error(`[V1] [${requestId}] CRITICAL ERROR in V1 generation:`, v1Error.message);
+            console.error(`[V1] [${requestId}] Error stack:`, v1Error.stack);
             
             // Update run status to failed
             await supabase
@@ -4750,9 +5414,11 @@ serve(async (req) => {
               success: false,
               error: `V1 Generation Failed: ${v1Error.message}`,
               run_id: runId,
+              requestId,
+              step: 'v1_generation',
               details: {
-                step: 'v1_generation',
                 message: v1Error.message,
+                stack: v1Error.stack?.split('\n')[0] || 'N/A',
               }
             }, 500);
           }
@@ -4804,26 +5470,36 @@ serve(async (req) => {
                 await deleteWorkoutPlanTree(supabase, workoutResult.planId);
                 const validationMessage = "We need more direction to build a meaningfully different plan.";
 
-                await supabase
-                  .from("plan_generation_runs")
-                  .update({
-                    status: "validation_failed",
-                    completed_at: new Date().toISOString(),
-                    validation_errors: [validationMessage],
-                    warnings_json: warnings,
-                    ai_response: {
-                      current_plan_id: currentPlanContext.planId,
-                      no_op_blocked: true,
-                    },
-                  })
-                  .eq("id", runId);
+                await updateGenerationRunFailure(supabase, runId, {
+                  status: "validation_failed",
+                  validationErrors: [validationMessage],
+                  warnings,
+                  errorStep: "validation",
+                  errorCode: "no_material_difference",
+                  errorContext: {
+                    current_plan_id: currentPlanContext.planId,
+                    no_op_blocked: true,
+                  },
+                  aiResponse: {
+                    current_plan_id: currentPlanContext.planId,
+                    no_op_blocked: true,
+                  },
+                });
 
                 return jsonResponse({
                   success: false,
                   status: "validation_failed",
                   run_id: runId,
                   runId,
+                  error: validationMessage,
                   message: validationMessage,
+                  error_code: "no_material_difference",
+                  requestId,
+                  step: "validation",
+                  details: {
+                    current_plan_id: currentPlanContext.planId,
+                    no_op_blocked: true,
+                  },
                   warnings,
                 });
               }
@@ -4851,16 +5527,39 @@ serve(async (req) => {
                   "07:00",
           }));
 
-          nutritionResult = await generateScientificMealPlan(
-            supabase,
-            userId,
-            runId,
-            nutritionContext,
-            activationMode,
-            nutritionHorizon,
-            currentNutritionPlanContext?.planId || null,
-            workoutSchedule,
-          );
+          try {
+            nutritionResult = await generateScientificMealPlan(
+              supabase,
+              userId,
+              runId,
+              nutritionContext,
+              activationMode,
+              nutritionHorizon,
+              currentNutritionPlanContext?.planId || null,
+              workoutSchedule,
+            );
+          } catch (scientificErr: any) {
+            // Scientific meal engine failed — fall back to the legacy plan generator
+            // so plan generation succeeds rather than producing a 500 for the user.
+            console.error("[generate-user-plans] Scientific meal engine failed, falling back to legacy:", scientificErr.message);
+            warnings.push(`Meal preferences could not be applied (${scientificErr.message}). A standard nutrition plan was generated instead.`);
+            const nutritionMealSlots = resolveNutritionMealSlots(nutritionRegeneration, currentNutritionPlanContext);
+            nutritionResult = await storeNutritionPlan(
+              supabase,
+              userId,
+              runId,
+              nutritionContext,
+              macroTolerancePercent,
+              includeVariants,
+              nutritionHorizon,
+              strictMacroMode,
+              varietyProfile,
+              activationMode,
+              currentNutritionPlanContext?.planId || null,
+              nutritionMealSlots,
+              dryRun,
+            );
+          }
         } else {
           // Fallback to legacy meal generation
           const nutritionMealSlots = resolveNutritionMealSlots(nutritionRegeneration, currentNutritionPlanContext);
@@ -4877,6 +5576,7 @@ serve(async (req) => {
             activationMode,
             currentNutritionPlanContext?.planId || null,
             nutritionMealSlots,
+            dryRun,
           );
         }
 
@@ -4905,14 +5605,48 @@ serve(async (req) => {
             generation_mode: generationMode,
           },
           warnings_json: dedupedWarnings,
+          error_step: null,
+          error_code: null,
+          error_context: null,
         })
         .eq("id", runId);
 
+      // 🛡️ QUALITY GATE: Render verification
+      const renderCheckResult = performRenderCheck({
+        workout_plan: (workoutResult && 'plan' in workoutResult) ? (workoutResult as any).plan : undefined,
+        nutrition_plan: (nutritionResult && 'plan' in nutritionResult) ? (nutritionResult as any).plan : undefined,
+      }, context.onboarding.training_days_per_week);
+
+      if (!renderCheckResult.passed) {
+        console.error(`[generate-user-plans] Render check FAILED for user ${userId}:`, renderCheckResult.details);
+      } else {
+        console.log(`[generate-user-plans] Render check PASSED for user ${userId}:`, renderCheckResult.details);
+      }
+
+      if (dryRun) {
+        return jsonResponse({
+          success: renderCheckResult.passed,
+          status: renderCheckResult.passed ? "dry_run_success" : "dry_run_render_failed",
+          run_id: runId,
+          requestId,
+          render_check: renderCheckResult,
+          data: {
+            workout: workoutResult,
+            nutrition: nutritionResult,
+          },
+          warnings: dedupedWarnings,
+        }, renderCheckResult.passed ? 200 : 422);
+      }
+
+      console.log(`[${requestId}] Plan generation completed successfully in ${durationMs}ms`);
+      
       return jsonResponse({
         success: true,
         status: activationMode === "preview" ? "preview_ready" : "success",
         run_id: runId,
         runId,
+        requestId,
+        render_check: renderCheckResult,
         workout_plan_id: workoutResult?.planId,
         workoutPlanId: workoutResult?.planId,
         nutrition_plan_id: nutritionResult?.planId,
@@ -4923,50 +5657,121 @@ serve(async (req) => {
         warnings: dedupedWarnings,
       });
     } catch (generationError) {
-      const err = generationError as Error;
+      const err = generationError as any;
       const dedupedWarnings = Array.from(
         new Set([
           ...warnings,
-          ...(generationError instanceof WorkoutGenerationValidationError ? generationError.warnings : []),
+          ...(generationError instanceof StrictTemplateSelectionError ? generationError.warnings : []),
+          ...(generationError instanceof WorkoutGenerationValidationError ? (generationError as WorkoutGenerationValidationError).warnings : []),
         ]),
       );
 
+      if (generationError instanceof StrictTemplateSelectionError) {
+        await updateGenerationRunFailure(supabase, runId, {
+          status: "validation_failed",
+          validationErrors: [err.message],
+          warnings: dedupedWarnings,
+          errorStep: generationError.step,
+          errorCode: generationError.errorCode,
+          errorContext: generationError.details,
+        });
+
+        return jsonResponse({
+          success: false,
+          status: "validation_failed",
+          error: err.message,
+          message: err.message,
+          error_code: generationError.errorCode,
+          run_id: runId,
+          runId,
+          requestId,
+          step: generationError.step,
+          details: generationError.details,
+          warnings: dedupedWarnings,
+        }, generationError.statusCode);
+      }
+
+      // Fix 2: Handle structured validation errors (HTTP 400) from fetchUserContext field checks.
+      if (err.statusCode === 400) {
+        await updateGenerationRunFailure(supabase, runId, {
+          status: "failed",
+          validationErrors: [err.message],
+          warnings: dedupedWarnings,
+          errorStep: "context_validation",
+          errorCode: err.errorCode || "context_validation_failed",
+          errorContext: err.field ? { field: err.field } : null,
+        });
+
+        return jsonResponse({
+          success: false,
+          error: err.message,
+          error_code: err.errorCode || "context_validation_failed",
+          field: err.field || null,
+          requestId,
+          step: "context_validation",
+        }, 400);
+      }
+
       if (generationError instanceof WorkoutGenerationValidationError) {
-        await supabase
-          .from("plan_generation_runs")
-          .update({
-            status: "validation_failed",
-            completed_at: new Date().toISOString(),
-            validation_errors: [err.message],
-            warnings_json: dedupedWarnings,
-          })
-          .eq("id", runId);
+        await updateGenerationRunFailure(supabase, runId, {
+          status: "validation_failed",
+          validationErrors: [err.message],
+          warnings: dedupedWarnings,
+          errorStep: err.step || "validation",
+          errorCode: err.errorCode || "workout_generation_validation_failed",
+          errorContext: err.details || null,
+        });
 
         return jsonResponse({
           success: false,
           status: "validation_failed",
           run_id: runId,
           runId,
+          error: err.message,
           message: err.message,
+          error_code: err.errorCode || "workout_generation_validation_failed",
           warnings: dedupedWarnings,
+          requestId,
+          step: err.step || 'validation',
+          details: err.details || null,
         });
       }
 
-      await supabase
-        .from("plan_generation_runs")
-        .update({
-          status: "failed",
-          completed_at: new Date().toISOString(),
-          validation_errors: [err.message],
-          warnings_json: dedupedWarnings,
-        })
-        .eq("id", runId);
+      await updateGenerationRunFailure(supabase, runId, {
+        status: "failed",
+        validationErrors: [err.message],
+        warnings: dedupedWarnings,
+        errorStep: err.step || "generation",
+        errorCode: err.errorCode || "generation_failed",
+        errorContext: err.details || null,
+      });
 
-      throw err;
+      // Return structured error instead of throwing
+      return jsonResponse({
+        success: false,
+        error: `Generation failed: ${err.message}`,
+        error_code: err.errorCode || "generation_failed",
+        run_id: runId,
+        runId,
+        requestId,
+        step: err.step || 'generation',
+        details: err.details || null,
+        warnings: dedupedWarnings,
+      }, 500);
     }
   } catch (error) {
     const err = error as Error;
-    console.error("[generate-user-plans]", err);
-    return jsonResponse({ success: false, error: err.message || "Failed to generate plans" }, 500);
+    const duration = Date.now() - startTime;
+    console.error(`[generate-user-plans] [${requestId}] Fatal error after ${duration}ms:`, err);
+    
+    // Always return structured JSON error with requestId for correlation
+    return jsonResponse({ 
+      success: false, 
+      error: err.message || "Failed to generate plans",
+      details: "An unexpected error occurred during plan generation. Please try again or contact support if the issue persists.",
+      requestId,
+      step: 'unknown',
+      duration_ms: duration
+    }, 500);
   }
 });

@@ -1,4 +1,5 @@
 import { supabase } from '../lib/supabase';
+import { invokeFunction } from '../lib/supabase/invokeFunction';
 
 export type MenuGoal = 'cut' | 'bulk' | 'high_protein' | 'low_sodium' | 'balanced';
 
@@ -40,22 +41,21 @@ export async function rankMenuOptions(input: {
   selectedItemName?: string;
   selectedIndex?: number;
 }): Promise<MenuScanResult> {
-  const { data, error } = await supabase.functions.invoke('menu-scan-rank', {
-    body: {
-      menu_text: input.menuText,
-      image_base64: input.imageBase64,
-      goals: input.goals,
-      constraints: input.constraints,
-      apply_to_meal_id: input.applyToMealId,
-      selected_item_name: input.selectedItemName,
-      selected_index: input.selectedIndex,
-    },
-  });
+  const { data, parsedError, rawError } = await invokeFunction(() =>
+    supabase.functions.invoke('menu-scan-rank', {
+      body: {
+        menu_text: input.menuText,
+        image_base64: input.imageBase64,
+        goals: input.goals,
+        constraints: input.constraints,
+        apply_to_meal_id: input.applyToMealId,
+        selected_item_name: input.selectedItemName,
+        selected_index: input.selectedIndex,
+      },
+    })
+  );
 
-  if (error) {
-    throw new Error(error.message || 'Failed to analyze menu');
-  }
-
+  if (rawError) throw new Error(parsedError?.error || parsedError?.message || rawError?.message || 'Failed to analyze menu');
   if (!data?.success) {
     throw new Error(data?.error || 'Failed to analyze menu');
   }

@@ -292,13 +292,13 @@ export default function HomeScreen() {
         isWorkoutExpected: calendarState.isWorkoutExpected,
         onPress: () => {
           if (calendarState.isWorkoutExpected && calendarState.planDayId) {
-            router.push({
+            router.navigate({
               pathname: '/(tabs)/workout/day-preview',
               params: { dayId: calendarState.planDayId },
             });
             return;
           }
-          router.push('/(tabs)/workout/my-plan');
+          router.navigate('/(tabs)/workout/my-plan');
         },
       };
     });
@@ -306,12 +306,12 @@ export default function HomeScreen() {
 
   const handleOpenMealSlot = useCallback((slot?: string | null, source = 'home-dashboard') => {
     if (!slot) {
-      router.push('/(tabs)/nutrition/my-plan');
+      router.navigate('/(tabs)/nutrition/my-plan');
       return;
     }
 
     trackHomeCtaTapped({ cta_id: `${source}_${slot}` });
-    router.push({
+    router.navigate({
       pathname: '/(tabs)/nutrition/food-search',
       params: {
         mealSlot: slot,
@@ -380,7 +380,7 @@ export default function HomeScreen() {
         handleOpenMealSlot(dashboardState.activeMeal?.slot, 'home-focus');
         return;
       case 'meal_plan':
-        router.push('/(tabs)/nutrition/my-plan');
+        router.navigate('/(tabs)/nutrition/my-plan');
         return;
       case 'workout':
       case 'tomorrow':
@@ -396,7 +396,7 @@ export default function HomeScreen() {
         router.push('/(tabs)/ai-coach');
         return;
       case 'barcode':
-        router.push('/(tabs)/nutrition/barcode-scanner');
+        router.navigate('/(tabs)/nutrition/barcode-scanner');
         return;
       case 'progress':
         router.push('/(tabs)/progress');

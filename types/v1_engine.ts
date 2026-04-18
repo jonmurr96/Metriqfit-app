@@ -119,6 +119,8 @@ export enum ReplacementGroup {
   Isolation_Calf_Raise = 'Isolation_Calf_Raise',
   Trunk_Flexion = 'Trunk_Flexion',
   Trunk_Anti_Extension = 'Trunk_Anti_Extension',
+  Trunk_Rotational_Anti_Rotation = 'Trunk_Rotational_Anti_Rotation',
+  Power_Dynamic_Primer = 'Power_Dynamic_Primer',
   Conditioning_Metabolic_Finisher = 'Conditioning_Metabolic_Finisher',
 }
 
@@ -157,7 +159,7 @@ export interface Exercise {
   fatigue_cost: FatigueCost;
   tier: ExerciseTier;
   progression_types: ProgressionModel[];
-  contraindications: ContraindicationTag[];
+  contraindications?: ContraindicationTag[];
   estimated_duration_seconds: number;
 }
 
@@ -240,10 +242,9 @@ export interface WorkoutPlan {
 export enum SwapReason {
   EquipmentUnavailable = 'EquipmentUnavailable',
   InjuryPain = 'InjuryPain',
-  TooDifficult = 'TooDifficult',
-  TooEasy = 'TooEasy',
-  SetupTooComplex = 'SetupTooComplex',
   Preference = 'Preference',
+  GymCrowded = 'GymCrowded',
+  Variety = 'Variety',
 }
 
 export enum ContinuityMethod {

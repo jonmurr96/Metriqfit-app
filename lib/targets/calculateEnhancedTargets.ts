@@ -17,9 +17,9 @@ export interface EnhancedTargetInput {
   training_days_per_week: number;
   minutes_per_workout: string;
   experience_level: ExperienceLevel;
-  carb_tolerance: CarbTolerance;
+  carb_tolerance?: CarbTolerance | null;
   avg_steps?: number | null;
-  target_weight_lb?: number | null;
+  target_weight_lb: number;
   target_date?: string | null;
 }
 
@@ -49,13 +49,15 @@ const ACTIVITY_MULTIPLIERS: Record<ActivityLevel, number> = {
   very_active: 1.725,
 };
 
-const CALORIE_ADJUSTMENTS: Record<GoalType, { mode: string; kcal?: number; default_kcal?: number }> = {
+const CALORIE_ADJUSTMENTS: Record<GoalType, { mode: string; kcal?: number; min_kcal?: number; max_kcal?: number; default_kcal?: number }> = {
   maintain_weight: { mode: 'offset', kcal: 0 },
   general_fitness: { mode: 'offset', kcal: 0 },
   increase_endurance: { mode: 'offset', kcal: 150 },
-  lose_weight: { mode: 'range_deficit', default_kcal: 450 },
-  recomp: { mode: 'range_deficit', default_kcal: 250 },
-  gain_weight: { mode: 'range_surplus', default_kcal: 300 },
+  lose_weight: { mode: 'range_deficit', min_kcal: 300, max_kcal: 700, default_kcal: 450 },
+  recomp: { mode: 'range_deficit', min_kcal: 150, max_kcal: 350, default_kcal: 250 },
+  gain_weight: { mode: 'range_surplus', min_kcal: 200, max_kcal: 500, default_kcal: 300 },
+  build_muscle: { mode: 'range_surplus', min_kcal: 250, max_kcal: 600, default_kcal: 350 },
+  get_fitter: { mode: 'offset', kcal: 0 },
 };
 
 const PROTEIN_G_PER_LB: Record<GoalType, Record<ExperienceLevel, number>> = {
@@ -65,6 +67,8 @@ const PROTEIN_G_PER_LB: Record<GoalType, Record<ExperienceLevel, number>> = {
   general_fitness: { beginner: 0.8, intermediate: 0.9, advanced: 1.0 },
   increase_endurance: { beginner: 0.8, intermediate: 0.9, advanced: 1.0 },
   gain_weight: { beginner: 0.8, intermediate: 0.9, advanced: 1.0 },
+  build_muscle: { beginner: 0.85, intermediate: 0.95, advanced: 1.05 },
+  get_fitter: { beginner: 0.8, intermediate: 0.9, advanced: 1.0 },
 };
 
 // Carb tolerance adjustments to macro ratios
@@ -134,9 +138,10 @@ export function calculateEnhancedTargets(input: EnhancedTargetInput): EnhancedTa
     activity_level,
     training_days_per_week,
     experience_level,
-    carb_tolerance,
+    carb_tolerance: carbToleranceRaw,
     avg_steps,
   } = input;
+  const carb_tolerance = carbToleranceRaw || 'energized_satiated';
 
   const age = calculateAge(dob);
   const heightInches = height_ft * 12 + height_in;
@@ -154,16 +159,30 @@ export function calculateEnhancedTargets(input: EnhancedTargetInput): EnhancedTa
   const activityMultiplier = ACTIVITY_MULTIPLIERS[activity_level];
   const tdee = bmr * activityMultiplier;
 
-  // Apply goal adjustment
+  // Apply goal adjustment scaled by weight delta
   const adjustment = CALORIE_ADJUSTMENTS[goal_type];
   let goalAdjustment = 0;
 
+  const weightDelta = input.target_weight_lb - current_weight_lb;
   if (adjustment.mode === 'offset') {
     goalAdjustment = adjustment.kcal || 0;
+    if (Math.abs(weightDelta) >= 5) {
+      goalAdjustment = clamp(weightDelta * 5, -150, 150);
+    }
   } else if (adjustment.mode === 'range_deficit') {
-    goalAdjustment = -(adjustment.default_kcal || 450);
+    if (weightDelta < 0) {
+      const scale = clamp(Math.abs(weightDelta) / 20, 0.5, 1.5);
+      goalAdjustment = -(clamp((adjustment.default_kcal || 450) * scale, adjustment.min_kcal || 300, adjustment.max_kcal || 700));
+    } else {
+      goalAdjustment = -(adjustment.default_kcal || 450);
+    }
   } else if (adjustment.mode === 'range_surplus') {
-    goalAdjustment = adjustment.default_kcal || 300;
+    if (weightDelta > 0) {
+      const scale = clamp(weightDelta / 20, 0.6, 1.6);
+      goalAdjustment = clamp((adjustment.default_kcal || 350) * scale, adjustment.min_kcal || 200, adjustment.max_kcal || 600);
+    } else {
+      goalAdjustment = adjustment.default_kcal || 300;
+    }
   }
 
   // Base calories (training day calories)

@@ -35,7 +35,7 @@ export function NutritionSectionShell({
               if (router.canGoBack()) {
                 router.back();
               } else {
-                router.push('/(tabs)/nutrition' as any);
+                router.navigate('/(tabs)/nutrition');
               }
             }}
             style={[styles.backButton, { backgroundColor: c.surface }]}

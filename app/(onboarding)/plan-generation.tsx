@@ -77,8 +77,10 @@ export default function PlanGenerationScreen() {
       try {
         const startTime = Date.now();
         const result = await triggerPlanGeneration(user.id, 'both', {
+          generation_version: 'v1',
           generation_mode: 'initial',
           strict_days_match: true,
+          strict_template_source: true,
           strict_macro_mode: true,
           variety_profile: 'moderate_rotation_4_5',
           macro_tolerance_percent: 5,
@@ -100,7 +102,24 @@ export default function PlanGenerationScreen() {
           goToPlanReview(result.runId, warnings);
         }, warnings.length ? 250 : 1000);
       } catch (error: any) {
+        // Extract enhanced error information
         const errorMessage = error?.message || 'Failed to generate plan';
+        const errorStep = error?.step || 'unknown';
+        const errorRequestId = error?.requestId || 'N/A';
+        const errorCode = error?.errorCode || error?.error_code || null;
+        const isTemplateSelectionUnsupported = errorCode === 'template_selection_unsupported';
+        
+        // Log full error details for debugging
+        console.error('[PlanGeneration] Generation failed:', {
+          message: errorMessage,
+          errorCode,
+          step: errorStep,
+          requestId: errorRequestId,
+          details: error?.details,
+          errorContext: error?.errorContext,
+          originalError: error?.originalError,
+        });
+        
         setGenerationError(errorMessage);
 
         if (/limit reached/i.test(errorMessage) && latestRunId) {
@@ -108,18 +127,45 @@ export default function PlanGenerationScreen() {
           return;
         }
 
+        // Build detailed error message for the alert
+        let alertMessage = isTemplateSelectionUnsupported
+          ? 'Your current training setup does not match a supported workout template yet.\n\nGo back to Training and adjust your workout days, equipment, or split preference, then try again.'
+          : errorMessage;
+        if (errorStep !== 'unknown') {
+          alertMessage += `\n\nFailed at step: ${errorStep}`;
+        }
+        if (errorRequestId !== 'N/A') {
+          alertMessage += `\nRequest ID: ${errorRequestId}`;
+        }
+        // Fix 9: Show error details if available for unexpected failures.
+        const errorDetails = error?.details;
+        if (errorDetails && !isTemplateSelectionUnsupported) {
+          const detailText = typeof errorDetails === 'string'
+            ? errorDetails
+            : JSON.stringify(errorDetails, null, 2);
+          alertMessage += `\n\nDetails: ${detailText}`;
+        }
+
         Alert.alert(
           'Generation Issue',
-          errorMessage,
+          alertMessage,
           [
             {
               text: 'Retry',
               onPress: handleRetry,
             },
             {
-              text: latestRunId ? 'Open Latest Plan' : 'Back to Onboarding',
+              text: isTemplateSelectionUnsupported
+                ? 'Back to Training'
+                : latestRunId
+                  ? 'Open Latest Plan'
+                  : 'Back to Onboarding',
               style: 'cancel',
               onPress: () => {
+                if (isTemplateSelectionUnsupported) {
+                  router.replace('/(onboarding)/training');
+                  return;
+                }
                 if (latestRunId) {
                   goToPlanReview(latestRunId);
                   return;

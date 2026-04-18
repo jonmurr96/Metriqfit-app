@@ -9,6 +9,7 @@ export type DisplayPreferences = {
   reduceMotion: boolean;
   highContrast: boolean;
   preferredAppearanceLabel: string;
+  food_measurement?: 'metric' | 'imperial_mixed';
 };
 
 export const DEFAULT_NOTIFICATION_PREFERENCES: NotificationPreferences = {
@@ -81,6 +82,10 @@ export function normalizeDisplayPreferences(value: unknown): DisplayPreferences 
         ? raw.highContrast
         : DEFAULT_DISPLAY_PREFERENCES.highContrast,
     preferredAppearanceLabel: getPreferredAppearanceLabel(raw),
+    food_measurement:
+      raw.food_measurement === 'imperial_mixed' || raw.food_measurement === 'metric'
+        ? raw.food_measurement
+        : undefined,
   };
 }
 

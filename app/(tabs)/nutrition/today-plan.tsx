@@ -28,10 +28,15 @@ import {
 import { buildPlannedMealDerivedState } from '../../../lib/nutrition/planned-meal-state';
 import { useTokens } from '../../../lib/theme';
 import type { MealSlot } from '../../../services/nutritionService';
+import { useProfile } from '../../../hooks/useUser';
+import { formatMacroDisplay, getDefaultFoodMeasurement } from '../../../lib/nutrition/displayUnits';
 
 export default function TodayPlanScreen() {
   const { c, s, ty, r } = useTokens();
   const router = useRouter();
+  const { data: profile } = useProfile();
+  const foodMeasurement = getDefaultFoodMeasurement(profile?.unit_system);
+  const displayFoodMeasurement = (profile?.display_preferences?.food_measurement as any) ?? foodMeasurement;
   const insets = useSafeAreaInsets();
   const params = useLocalSearchParams<{ date?: string | string[]; focusSlot?: string | string[] }>();
   const dateKey = normalizeDateKey(params.date);
@@ -248,9 +253,9 @@ export default function TodayPlanScreen() {
               emphasis="soft"
               items={[
                 { macro: 'calories', value: plannedTotals.calories, unit: 'kcal' },
-                { macro: 'protein', value: plannedTotals.protein, unit: 'g' },
-                { macro: 'carbs', value: plannedTotals.carbs, unit: 'g' },
-                { macro: 'fat', value: plannedTotals.fat, unit: 'g' },
+                { macro: 'protein', value: parseFloat(formatMacroDisplay(plannedTotals.protein, 'protein', displayFoodMeasurement).value), unit: formatMacroDisplay(plannedTotals.protein, 'protein', displayFoodMeasurement).unit },
+                { macro: 'carbs', value: parseFloat(formatMacroDisplay(plannedTotals.carbs, 'carbs', displayFoodMeasurement).value), unit: formatMacroDisplay(plannedTotals.carbs, 'carbs', displayFoodMeasurement).unit },
+                { macro: 'fat', value: parseFloat(formatMacroDisplay(plannedTotals.fat, 'fat', displayFoodMeasurement).value), unit: formatMacroDisplay(plannedTotals.fat, 'fat', displayFoodMeasurement).unit },
               ]}
             />
           </GlassCard>
@@ -326,9 +331,9 @@ export default function TodayPlanScreen() {
                     emphasis="soft"
                     items={[
                       { macro: 'calories', value: section.totals.calories, unit: 'kcal' },
-                      { macro: 'protein', value: section.totals.protein, unit: 'g' },
-                      { macro: 'carbs', value: section.totals.carbs, unit: 'g' },
-                      { macro: 'fat', value: section.totals.fat, unit: 'g' },
+                      { macro: 'protein', value: parseFloat(formatMacroDisplay(section.totals.protein, 'protein', displayFoodMeasurement).value), unit: formatMacroDisplay(section.totals.protein, 'protein', displayFoodMeasurement).unit },
+                      { macro: 'carbs', value: parseFloat(formatMacroDisplay(section.totals.carbs, 'carbs', displayFoodMeasurement).value), unit: formatMacroDisplay(section.totals.carbs, 'carbs', displayFoodMeasurement).unit },
+                      { macro: 'fat', value: parseFloat(formatMacroDisplay(section.totals.fat, 'fat', displayFoodMeasurement).value), unit: formatMacroDisplay(section.totals.fat, 'fat', displayFoodMeasurement).unit },
                     ]}
                   />
 
@@ -453,9 +458,9 @@ export default function TodayPlanScreen() {
                               emphasis="outlined"
                               items={[
                                 { macro: 'calories', value: item.calories, unit: 'kcal' },
-                                { macro: 'protein', value: item.protein, unit: 'g' },
-                                { macro: 'carbs', value: item.carbs, unit: 'g' },
-                                { macro: 'fat', value: item.fat, unit: 'g' },
+                                { macro: 'protein', value: parseFloat(formatMacroDisplay(item.protein, 'protein', displayFoodMeasurement).value), unit: formatMacroDisplay(item.protein, 'protein', displayFoodMeasurement).unit },
+                                { macro: 'carbs', value: parseFloat(formatMacroDisplay(item.carbs, 'carbs', displayFoodMeasurement).value), unit: formatMacroDisplay(item.carbs, 'carbs', displayFoodMeasurement).unit },
+                                { macro: 'fat', value: parseFloat(formatMacroDisplay(item.fat, 'fat', displayFoodMeasurement).value), unit: formatMacroDisplay(item.fat, 'fat', displayFoodMeasurement).unit },
                               ]}
                             />
                           </View>

@@ -354,11 +354,15 @@ export function useSwapExercise() {
     mutationFn: async ({
       sessionExerciseId,
       newExerciseId,
+      reason,
+      continuity,
     }: {
       sessionExerciseId: string;
       newExerciseId: string;
+      reason?: string;
+      continuity?: string;
     }) => {
-      return swapExercise(sessionExerciseId, newExerciseId);
+      return swapExercise(sessionExerciseId, newExerciseId, reason, continuity);
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: workoutKeys.activeSession() });

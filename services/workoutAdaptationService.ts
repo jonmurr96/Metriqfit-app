@@ -1,4 +1,5 @@
 import { supabase } from '../lib/supabase';
+import { invokeFunction } from '../lib/supabase/invokeFunction';
 import { getPlanFocusCoherenceReport } from './workoutCoherenceService';
 
 export type WorkoutAdaptationRecommendation = {
@@ -17,14 +18,13 @@ export async function generateWorkoutAdaptationRecommendations(input?: {
   planId?: string;
   contextWindowDays?: number;
 }) {
-  const { data, error } = await supabase.functions.invoke('adapt-workout-plan', {
-    body: {
-      planId: input?.planId,
-      contextWindowDays: input?.contextWindowDays,
-    },
-  });
+  const { data, parsedError, rawError } = await invokeFunction(() =>
+    supabase.functions.invoke('adapt-workout-plan', {
+      body: { planId: input?.planId, contextWindowDays: input?.contextWindowDays },
+    })
+  );
 
-  if (error) throw new Error(error.message || 'Failed to generate adaptation recommendations');
+  if (rawError) throw new Error(parsedError?.error || parsedError?.message || rawError?.message || 'Failed to generate adaptation recommendations');
   if (!data?.success) throw new Error(data?.error || 'Failed to generate adaptation recommendations');
   return data;
 }

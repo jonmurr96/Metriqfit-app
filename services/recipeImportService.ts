@@ -1,4 +1,5 @@
 import { supabase } from '../lib/supabase';
+import { invokeFunction } from '../lib/supabase/invokeFunction';
 
 export interface RecipeImportIngredient {
   original: string;
@@ -33,18 +34,17 @@ export async function importRecipeFromUrl(
     existingRecipeId?: string;
   },
 ): Promise<RecipeImportResult> {
-  const { data, error } = await supabase.functions.invoke('import-recipe-url', {
-    body: {
-      url,
-      saveDraft: options?.saveDraft || false,
-      existingRecipeId: options?.existingRecipeId,
-    },
-  });
+  const { data, parsedError, rawError } = await invokeFunction(() =>
+    supabase.functions.invoke('import-recipe-url', {
+      body: {
+        url,
+        saveDraft: options?.saveDraft || false,
+        existingRecipeId: options?.existingRecipeId,
+      },
+    })
+  );
 
-  if (error) {
-    throw new Error(error.message || 'Failed to import recipe');
-  }
-
+  if (rawError) throw new Error(parsedError?.error || parsedError?.message || rawError?.message || 'Failed to import recipe');
   if (!data?.success) {
     throw new Error(data?.error || 'Failed to import recipe');
   }
