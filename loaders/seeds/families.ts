@@ -1,4 +1,22 @@
-import { GoalBucket, ExperienceLevel, SessionEnvironment, LiftComfort } from '../../types/v1_engine.ts';
+import { GoalBucket, ExperienceLevel } from '../../types/v1_engine.ts';
+
+const adaptiveFamilies = (['beginner', 'intermediate', 'advanced'] as const).flatMap((exp) => {
+  const label = exp === 'beginner' ? 'Beginner' : exp === 'intermediate' ? 'Intermediate' : 'Advanced';
+  const level = exp === 'beginner'
+    ? ExperienceLevel.Beginner
+    : exp === 'intermediate'
+      ? ExperienceLevel.Intermediate
+      : ExperienceLevel.Advanced;
+
+  return [2, 3, 4, 5, 6].map((days) => ({
+    external_id: `fam_adaptive_${exp}_${days}_day`,
+    name: `${label} Adaptive ${days}-Day`,
+    description: `${label}-appropriate ${days}-day plan structure that honors the user's selected workout frequency while adapting exercises, volume, and intensity to goal, equipment, and injury constraints.`,
+    template_id: `tmp_adaptive_${exp}_${days}_day_v1`,
+    experience_level: level,
+    goal_bucket: GoalBucket.GenFitness,
+  }));
+});
 
 export const planFamilies = [
   {
@@ -201,4 +219,5 @@ export const planFamilies = [
     experience_level: ExperienceLevel.Intermediate,
     goal_bucket: GoalBucket.GenFitness,
   },
+  ...adaptiveFamilies,
 ];

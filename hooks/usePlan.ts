@@ -8,6 +8,7 @@ import { useAuth } from '../lib/auth/AuthProvider';
 import {
   triggerPlanGeneration,
   getActiveWorkoutPlan,
+  getWorkoutPlanByGenerationRun,
   getActiveNutritionPlan,
   getPlanHistory,
   getLatestNutritionPlanPreview,
@@ -77,6 +78,8 @@ export const planKeys = {
   mediaVersion: 'media-v2' as const,
   workout: () => [...planKeys.all, 'workout'] as const,
   workoutActive: (userId: string) => [...planKeys.workout(), 'active', userId] as const,
+  workoutByGenerationRun: (userId: string, generationRunId: string) =>
+    [...planKeys.workout(), 'generation-run', userId, generationRunId] as const,
   workoutHistory: (userId: string) => [...planKeys.workout(), 'history', userId] as const,
   workoutPreview: (userId: string, replacesPlanId?: string | null) =>
     [...planKeys.workout(), 'preview', userId, replacesPlanId || 'latest'] as const,
@@ -115,6 +118,17 @@ export function useActiveWorkoutPlan() {
     queryFn: () => getActiveWorkoutPlan(user!.id),
     enabled: !!user,
     staleTime: 5 * 60 * 1000,
+  });
+}
+
+export function useWorkoutPlanByGenerationRun(generationRunId?: string | null, options?: { enabled?: boolean }) {
+  const { user } = useAuth();
+
+  return useQuery({
+    queryKey: planKeys.workoutByGenerationRun(user?.id || '', generationRunId || ''),
+    queryFn: () => getWorkoutPlanByGenerationRun(user!.id, generationRunId!),
+    enabled: !!user && !!generationRunId && (options?.enabled ?? true),
+    staleTime: 30 * 1000,
   });
 }
 

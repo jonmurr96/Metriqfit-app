@@ -8,11 +8,11 @@ import {
   View,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { LinearGradient } from 'expo-linear-gradient';
 import { MotiView } from 'moti';
 
 import { useTokens } from '../../lib/theme';
 import { BrandMark } from '../branding/BrandMark';
+import { AuthBackground } from './AuthBackground';
 
 interface AuthScreenShellProps {
   title: string;
@@ -29,95 +29,127 @@ export function AuthScreenShell({
   footer,
   titleMode = 'default',
 }: AuthScreenShellProps) {
-  const { c, ty, s, r, gradients, animation, theme } = useTokens();
-  const brandGradient = gradients.brand;
-  const purpleBlueGradient = gradients.purpleBlue;
-  const titleGradientStops = [
-    purpleBlueGradient?.[0] ?? brandGradient[0],
-    brandGradient[1],
-    purpleBlueGradient?.[1] ?? brandGradient[2],
-  ];
-  const gradientTitleStyle =
-    Platform.OS === 'web'
-      ? ({
-          backgroundImage: `linear-gradient(110deg, ${titleGradientStops[0]}, ${titleGradientStops[1]}, ${titleGradientStops[2]})`,
-          WebkitBackgroundClip: 'text',
-          backgroundClip: 'text',
-          color: 'transparent',
-        } as any)
-      : ({ color: c.primary } as const);
+  const { c, ty, s } = useTokens();
 
   return (
-    <SafeAreaView style={[styles.container, { backgroundColor: c.bg }]}>
-      <LinearGradient
-        colors={[`${c.primary}1A`, c.bg, `${c.surface}F0`]}
-        locations={[0, 0.45, 1]}
-        style={StyleSheet.absoluteFill}
-      />
-
-      <View style={[styles.atmosphereLayer, { pointerEvents: 'none' as const }]}>
-        <View style={[styles.glowOrb, styles.orbTop, { backgroundColor: `${c.primary}24` }]} />
-        <View style={[styles.glowOrb, styles.orbBottom, { backgroundColor: `${c.accent2}18` }]} />
-      </View>
+    <SafeAreaView style={styles.container}>
+      {/* Animated background layer */}
+      <AuthBackground />
 
       <KeyboardAvoidingView
         style={styles.keyboardView}
         behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+        keyboardVerticalOffset={Platform.OS === 'ios' ? 24 : 0}
       >
         <ScrollView
           contentContainerStyle={styles.scrollContent}
           keyboardShouldPersistTaps="handled"
           showsVerticalScrollIndicator={false}
+          contentInset={{ bottom: 40 }}
+          scrollIndicatorInsets={{ bottom: 40 }}
         >
-          <MotiView
-            from={{ opacity: 0, translateY: 16 }}
-            animate={{ opacity: 1, translateY: 0 }}
-            transition={{ type: 'timing', duration: 480 }}
-            style={[
-              styles.card,
-              {
-                backgroundColor: `${c.surface}${theme.auth.panelOpacity}`,
-                borderColor: `${c.primary}${theme.auth.panelBorderOpacity}`,
-                borderRadius: r.lg,
-                padding: s.xl,
-                maxWidth: theme.auth.maxWidth,
-              },
-            ]}
-          >
-            <View style={styles.hero}>
-              <BrandMark size="lg" glow="hero" />
-              {titleMode === 'brandAnimated' ? (
-                <MotiView
-                  from={{ opacity: 0.9, scale: 0.98 }}
-                  animate={{ opacity: 1, scale: 1.02 }}
-                  transition={{
-                    type: 'timing',
-                    duration: animation.duration.verySlow * 2,
-                    loop: true,
-                    repeatReverse: true,
-                  }}
+          {/* Hero Section */}
+          <View style={styles.hero}>
+            {/* Pulsing logo */}
+            <MotiView
+              from={{ scale: 1 }}
+              animate={{ scale: [1, 1.03, 1] }}
+              transition={{
+                type: 'timing',
+                duration: 4000,
+                loop: true,
+                repeatReverse: false,
+              }}
+            >
+              <BrandMark size="xl" glow="hero" />
+            </MotiView>
+
+            {/* Logo glow backdrop */}
+            <View
+              style={[
+                styles.logoGlow,
+                { backgroundColor: `${c.primary}15` },
+              ]}
+              pointerEvents="none"
+            />
+
+            {/* Title */}
+            {titleMode === 'brandAnimated' ? (
+              <MotiView
+                from={{ opacity: 0, translateY: 8 }}
+                animate={{ opacity: 1, translateY: 0 }}
+                transition={{ type: 'timing', duration: 600, delay: 200 }}
+              >
+                <Text
+                  style={[
+                    styles.title,
+                    {
+                      color: c.primary,
+                      fontFamily: ty.heading.family,
+                      textShadowColor: `${c.primary}40`,
+                      textShadowRadius: 20,
+                      textShadowOffset: { width: 0, height: 0 },
+                    },
+                  ]}
                 >
-                  <Text
-                    style={[
-                      styles.title,
-                      styles.brandTitle,
-                      { fontFamily: ty.heading.family },
-                      gradientTitleStyle,
-                    ]}
-                  >
-                    {title}
-                  </Text>
-                </MotiView>
-              ) : (
-                <Text style={[styles.title, { color: c.text, fontFamily: ty.heading.family }]}>{title}</Text>
-              )}
-              <Text style={[styles.subtitle, { color: c.textMuted, fontFamily: ty.body.family }]}>{subtitle}</Text>
-            </View>
+                  {title}
+                </Text>
+              </MotiView>
+            ) : (
+              <MotiView
+                from={{ opacity: 0, translateY: 8 }}
+                animate={{ opacity: 1, translateY: 0 }}
+                transition={{ type: 'timing', duration: 600, delay: 200 }}
+              >
+                <Text
+                  style={[
+                    styles.title,
+                    { color: c.text, fontFamily: ty.heading.family },
+                  ]}
+                >
+                  {title}
+                </Text>
+              </MotiView>
+            )}
 
+            {/* Subtitle */}
+            <MotiView
+              from={{ opacity: 0, translateY: 6 }}
+              animate={{ opacity: 1, translateY: 0 }}
+              transition={{ type: 'timing', duration: 600, delay: 350 }}
+            >
+              <Text
+                style={[
+                  styles.subtitle,
+                  { color: c.textMuted, fontFamily: ty.body.family },
+                ]}
+              >
+                {subtitle}
+              </Text>
+            </MotiView>
+          </View>
+
+          {/* Form Content */}
+          <MotiView
+            from={{ opacity: 0, translateY: 20 }}
+            animate={{ opacity: 1, translateY: 0 }}
+            transition={{ type: 'timing', duration: 600, delay: 450 }}
+            style={styles.formContainer}
+          >
             <View style={{ gap: s.md }}>{children}</View>
-
-            {footer ? <View style={{ marginTop: s.lg }}>{footer}</View> : null}
           </MotiView>
+
+          {/* Footer */}
+          {footer ? (
+            <MotiView
+              from={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              transition={{ type: 'timing', duration: 500, delay: 700 }}
+              style={styles.footer}
+            >
+              {footer}
+            </MotiView>
+          ) : null}
         </ScrollView>
       </KeyboardAvoidingView>
     </SafeAreaView>
@@ -131,52 +163,46 @@ const styles = StyleSheet.create({
   keyboardView: {
     flex: 1,
   },
-  atmosphereLayer: {
-    ...StyleSheet.absoluteFillObject,
-    overflow: 'hidden',
-  },
-  glowOrb: {
-    position: 'absolute',
-    width: 280,
-    height: 280,
-    borderRadius: 999,
-  },
-  orbTop: {
-    top: -140,
-    right: -70,
-  },
-  orbBottom: {
-    bottom: -120,
-    left: -120,
-  },
   scrollContent: {
     flexGrow: 1,
     justifyContent: 'center',
-    paddingHorizontal: 20,
-    paddingVertical: 22,
-  },
-  card: {
-    alignSelf: 'center',
-    width: '100%',
-    borderWidth: 1,
+    paddingHorizontal: 24,
+    paddingTop: 28,
+    paddingBottom: 60,
   },
   hero: {
     alignItems: 'center',
-    marginBottom: 18,
-    gap: 8,
+    marginBottom: 32,
+    gap: 10,
+    position: 'relative',
+  },
+  logoGlow: {
+    position: 'absolute',
+    width: 200,
+    height: 200,
+    borderRadius: 100,
+    top: -20,
+    zIndex: -1,
   },
   title: {
-    fontSize: 30,
+    fontSize: 32,
     textAlign: 'center',
-    letterSpacing: -0.4,
-  },
-  brandTitle: {
-    letterSpacing: -0.7,
-    textTransform: 'none',
+    letterSpacing: -0.5,
+    marginTop: 4,
   },
   subtitle: {
-    fontSize: 15,
+    fontSize: 14,
     textAlign: 'center',
     lineHeight: 22,
+    letterSpacing: 0.2,
+  },
+  formContainer: {
+    width: '100%',
+    maxWidth: 420,
+    alignSelf: 'center',
+  },
+  footer: {
+    marginTop: 24,
+    alignItems: 'center',
   },
 });

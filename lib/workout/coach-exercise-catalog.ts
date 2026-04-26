@@ -60,9 +60,6 @@ const DISALLOWED_PATTERNS = [
   'pause ',
   'tempo',
   'medicine ball',
-  'band ',
-  'band-',
-  'with band',
   'with towel',
   'towel',
   'stability ball',
@@ -487,7 +484,7 @@ export function isExerciseAllowedForExperience(
     // Intermediate complexity exercises are allowed for beginners only with limited equipment
     // (where foundational alternatives may not exist)
     if (complexity === 'intermediate') {
-      const limitedEquipment = ['dumbbells_only', 'dumbbells_plus_bench', 'bands_only', 'bodyweight_only'].includes(
+      const limitedEquipment = ['dumbbells_only', 'dumbbells_plus_bench', 'bodyweight_only'].includes(
         normalizeWorkoutToken(equipmentAccess || '')
       );
       return limitedEquipment;

@@ -26,7 +26,6 @@ export type EquipmentAccess =
   | 'full_gym'
   | 'dumbbells_plus_bench'
   | 'dumbbells_only'
-  | 'bands_only'
   | 'bodyweight_only'
   | 'other';
 
@@ -105,11 +104,10 @@ export const EXERCISE_SELECT_V2 = [
 const EQUIPMENT_ACCESS_MAP: Record<EquipmentAccess, string[]> = {
   full_gym: [
     'barbell', 'dumbbell', 'cable', 'machine', 'bodyweight',
-    'band', 'kettlebell', 'pull_up_bar', 'dip_bar', 'bench', 'ez_bar',
+    'kettlebell', 'pull_up_bar', 'dip_bar', 'bench', 'ez_bar',
   ],
-  dumbbells_plus_bench: ['dumbbell', 'bodyweight', 'band', 'bench', 'pull_up_bar', 'dip_bar'],
-  dumbbells_only:       ['dumbbell', 'bodyweight', 'band', 'pull_up_bar'],
-  bands_only:           ['band', 'bodyweight'],
+  dumbbells_plus_bench: ['dumbbell', 'bodyweight', 'bench', 'pull_up_bar', 'dip_bar'],
+  dumbbells_only:       ['dumbbell', 'bodyweight', 'pull_up_bar'],
   bodyweight_only:      ['bodyweight', 'pull_up_bar', 'dip_bar'],
   other:                ['bodyweight'],
 };

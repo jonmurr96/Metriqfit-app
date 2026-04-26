@@ -15,6 +15,7 @@ import {
   useRestorePurchases,
 } from '../../hooks';
 import { useAuth } from '../../lib/auth';
+import { supabase } from '../../lib/supabase';
 import {
   checkEntitlementStatus,
   ensureFreeSubscription,
@@ -137,6 +138,15 @@ export default function PaywallScreen() {
     ['Unlimited history', 'No', 'Yes', 'Yes'],
   ] as const;
 
+  async function markPaywallComplete(userId: string) {
+    await supabase
+      .from('onboarding_answers')
+      .upsert(
+        { user_id: userId, paywall_completed_at: new Date().toISOString() },
+        { onConflict: 'user_id' }
+      );
+  }
+
   const completeWithFreeTier = async () => {
     if (!user?.id) return;
 
@@ -145,6 +155,7 @@ export default function PaywallScreen() {
       if (resolvedRunId) {
         await setPricingDecision.mutateAsync({ runId: resolvedRunId, tier: 'free' });
       }
+      await markPaywallComplete(user.id);
       trackEvent('onboarding_free_selected', {
         generation_run_id: resolvedRunId,
       });
@@ -194,6 +205,7 @@ export default function PaywallScreen() {
           });
         }
 
+        await markPaywallComplete(user.id);
         trackEvent('onboarding_purchase_succeeded', {
           generation_run_id: resolvedRunId,
           package_id: refreshedEntitlement?.planType || selectedPackage?.id,
@@ -240,6 +252,7 @@ export default function PaywallScreen() {
       });
     }
 
+    await markPaywallComplete(user.id);
     trackEvent('onboarding_purchase_succeeded', {
       generation_run_id: resolvedRunId,
       package_id: selectedPackage.id,
@@ -273,6 +286,7 @@ export default function PaywallScreen() {
       return;
     }
 
+    if (user?.id) await markPaywallComplete(user.id);
     trackEvent('onboarding_restore_succeeded', {
       generation_run_id: resolvedRunId,
       source: 'onboarding_paywall',

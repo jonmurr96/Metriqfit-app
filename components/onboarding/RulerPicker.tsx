@@ -121,7 +121,7 @@ export function RulerPicker({
             ]}
           />
           {isMajor && (
-            <Text style={styles.tickLabel}>{val}</Text>
+            <Text style={styles.tickLabel} numberOfLines={1}>{val}</Text>
           )}
         </View>,
       );
@@ -239,5 +239,6 @@ const styles = StyleSheet.create({
     fontFamily: 'Sora_400Regular',
     marginTop: 4,
     textAlign: 'center',
+    width: 28,
   },
 });

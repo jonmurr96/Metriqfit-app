@@ -11,6 +11,8 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { MotiView } from 'moti';
 import { metriqfitTheme } from '../../lib/theme';
 import { useOnboarding } from '../../lib/onboarding';
+import { useAuth } from '../../lib/auth';
+import { supabase } from '../../lib/supabase';
 import { PremiumHeader, PremiumFooter } from '../../components/onboarding/premium';
 import { RulerPicker } from '../../components/onboarding/RulerPicker';
 
@@ -30,6 +32,7 @@ function kgToLb(kg: number): number { return Math.round(kg / 0.453592); }
 
 export default function WeightScreen() {
   const { data, updateData, setCurrentStep } = useOnboarding();
+  const { user } = useAuth();
 
   const storedLb = data.current_weight_lb ?? 175;
   const storedTargetLb = data.target_weight_lb ?? storedLb;
@@ -82,6 +85,12 @@ export default function WeightScreen() {
   const handleContinue = () => {
     if (isValid) {
       setCurrentStep(5);
+      if (user?.id) {
+        supabase
+          .from('onboarding_answers')
+          .upsert({ user_id: user.id, last_onboarding_step: 'goals' }, { onConflict: 'user_id' })
+          .then(() => {});
+      }
       router.push('/(onboarding)/goals');
     }
   };

@@ -7,8 +7,283 @@ import {
   DayType,
   ReplacementGroup,
   SlotArchetype,
-  ExperienceLevel
+  ExperienceLevel,
+  SetTechnique,
+  PlanTemplate,
+  PlanTemplateSlot,
+  PlanTemplateDay
 } from '../../types/v1_engine.ts';
+
+type AdaptiveExperienceKey = 'beginner' | 'intermediate' | 'advanced';
+
+const adaptiveExperience: Record<AdaptiveExperienceKey, {
+  label: string;
+  level: ExperienceLevel;
+  rpe: number;
+  primeSets: number;
+  secondarySets: number;
+  isolationSets: number;
+}> = {
+  beginner: {
+    label: 'Beginner',
+    level: ExperienceLevel.Beginner,
+    rpe: 7,
+    primeSets: 2,
+    secondarySets: 2,
+    isolationSets: 2,
+  },
+  intermediate: {
+    label: 'Intermediate',
+    level: ExperienceLevel.Intermediate,
+    rpe: 8,
+    primeSets: 3,
+    secondarySets: 3,
+    isolationSets: 2,
+  },
+  advanced: {
+    label: 'Advanced',
+    level: ExperienceLevel.Advanced,
+    rpe: 8,
+    primeSets: 4,
+    secondarySets: 3,
+    isolationSets: 3,
+  },
+};
+
+const slot = (
+  order_index: number,
+  architectural_group: ReplacementGroup,
+  archetype: SlotArchetype,
+  exp: AdaptiveExperienceKey,
+  reps_min: number,
+  reps_max: number,
+  rest_seconds: number,
+  options: Partial<PlanTemplateSlot> = {},
+): PlanTemplateSlot => {
+  const settings = adaptiveExperience[exp];
+  const sets = archetype === SlotArchetype.PrimeCompound
+    ? settings.primeSets
+    : archetype === SlotArchetype.SecondaryCompound
+      ? settings.secondarySets
+      : settings.isolationSets;
+
+  return {
+    order_index,
+    architectural_group,
+    is_required: options.is_required ?? archetype !== SlotArchetype.Isolation,
+    archetype,
+    progression_model: options.progression_model ?? ProgressionModel.Double_Progression,
+    sets: options.sets ?? sets,
+    reps_min,
+    reps_max,
+    target_rpe: options.target_rpe ?? settings.rpe,
+    rest_seconds,
+    set_technique: options.set_technique,
+    technique_group_id: options.technique_group_id,
+    technique_notes: options.technique_notes,
+  };
+};
+
+const cardioFinisher = (order_index: number, exp: AdaptiveExperienceKey): PlanTemplateSlot =>
+  slot(order_index, ReplacementGroup.Conditioning_Metabolic_Finisher, SlotArchetype.Finisher, exp, 1, 1, 45, {
+    is_required: false,
+    sets: exp === 'beginner' ? 1 : 2,
+    target_rpe: exp === 'advanced' ? 8 : 7,
+    progression_model: ProgressionModel.Density,
+    technique_notes: '+20-30 min cardio optional if recovery and schedule allow.',
+  });
+
+const fullBodyA = (exp: AdaptiveExperienceKey): PlanTemplateDay => ({
+  day_number: 1,
+  day_type: exp === 'beginner' ? DayType.FullBodyGenFit : DayType.FullBodyHypertrophy,
+  slots: [
+    slot(0, ReplacementGroup.Primary_Bilateral_Squat, SlotArchetype.PrimeCompound, exp, 8, 12, 120),
+    slot(1, ReplacementGroup.Primary_Horizontal_Press, SlotArchetype.SecondaryCompound, exp, 8, 12, 90),
+    slot(2, ReplacementGroup.Primary_Horizontal_Pull, SlotArchetype.SecondaryCompound, exp, 10, 12, 90),
+    slot(3, ReplacementGroup.Trunk_Anti_Extension, SlotArchetype.Isolation, exp, 20, 45, 45, { is_required: false }),
+  ],
+});
+
+const fullBodyB = (exp: AdaptiveExperienceKey): PlanTemplateDay => ({
+  day_number: 2,
+  day_type: exp === 'beginner' ? DayType.FullBodyGenFit : DayType.FullBodyHypertrophy,
+  slots: [
+    slot(0, ReplacementGroup.Primary_Bilateral_Hinge, SlotArchetype.PrimeCompound, exp, 8, 12, 120),
+    slot(1, ReplacementGroup.Primary_Horizontal_Press, SlotArchetype.SecondaryCompound, exp, 8, 12, 90),
+    slot(2, ReplacementGroup.Primary_Vertical_Pull, SlotArchetype.SecondaryCompound, exp, 10, 12, 90),
+    slot(3, ReplacementGroup.Unilateral_Squat_Lunge, SlotArchetype.SecondaryCompound, exp, 10, 12, 75, { is_required: false }),
+  ],
+});
+
+const fullBodyC = (exp: AdaptiveExperienceKey): PlanTemplateDay => ({
+  day_number: 3,
+  day_type: exp === 'beginner' ? DayType.FullBodyGenFit : DayType.FullBodyHypertrophy,
+  slots: [
+    slot(0, ReplacementGroup.Primary_Bilateral_Squat, SlotArchetype.PrimeCompound, exp, 10, 12, 120),
+    slot(1, ReplacementGroup.Primary_Bilateral_Hinge, SlotArchetype.SecondaryCompound, exp, 10, 12, 90),
+    slot(2, ReplacementGroup.Primary_Horizontal_Pull, SlotArchetype.SecondaryCompound, exp, 10, 12, 90),
+    cardioFinisher(3, exp),
+  ],
+});
+
+const upperA = (exp: AdaptiveExperienceKey, day_number = 1): PlanTemplateDay => ({
+  day_number,
+  day_type: exp === 'beginner' ? DayType.UpperHypertrophy : DayType.UpperStrength,
+  slots: [
+    slot(0, ReplacementGroup.Primary_Horizontal_Press, SlotArchetype.PrimeCompound, exp, 8, 12, 120),
+    slot(1, ReplacementGroup.Primary_Horizontal_Pull, SlotArchetype.PrimeCompound, exp, 8, 12, 120),
+    slot(2, ReplacementGroup.Primary_Vertical_Press, SlotArchetype.SecondaryCompound, exp, 10, 12, 90, {
+      is_required: exp !== 'beginner',
+    }),
+    slot(3, ReplacementGroup.Isolation_Lateral_Delt, SlotArchetype.Isolation, exp, 12, 20, 60, {
+      is_required: false,
+      set_technique: exp === 'advanced' ? SetTechnique.Drop_Set : SetTechnique.Superset,
+      technique_group_id: `upper_${day_number}_accessory`,
+    }),
+  ],
+});
+
+const upperB = (exp: AdaptiveExperienceKey, day_number = 3): PlanTemplateDay => ({
+  day_number,
+  day_type: DayType.UpperHypertrophy,
+  slots: [
+    slot(0, ReplacementGroup.Primary_Vertical_Pull, SlotArchetype.PrimeCompound, exp, 8, 12, 120),
+    slot(1, ReplacementGroup.Primary_Horizontal_Press, SlotArchetype.SecondaryCompound, exp, 10, 12, 90),
+    slot(2, ReplacementGroup.Isolation_Bicep_Flexion, SlotArchetype.Isolation, exp, 10, 15, 60, {
+      is_required: false,
+      set_technique: exp === 'advanced' ? SetTechnique.Rest_Pause : SetTechnique.Superset,
+      technique_group_id: `upper_${day_number}_arms`,
+    }),
+    slot(3, ReplacementGroup.Isolation_Tricep_Extension, SlotArchetype.Isolation, exp, 10, 15, 60, {
+      is_required: false,
+      set_technique: SetTechnique.Superset,
+      technique_group_id: `upper_${day_number}_arms`,
+    }),
+  ],
+});
+
+const lowerA = (exp: AdaptiveExperienceKey, day_number = 2): PlanTemplateDay => ({
+  day_number,
+  day_type: exp === 'beginner' ? DayType.LowerHypertrophy : DayType.LowerStrength,
+  slots: [
+    slot(0, ReplacementGroup.Primary_Bilateral_Squat, SlotArchetype.PrimeCompound, exp, 8, 12, 120),
+    slot(1, ReplacementGroup.Primary_Bilateral_Hinge, SlotArchetype.SecondaryCompound, exp, 10, 12, 90),
+    slot(2, ReplacementGroup.Isolation_Hamstring_Curl, SlotArchetype.Isolation, exp, 12, 15, 60, { is_required: false }),
+    slot(3, ReplacementGroup.Trunk_Anti_Extension, SlotArchetype.Isolation, exp, 20, 45, 45, { is_required: false }),
+  ],
+});
+
+const lowerB = (exp: AdaptiveExperienceKey, day_number = 4): PlanTemplateDay => ({
+  day_number,
+  day_type: DayType.LowerHypertrophy,
+  slots: [
+    slot(0, ReplacementGroup.Primary_Bilateral_Hinge, SlotArchetype.PrimeCompound, exp, 8, 12, 120),
+    slot(1, ReplacementGroup.Unilateral_Squat_Lunge, SlotArchetype.SecondaryCompound, exp, 10, 12, 90),
+    slot(2, ReplacementGroup.Isolation_Quad_Extension, SlotArchetype.Isolation, exp, 12, 15, 60, {
+      is_required: false,
+      set_technique: exp === 'advanced' ? SetTechnique.Drop_Set : undefined,
+    }),
+    slot(3, ReplacementGroup.Isolation_Calf_Raise, SlotArchetype.Isolation, exp, 12, 20, 60, { is_required: false }),
+  ],
+});
+
+const pushDay = (exp: AdaptiveExperienceKey, day_number: number): PlanTemplateDay => ({
+  day_number,
+  day_type: DayType.Push,
+  slots: [
+    slot(0, ReplacementGroup.Primary_Horizontal_Press, SlotArchetype.PrimeCompound, exp, 6, 12, 120, {
+      set_technique: exp === 'advanced' ? SetTechnique.Pyramid_Set : undefined,
+    }),
+    slot(1, ReplacementGroup.Primary_Vertical_Press, SlotArchetype.SecondaryCompound, exp, 8, 12, 90),
+    slot(2, ReplacementGroup.Isolation_Chest_Fly, SlotArchetype.Isolation, exp, 12, 15, 60, { is_required: false }),
+    slot(3, ReplacementGroup.Isolation_Lateral_Delt, SlotArchetype.Isolation, exp, 12, 20, 60, {
+      is_required: false,
+      set_technique: exp === 'advanced' ? SetTechnique.Drop_Set : SetTechnique.Superset,
+      technique_group_id: `push_${day_number}_delts`,
+    }),
+    slot(4, ReplacementGroup.Isolation_Tricep_Extension, SlotArchetype.Isolation, exp, 10, 15, 60, {
+      is_required: false,
+      set_technique: SetTechnique.Superset,
+      technique_group_id: `push_${day_number}_delts`,
+    }),
+  ],
+});
+
+const pullDay = (exp: AdaptiveExperienceKey, day_number: number): PlanTemplateDay => ({
+  day_number,
+  day_type: DayType.Pull,
+  slots: [
+    slot(0, ReplacementGroup.Primary_Horizontal_Pull, SlotArchetype.PrimeCompound, exp, 8, 12, 120),
+    slot(1, ReplacementGroup.Primary_Vertical_Pull, SlotArchetype.SecondaryCompound, exp, 8, 12, 90),
+    slot(2, ReplacementGroup.Isolation_Bicep_Flexion, SlotArchetype.Isolation, exp, 10, 15, 60, {
+      is_required: false,
+      set_technique: exp === 'advanced' ? SetTechnique.Rest_Pause : undefined,
+    }),
+    slot(3, ReplacementGroup.Trunk_Rotational_Anti_Rotation, SlotArchetype.Isolation, exp, 10, 15, 45, { is_required: false }),
+  ],
+});
+
+const legsDay = (exp: AdaptiveExperienceKey, day_number: number): PlanTemplateDay => ({
+  day_number,
+  day_type: DayType.Legs,
+  slots: [
+    slot(0, ReplacementGroup.Primary_Bilateral_Squat, SlotArchetype.PrimeCompound, exp, 8, 12, 120),
+    slot(1, ReplacementGroup.Primary_Bilateral_Hinge, SlotArchetype.SecondaryCompound, exp, 8, 12, 90),
+    slot(2, ReplacementGroup.Unilateral_Squat_Lunge, SlotArchetype.SecondaryCompound, exp, 10, 12, 90, { is_required: false }),
+    slot(3, ReplacementGroup.Isolation_Calf_Raise, SlotArchetype.Isolation, exp, 12, 20, 60, { is_required: false }),
+  ],
+});
+
+const accessoryCoreDay = (exp: AdaptiveExperienceKey, day_number: number): PlanTemplateDay => ({
+  day_number,
+  day_type: DayType.FullBodyGenFit,
+  slots: [
+    slot(0, ReplacementGroup.Unilateral_Squat_Lunge, SlotArchetype.SecondaryCompound, exp, 10, 12, 75),
+    slot(1, ReplacementGroup.Primary_Horizontal_Pull, SlotArchetype.SecondaryCompound, exp, 10, 12, 75),
+    slot(2, ReplacementGroup.Trunk_Anti_Extension, SlotArchetype.Isolation, exp, 20, 60, 45),
+    cardioFinisher(3, exp),
+  ],
+});
+
+const adaptiveDays = (exp: AdaptiveExperienceKey, days: number): PlanTemplateDay[] => {
+  if (exp === 'beginner') {
+    if (days === 2) return [fullBodyA(exp), { ...fullBodyB(exp), day_number: 2 }];
+    if (days === 3) return [fullBodyA(exp), fullBodyB(exp), fullBodyC(exp)];
+    if (days === 4) return [upperA(exp, 1), lowerA(exp, 2), { ...fullBodyA(exp), day_number: 3 }, accessoryCoreDay(exp, 4)];
+    if (days === 5) return [fullBodyA(exp), upperA(exp, 2), lowerA(exp, 3), { ...fullBodyB(exp), day_number: 4 }, accessoryCoreDay(exp, 5)];
+    return [upperA(exp, 1), lowerA(exp, 2), { ...fullBodyA(exp), day_number: 3 }, upperB(exp, 4), lowerB(exp, 5), accessoryCoreDay(exp, 6)];
+  }
+
+  if (days === 2) return [fullBodyA(exp), { ...fullBodyB(exp), day_number: 2 }];
+  if (days === 3) return [fullBodyA(exp), fullBodyB(exp), fullBodyC(exp)];
+  if (days === 4) return [upperA(exp, 1), lowerA(exp, 2), upperB(exp, 3), lowerB(exp, 4)];
+  if (days === 5) return [upperA(exp, 1), lowerA(exp, 2), pushDay(exp, 3), pullDay(exp, 4), legsDay(exp, 5)];
+  return [pushDay(exp, 1), pullDay(exp, 2), legsDay(exp, 3), pushDay(exp, 4), pullDay(exp, 5), legsDay(exp, 6)];
+};
+
+const createAdaptiveTemplate = (exp: AdaptiveExperienceKey, days: number): PlanTemplate => {
+  const settings = adaptiveExperience[exp];
+  const style = days <= 3
+    ? TrainingStyle.FullBody
+    : days === 6 && exp !== 'beginner'
+      ? TrainingStyle.PPL
+      : TrainingStyle.UpperLower;
+
+  return {
+    external_id: `tmp_adaptive_${exp}_${days}_day_v1`,
+    name: `${settings.label} Adaptive ${days}-Day`,
+    goal_bucket: GoalBucket.GenFitness,
+    training_style: style,
+    days_per_week: days,
+    lift_comfort: exp === 'advanced' ? LiftComfort.BarbellAdv : LiftComfort.MachineDB,
+    environment: SessionEnvironment.Commercial,
+    experience_level: settings.level,
+    days: adaptiveDays(exp, days).map((day, index) => ({ ...day, day_number: index + 1 })),
+  };
+};
+
+const adaptiveTemplates = (['beginner', 'intermediate', 'advanced'] as const)
+  .flatMap((exp) => [2, 3, 4, 5, 6].map((days) => createAdaptiveTemplate(exp, days)));
 
 export const coreTemplates = [
   // ─── BEGINNER: FULL BODY BARBELL (3-day) ────────────────────────────────────
@@ -1131,5 +1406,6 @@ export const coreTemplates = [
         ]
       }
     ]
-  }
+  },
+  ...adaptiveTemplates
 ];

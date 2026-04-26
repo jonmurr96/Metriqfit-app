@@ -380,16 +380,6 @@ export default function NutritionScreen() {
               </View>
             )}
             
-            {/* Debug: Show missing fields */}
-            {!isValid && (
-              <View style={[styles.errorBox, { backgroundColor: 'rgba(34,211,238,0.12)', borderColor: 'rgba(34,211,238,0.4)' }]}>
-                <Ionicons name="information-circle-outline" size={18} color={CYAN} />
-                <Text style={[styles.errorText, { color: CYAN }]}>
-                  Missing: {Object.entries(validationChecks).filter(([_, v]) => !v).map(([k]) => k).join(', ')}
-                </Text>
-              </View>
-            )}
-
             {/* Dietary preference */}
             <View style={styles.section}>
               <Text style={styles.sectionLabel}>Dietary Style</Text>

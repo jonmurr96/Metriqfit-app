@@ -1,21 +1,18 @@
 import { useRef, useState } from 'react';
-import { Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
+import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { Link, router } from 'expo-router';
+import { MotiView } from 'moti';
 
 import { useAuth } from '../../lib/auth';
 import { useTokens } from '../../lib/theme';
 import { AuthScreenShell } from '../../components/auth/AuthScreenShell';
-import { AuthTextField } from '../../components/auth/AuthTextField';
-import { AuthPasswordField } from '../../components/auth/AuthPasswordField';
-import { AuthPrimaryButton } from '../../components/auth/AuthPrimaryButton';
+import { FloatingLabelInput } from '../../components/auth/FloatingLabelInput';
+import { ShimmerButton } from '../../components/auth/ShimmerButton';
 import { AuthProviderButton } from '../../components/auth/AuthProviderButton';
 import { AuthFooterLinks } from '../../components/auth/AuthFooterLinks';
 
 const normalizeError = (message?: string): string => {
-  if (!message) {
-    return 'Something went wrong. Please try again.';
-  }
-
+  if (!message) return 'Something went wrong. Please try again.';
   const lowered = message.toLowerCase();
   if (lowered.includes('invalid login credentials')) {
     return 'Invalid email or password. Please check your credentials.';
@@ -38,7 +35,7 @@ export default function SignInScreen() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const [successMessage, setSuccessMessage] = useState('');
-  const passwordRef = useRef<TextInput>(null);
+  const passwordRef = useRef<any>(null);
 
   const handleEmailPasswordSignIn = async () => {
     if (!email || !password) {
@@ -57,7 +54,6 @@ export default function SignInScreen() {
         setError(normalizeError(signInError.message));
         return;
       }
-
       setSuccessMessage('Signed in successfully. Redirecting...');
       router.replace('/');
     } catch (err: any) {
@@ -99,6 +95,7 @@ export default function SignInScreen() {
         />
       }
     >
+      {/* OAuth Buttons */}
       <View style={{ gap: s.sm }}>
         <AuthProviderButton
           provider="google"
@@ -106,21 +103,20 @@ export default function SignInScreen() {
           disabled={loading || !oauthAvailability.google}
           helperText={!oauthAvailability.google ? 'Google sign in is disabled in this environment.' : undefined}
         />
-
-        <AuthProviderButton
-          provider="apple"
-          disabled
-          helperText="Apple sign in is coming soon."
-        />
+        <AuthProviderButton provider="apple" disabled />
       </View>
 
+      {/* Divider */}
       <View style={styles.dividerRow}>
         <View style={[styles.dividerLine, { backgroundColor: `${c.primary}${theme.auth.dividerOpacity}` }]} />
-        <Text style={[styles.dividerText, { color: c.textMuted, fontFamily: ty.body.family }]}>or continue with email</Text>
+        <Text style={[styles.dividerText, { color: c.textMuted, fontFamily: ty.body.family }]}>
+          or continue with email
+        </Text>
         <View style={[styles.dividerLine, { backgroundColor: `${c.primary}${theme.auth.dividerOpacity}` }]} />
       </View>
 
-      <AuthTextField
+      {/* Email */}
+      <FloatingLabelInput
         label="Email"
         placeholder="you@example.com"
         value={email}
@@ -128,7 +124,6 @@ export default function SignInScreen() {
         autoCapitalize="none"
         autoCorrect={false}
         keyboardType="email-address"
-        textContentType="oneTimeCode"
         autoComplete="email"
         returnKeyType="next"
         onSubmitEditing={() => passwordRef.current?.focus()}
@@ -137,40 +132,62 @@ export default function SignInScreen() {
         accessibilityHint="Enter the email linked to your account"
       />
 
-      <AuthPasswordField
-        ref={passwordRef}
-        label="Password"
-        placeholder="Enter your password"
-        value={password}
-        onChangeText={setPassword}
-        autoCapitalize="none"
-        autoCorrect={false}
-        textContentType="password"
-        autoComplete="password"
-        returnKeyType="go"
-        onSubmitEditing={handleEmailPasswordSignIn}
-        editable={!loading}
-        accessibilityLabel="Password"
-        accessibilityHint="Enter your account password"
-      />
-
-      <View style={styles.forgotRow}>
+      {/* Password with inline Forgot link */}
+      <View>
+        <FloatingLabelInput
+          ref={passwordRef}
+          label="Password"
+          placeholder="Enter your password"
+          value={password}
+          onChangeText={setPassword}
+          isPassword
+          autoCapitalize="none"
+          autoCorrect={false}
+          autoComplete="password"
+          returnKeyType="go"
+          onSubmitEditing={handleEmailPasswordSignIn}
+          editable={!loading}
+          accessibilityLabel="Password"
+          accessibilityHint="Enter your account password"
+        />
         <Link href={'/(auth)/forgot-password' as any} asChild>
-          <Pressable disabled={loading} accessibilityRole="link" accessibilityLabel="Forgot password">
-            <Text style={[styles.forgotText, { color: c.primary, fontFamily: ty.body.familySemibold }]}>Forgot password?</Text>
+          <Pressable
+            disabled={loading}
+            accessibilityRole="link"
+            accessibilityLabel="Forgot password"
+            style={styles.forgotWrap}
+          >
+            <Text style={[styles.forgotText, { color: c.primary, fontFamily: ty.body.familySemibold }]}>
+              Forgot password?
+            </Text>
           </Pressable>
         </Link>
       </View>
 
+      {/* Error / Success Messages */}
       {error ? (
-        <Text style={[styles.messageText, { color: c.danger, fontFamily: ty.body.family }]}>{error}</Text>
+        <MotiView
+          from={{ opacity: 0, translateX: -8 }}
+          animate={{ opacity: 1, translateX: 0 }}
+          transition={{ type: 'spring', damping: 14 }}
+          style={[styles.messageBox, { borderLeftColor: c.danger, backgroundColor: `${c.danger}12` }]}
+        >
+          <Text style={[styles.messageText, { color: c.danger, fontFamily: ty.body.family }]}>{error}</Text>
+        </MotiView>
       ) : null}
 
       {!error && successMessage ? (
-        <Text style={[styles.messageText, { color: c.success, fontFamily: ty.body.family }]}>{successMessage}</Text>
+        <MotiView
+          from={{ opacity: 0 }}
+          animate={{ opacity: 1 }}
+          style={[styles.messageBox, { borderLeftColor: c.success, backgroundColor: `${c.success}12` }]}
+        >
+          <Text style={[styles.messageText, { color: c.success, fontFamily: ty.body.family }]}>{successMessage}</Text>
+        </MotiView>
       ) : null}
 
-      <AuthPrimaryButton
+      {/* Primary CTA */}
+      <ShimmerButton
         label="Sign In"
         onPress={handleEmailPasswordSignIn}
         loading={loading}
@@ -184,26 +201,35 @@ const styles = StyleSheet.create({
   dividerRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 10,
+    gap: 12,
+    marginVertical: 4,
   },
   dividerLine: {
     flex: 1,
-    height: 1,
+    height: StyleSheet.hairlineWidth,
   },
   dividerText: {
-    fontSize: 12,
+    fontSize: 11,
     textAlign: 'center',
+    letterSpacing: 0.5,
+    textTransform: 'uppercase',
   },
-  forgotRow: {
-    alignItems: 'flex-end',
-    marginTop: -4,
+  forgotWrap: {
+    alignSelf: 'flex-end',
+    marginTop: 8,
+    paddingHorizontal: 4,
   },
   forgotText: {
-    fontSize: 12,
+    fontSize: 13,
+  },
+  messageBox: {
+    borderLeftWidth: 3,
+    borderRadius: 8,
+    paddingVertical: 10,
+    paddingHorizontal: 14,
   },
   messageText: {
     fontSize: 13,
     lineHeight: 18,
-    textAlign: 'center',
   },
 });

@@ -271,16 +271,13 @@ const DEFAULT_DERIVED_BLUEPRINT: WorkoutFocusTag[][] = [
 ];
 
 const EQUIPMENT_ALIAS_MAP: Record<string, string[]> = {
-  full_gym: ['barbell', 'dumbbell', 'machine', 'cable', 'bodyweight', 'band', 'smith_machine', 'bench', 'kettlebell', 'cardio_machine', 'freeweight_or_machine'],
+  full_gym: ['barbell', 'dumbbell', 'machine', 'cable', 'bodyweight', 'smith_machine', 'bench', 'kettlebell', 'cardio_machine', 'freeweight_or_machine'],
   none: ['bodyweight'],
   freeweight_or_machine: ['barbell', 'dumbbell', 'machine', 'smith_machine', 'freeweight_or_machine'],
   bodyweight: ['none', 'bodyweight'],
-  bands: ['band', 'resistance_band', 'bands'],
-  resistance_band: ['band', 'resistance_band', 'bands'],
   dumbbells_only: ['dumbbell', 'bodyweight', 'none'],
   dumbbells_plus_bench: ['dumbbell', 'bench', 'bodyweight', 'none'],
   bodyweight_only: ['bodyweight', 'none'],
-  bands_only: ['band', 'bands', 'resistance_band', 'bodyweight', 'none'],
 };
 
 export function normalizeWorkoutToken(value: string) {
@@ -857,7 +854,7 @@ export function inferExerciseMovementFamily(exercise: ProgramExercise): string |
     ['row', ['row', 'seal row', 't bar']],
     ['pulldown', ['pulldown', 'pull up', 'chin up']],
     ['shoulder_press', ['shoulder press', 'overhead press', 'arnold press', 'landmine press']],
-    ['rear_delt', ['rear delt', 'face pull', 'reverse fly', 'reverse flye', 'band pull apart', 'w raise', 'prone y raise']],
+    ['rear_delt', ['rear delt', 'face pull', 'reverse fly', 'reverse flye', 'w raise', 'prone y raise']],
     ['lateral_raise', ['lateral raise', 'front raise', 'upright row', 'y raise']],
     ['biceps_curl', ['curl', 'preacher', 'hammer curl', 'concentration curl']],
     ['triceps_extension', ['pushdown', 'skull crusher', 'skullcrusher', 'triceps extension', 'dip']],

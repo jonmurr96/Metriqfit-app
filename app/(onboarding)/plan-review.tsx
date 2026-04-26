@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   ActivityIndicator,
   Alert,
@@ -15,19 +15,16 @@ import { LinearGradient } from 'expo-linear-gradient';
 import { useTokens } from '../../lib/theme';
 import { TabBarIcon } from '../../components/navigation/TabBarIcon';
 import {
-  AcceptEditActions,
-  DailyTargetsList,
-  InfoButton,
-  MacroGrid,
-  NutritionMealPreview,
-  PlanSummaryCard,
-  ReviewProgressBar,
-  ReviewSectionCard,
+  DailySnapshotCard,
+  PlanRow,
+  StickyBottomBar,
   WorkoutWeekPreview,
+  NutritionMealPreview,
 } from '../../components/onboarding/review';
 import {
   useGenerationHistory,
   useActiveWorkoutPlan,
+  useWorkoutPlanByGenerationRun,
   useEditableNutritionPlanContext,
   useNutritionPlanDay,
   useWorkoutScheduleByPlanId,
@@ -103,7 +100,6 @@ function humanEquipment(value: string | undefined | null) {
     full_gym: 'full gym',
     dumbbells_only: 'dumbbells only',
     dumbbells_plus_bench: 'dumbbells + bench',
-    bands_only: 'bands only',
     bodyweight_only: 'bodyweight only',
   };
   return map[String(value || '')] || 'available equipment';
@@ -114,15 +110,18 @@ export default function PlanReviewScreen() {
   const insets = useSafeAreaInsets();
   const router = useRouter();
   const params = useLocalSearchParams<{ runId?: string; warnings?: string }>();
-
   const { data: profile } = useProfile();
   const { data: generationHistory } = useGenerationHistory();
   const { data: onboardingAnswers } = useOnboardingAnswers();
   const { data: targetData, isLoading: targetsLoading } = useUserTargets();
+  const routeRunId = typeof params.runId === 'string' ? params.runId : null;
+  const latestRunId = generationHistory?.[0]?.id || null;
+  const resolvedRunId = routeRunId || latestRunId;
   const activeWorkoutQuery = useActiveWorkoutPlan();
-  const previewWorkoutQuery = useWorkoutPlanPreview(null, { enabled: !activeWorkoutQuery.data });
-  const workoutPlan = activeWorkoutQuery.data || previewWorkoutQuery.data || null;
-  const workoutLoading = activeWorkoutQuery.isLoading || previewWorkoutQuery.isLoading;
+  const generatedWorkoutQuery = useWorkoutPlanByGenerationRun(resolvedRunId, { enabled: Boolean(resolvedRunId) });
+  const previewWorkoutQuery = useWorkoutPlanPreview(null, { enabled: !generatedWorkoutQuery.data && !activeWorkoutQuery.data });
+  const workoutPlan = generatedWorkoutQuery.data || activeWorkoutQuery.data || previewWorkoutQuery.data || null;
+  const workoutLoading = activeWorkoutQuery.isLoading || generatedWorkoutQuery.isLoading || previewWorkoutQuery.isLoading;
   const nutritionContextQuery = useEditableNutritionPlanContext();
   const nutritionPlan = nutritionContextQuery.data?.editablePlan || null;
   const nutritionPlanSource = nutritionContextQuery.data?.source || 'none';
@@ -138,16 +137,12 @@ export default function PlanReviewScreen() {
     [targetData?.calories, targetData?.carbs_g, targetData?.fat_g, targetData?.protein_g, targetData?.water_ml],
   );
 
-  const routeRunId = typeof params.runId === 'string' ? params.runId : null;
-  const latestRunId = generationHistory?.[0]?.id || null;
-  const resolvedRunId = routeRunId || latestRunId;
   const warnings = safeParseWarnings(params.warnings);
 
   const reviewStateQuery = useOnboardingReviewState(resolvedRunId);
   const setSectionAccepted = useSetReviewSectionAccepted();
   const [infoSheet, setInfoSheet] = useState<{ title: string; body: string } | null>(null);
-  const [workoutDetailsExpanded, setWorkoutDetailsExpanded] = useState(false);
-  const [nutritionDetailsExpanded, setNutritionDetailsExpanded] = useState(false);
+  const [expandedPlan, setExpandedPlan] = useState<'workout' | 'nutrition' | null>(null);
 
   const answerPayload = (onboardingAnswers?.answers || {}) as Record<string, any>;
 
@@ -173,16 +168,17 @@ export default function PlanReviewScreen() {
     return map;
   }, [workoutPlan?.days]);
 
+  const reviewState = reviewStateQuery.data;
+
   const acceptedCount = useMemo(() => {
-    const state = reviewStateQuery.data;
-    if (!state) return 0;
+    if (!reviewState) return 0;
     return [
-      state.macros_accepted,
-      state.daily_targets_accepted,
-      state.workout_plan_accepted,
-      state.nutrition_plan_accepted,
+      reviewState.macros_accepted,
+      reviewState.daily_targets_accepted,
+      reviewState.workout_plan_accepted,
+      reviewState.nutrition_plan_accepted,
     ].filter(Boolean).length;
-  }, [reviewStateQuery.data]);
+  }, [reviewState]);
 
   const allAccepted = acceptedCount === 4;
   const hasRequiredPlans = Boolean(workoutPlan && nutritionPlan);
@@ -293,6 +289,10 @@ export default function PlanReviewScreen() {
     });
   };
 
+  const togglePlanExpand = (plan: 'workout' | 'nutrition') => {
+    setExpandedPlan((prev) => (prev === plan ? null : plan));
+  };
+
   const isLoading =
     targetsLoading
     || workoutLoading
@@ -303,7 +303,7 @@ export default function PlanReviewScreen() {
 
   if (isLoading) {
     return (
-      <View style={[styles.loadingScreen, { backgroundColor: c.bg }]}> 
+      <View style={[styles.loadingScreen, { backgroundColor: c.bg }]}>
         <ActivityIndicator size="large" color={c.primary} />
       </View>
     );
@@ -311,194 +311,175 @@ export default function PlanReviewScreen() {
 
   if (!resolvedRunId) {
     return (
-      <View style={[styles.loadingScreen, { backgroundColor: c.bg, padding: s.lg }]}> 
+      <View style={[styles.loadingScreen, { backgroundColor: c.bg, padding: s.lg }]}>
         <Text style={{ color: c.text, fontFamily: ty.heading.familySemibold, fontSize: ty.sizes.lg, textAlign: 'center' }}>
           We could not find your generated plan.
         </Text>
-        <Pressable style={[styles.primaryButton, { backgroundColor: c.primary, borderRadius: r.md, marginTop: s.lg }]} onPress={() => router.replace('/(onboarding)/plan-generation')}>
+        <Pressable
+          style={[styles.primaryButton, { backgroundColor: c.primary, borderRadius: r.md, marginTop: s.lg }]}
+          onPress={() => router.replace('/(onboarding)/plan-generation')}
+        >
           <Text style={{ color: c.bg, fontFamily: ty.heading.familySemibold }}>Generate again</Text>
         </Pressable>
       </View>
     );
   }
 
-  const reviewState = reviewStateQuery.data;
-
   const displayName = `${profile?.first_name || answerPayload.first_name || 'MetriqFit'} ${
     profile?.last_name || answerPayload.last_name || ''
   }`.trim();
 
+  const stepsValue = typeof answerPayload.avg_steps === 'number' ? answerPayload.avg_steps.toLocaleString() : 'Not set';
+  const tdeeValue = typeof answerPayload.maintenance_tdee === 'number' ? answerPayload.maintenance_tdee.toLocaleString() : null;
+
   return (
-    <View style={[styles.container, { backgroundColor: c.bg }]}> 
+    <View style={[styles.container, { backgroundColor: c.bg }]}>
       <LinearGradient colors={[c.bg, c.surface]} style={StyleSheet.absoluteFill} />
 
       <ScrollView
         contentContainerStyle={{
           paddingTop: insets.top + s.md,
           paddingHorizontal: s.lg,
-          paddingBottom: insets.bottom + s.xxl,
+          paddingBottom: insets.bottom + 100,
         }}
         showsVerticalScrollIndicator={false}
       >
+        {/* Header */}
         <View style={styles.headerRow}>
           <View>
-            <Text style={{ color: c.text, fontFamily: ty.heading.familySemibold, fontSize: ty.sizes.xl }}>{displayName}</Text>
-            <Text style={{ color: c.primary, fontFamily: ty.body.familySemibold, fontSize: ty.sizes.xs, letterSpacing: 1.2 }}>
+            <Text style={{ color: c.text, fontFamily: ty.heading.familySemibold, fontSize: ty.sizes.xl }}>
+              {displayName}
+            </Text>
+            <Text
+              style={{
+                color: c.primary,
+                fontFamily: ty.body.familySemibold,
+                fontSize: ty.sizes.xs,
+                letterSpacing: 1.2,
+              }}
+            >
               PLAN REVIEW
             </Text>
           </View>
-          <Pressable style={[styles.closeButton, { backgroundColor: c.surface2, borderColor: c.border, borderRadius: r.md }]} onPress={handleClose}>
+          <Pressable
+            style={[styles.closeButton, { backgroundColor: c.surface2, borderColor: c.border, borderRadius: r.md }]}
+            onPress={handleClose}
+          >
             <TabBarIcon name="close" color={c.text} size={20} />
           </Pressable>
         </View>
 
-        <ReviewProgressBar acceptedCount={acceptedCount} total={4} />
+        {/* Daily Snapshot — merged Macros + Daily Targets */}
+        <DailySnapshotCard
+          protein={targets.protein_g}
+          carbs={targets.carbs_g}
+          fat={targets.fat_g}
+          calories={targets.calories}
+          waterLiters={`${(targets.water_ml / 1000).toFixed(1)}L`}
+          steps={stepsValue}
+          accepted={Boolean(reviewState?.macros_accepted && reviewState?.daily_targets_accepted)}
+          onAccept={() => {
+            // Accept both macros and daily_targets together
+            handleAcceptToggle('macros', !reviewState?.macros_accepted);
+            handleAcceptToggle('daily_targets', !reviewState?.daily_targets_accepted);
+          }}
+          onEdit={() => {
+            Alert.alert('Edit', 'What would you like to edit?', [
+              { text: 'Macros', onPress: () => goToEdit('edit-macros') },
+              { text: 'Daily Targets', onPress: () => goToEdit('edit-daily-targets') },
+              { text: 'Cancel', style: 'cancel' },
+            ]);
+          }}
 
-        {warnings.length > 0 ? (
-          <View style={[styles.warningCard, { backgroundColor: c.surface, borderColor: c.warning, borderRadius: r.md }]}> 
-            <Text style={{ color: c.warning, fontFamily: ty.body.familySemibold, marginBottom: 6 }}>Generation notes</Text>
-            {warnings.slice(0, 3).map((warning, idx) => (
-              <Text key={`${warning}-${idx}`} style={{ color: c.textMuted, fontFamily: ty.body.family, fontSize: 13, lineHeight: 18 }}>
-                • {warning}
-              </Text>
-            ))}
-          </View>
-        ) : null}
+        />
 
-        <ReviewSectionCard title="Macros">
-          <MacroGrid
-            protein={targets.protein_g}
-            carbs={targets.carbs_g}
-            fat={targets.fat_g}
-            calories={targets.calories}
-          />
-          <AcceptEditActions
-            accepted={Boolean(reviewState?.macros_accepted)}
-            onAccept={() => handleAcceptToggle('macros', !reviewState?.macros_accepted)}
-            onEdit={() => goToEdit('edit-macros')}
-          />
-        </ReviewSectionCard>
-
-        <ReviewSectionCard title="Daily Targets">
-          <DailyTargetsList
-            water_ml={targets.water_ml}
-            steps={typeof answerPayload.avg_steps === 'number' ? answerPayload.avg_steps : null}
-            tdee={typeof answerPayload.maintenance_tdee === 'number' ? answerPayload.maintenance_tdee : null}
-          />
-          <AcceptEditActions
-            accepted={Boolean(reviewState?.daily_targets_accepted)}
-            onAccept={() => handleAcceptToggle('daily_targets', !reviewState?.daily_targets_accepted)}
-            onEdit={() => goToEdit('edit-daily-targets')}
-          />
-        </ReviewSectionCard>
-
-        <ReviewSectionCard
-          title="Workout Plan"
-          headerAccessory={<InfoButton onPress={showWorkoutPlanInfo} />}
-          subtitle="Overview first. Expand to view day-by-day exercises and rest days."
+        {/* Plans Section */}
+        <Text
+          style={[
+            styles.sectionLabel,
+            { color: c.textMuted, fontFamily: ty.body.familySemibold },
+          ]}
         >
-          <PlanSummaryCard
-            name={workoutPlan?.name || 'Generated workout plan'}
-            description={workoutPlan?.description}
+          YOUR PLANS
+        </Text>
+
+        <View style={styles.plansGap}>
+          {/* Workout Plan Row */}
+          <PlanRow
+            icon="barbell-outline"
+            iconColor={c.primary}
+            title="Workout Plan"
             metadata={`${workoutPlan?.days_per_week || answerPayload.training_days_per_week || '-'} days/week`}
-          />
-          <Pressable
-            style={[styles.expandRow, { borderColor: c.border, backgroundColor: c.surface2, borderRadius: r.md }]}
-            onPress={() => setWorkoutDetailsExpanded((prev) => !prev)}
+            subtitle={workoutPlan?.name || 'Generated workout plan'}
+            accepted={Boolean(reviewState?.workout_plan_accepted)}
+            onAccept={() => handleAcceptToggle('workout_plan', !reviewState?.workout_plan_accepted)}
+            onEdit={() => goToEdit('edit-workout-plan')}
+            expanded={expandedPlan === 'workout'}
+            onToggleExpand={() => togglePlanExpand('workout')}
           >
-            <Text style={{ color: c.text, fontFamily: ty.body.familySemibold }}>
-              {workoutDetailsExpanded ? 'Hide full workout details' : 'Show full workout details'}
-            </Text>
-            <TabBarIcon
-              name={workoutDetailsExpanded ? 'chevron-up' : 'chevron-down'}
-              color={c.textMuted}
-              size={16}
-            />
-          </Pressable>
-          {workoutDetailsExpanded ? (
             <WorkoutWeekPreview
               schedule={weekSchedule || []}
               exercisesByPlanDayId={exercisesByPlanDayId}
             />
-          ) : null}
-          <AcceptEditActions
-            accepted={Boolean(reviewState?.workout_plan_accepted)}
-            onAccept={() => handleAcceptToggle('workout_plan', !reviewState?.workout_plan_accepted)}
-            onEdit={() => goToEdit('edit-workout-plan')}
-          />
-        </ReviewSectionCard>
+          </PlanRow>
 
-        <ReviewSectionCard
-          title="Nutrition Plan"
-          headerAccessory={<InfoButton onPress={showNutritionPlanInfo} />}
-          subtitle="Overview first. Expand to inspect meal ingredients and calories."
-        >
-          <PlanSummaryCard
-            name={nutritionPlan?.name || 'Generated nutrition plan'}
-            description={nutritionPlan?.description}
-            metadata={[
-              `${String(answerPayload.meals_per_day || '3').replace('_', ' ')} meals/day`,
-              nutritionPlanSource === 'preview' ? 'Preview context' : 'Live context',
-            ].join(' • ')}
-          />
-          <Pressable
-            style={[styles.expandRow, { borderColor: c.border, backgroundColor: c.surface2, borderRadius: r.md }]}
-            onPress={() => setNutritionDetailsExpanded((prev) => !prev)}
-          >
-            <Text style={{ color: c.text, fontFamily: ty.body.familySemibold }}>
-              {nutritionDetailsExpanded ? 'Hide full nutrition details' : 'Show full nutrition details'}
-            </Text>
-            <TabBarIcon
-              name={nutritionDetailsExpanded ? 'chevron-up' : 'chevron-down'}
-              color={c.textMuted}
-              size={16}
-            />
-          </Pressable>
-          {nutritionDetailsExpanded ? <NutritionMealPreview dayDetails={nutritionToday || null} /> : null}
-          <AcceptEditActions
+          {/* Nutrition Plan Row */}
+          <PlanRow
+            icon="nutrition-outline"
+            iconColor={c.macros.carbs}
+            title="Nutrition Plan"
+            metadata={`${String(answerPayload.meals_per_day || '3').replace('_', ' ')} meals/day`}
+            subtitle={
+              nutritionPlan
+                ? `${Math.round(targets.calories)} kcal · ${nutritionPlanSource === 'preview' ? 'Preview' : 'Live'}`
+                : 'Generated nutrition plan'
+            }
             accepted={Boolean(reviewState?.nutrition_plan_accepted)}
             onAccept={() => handleAcceptToggle('nutrition_plan', !reviewState?.nutrition_plan_accepted)}
             onEdit={() => goToEdit('edit-nutrition-plan')}
-          />
-        </ReviewSectionCard>
+            expanded={expandedPlan === 'nutrition'}
+            onToggleExpand={() => togglePlanExpand('nutrition')}
+          >
+            <NutritionMealPreview dayDetails={nutritionToday || null} />
+          </PlanRow>
+        </View>
 
-        <Pressable
-          style={[
-            styles.primaryButton,
-            {
-              backgroundColor: canContinue ? c.primary : c.surface2,
-              borderRadius: r.md,
-              ...shadow.glow,
-            },
-          ]}
-          onPress={handleContinue}
-          disabled={!canContinue}
-        >
-          <Text style={{ color: canContinue ? c.bg : c.textMuted, fontFamily: ty.heading.familySemibold, fontSize: ty.sizes.md }}>
-            Continue
+        {/* Redo onboarding — subtle text link */}
+        <Pressable style={styles.redoLink} onPress={handleRedoOnboarding}>
+          <Text style={{ color: c.textSubtle, fontFamily: ty.body.family, fontSize: 12 }}>
+            Want to start over? Redo onboarding
           </Text>
-        </Pressable>
-
-        {!hasRequiredPlans ? (
-          <Text style={{ color: c.warning, fontFamily: ty.body.family, marginTop: 8, textAlign: 'center' }}>
-            Plans must finish generating before you can continue.
-          </Text>
-        ) : null}
-
-        <Pressable style={[styles.secondaryButton, { borderColor: c.border, borderRadius: r.md }]} onPress={handleRedoOnboarding}>
-          <Text style={{ color: c.textMuted, fontFamily: ty.body.familySemibold }}>Redo onboarding</Text>
         </Pressable>
       </ScrollView>
 
+      {/* Sticky Bottom Bar */}
+      <StickyBottomBar
+        canContinue={canContinue}
+        onContinue={handleContinue}
+        acceptedCount={acceptedCount}
+        total={4}
+      />
+
+      {/* Info Sheet Overlay */}
       {infoSheet ? (
         <View style={styles.infoOverlay}>
           <Pressable style={StyleSheet.absoluteFill} onPress={() => setInfoSheet(null)} />
-          <View style={[styles.infoCard, { backgroundColor: c.surface, borderColor: c.border, borderRadius: r.lg }]}> 
+          <View
+            style={[
+              styles.infoCard,
+              { backgroundColor: c.surface, borderColor: c.border, borderRadius: r.lg },
+            ]}
+          >
             <View style={styles.infoHeader}>
-              <Text style={{ color: c.text, fontFamily: ty.heading.familySemibold, fontSize: ty.sizes.md }}>
+              <Text
+                style={{ color: c.text, fontFamily: ty.heading.familySemibold, fontSize: ty.sizes.md }}
+              >
                 {infoSheet.title}
               </Text>
-              <Pressable onPress={() => setInfoSheet(null)} style={[styles.infoClose, { borderColor: c.border, borderRadius: r.md }]}>
+              <Pressable
+                onPress={() => setInfoSheet(null)}
+                style={[styles.infoClose, { borderColor: c.border, borderRadius: r.md }]}
+              >
                 <TabBarIcon name="close" color={c.textMuted} size={16} />
               </Pressable>
             </View>
@@ -525,7 +506,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    marginBottom: 18,
+    marginBottom: 14,
   },
   closeButton: {
     width: 42,
@@ -534,33 +515,23 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
-  warningCard: {
-    borderWidth: 1,
-    padding: 12,
-    marginTop: 12,
-    marginBottom: 16,
+  sectionLabel: {
+    fontSize: 12,
+    letterSpacing: 1,
+    textTransform: 'uppercase',
+    marginTop: 20,
+    marginBottom: 10,
   },
-  expandRow: {
-    borderWidth: 1,
-    marginTop: 8,
-    marginBottom: 8,
-    minHeight: 42,
-    paddingHorizontal: 12,
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
+  plansGap: {
     gap: 10,
+  },
+  redoLink: {
+    alignItems: 'center',
+    marginTop: 20,
+    marginBottom: 8,
   },
   primaryButton: {
     height: 52,
-    marginTop: 10,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  secondaryButton: {
-    marginTop: 10,
-    height: 48,
-    borderWidth: 1,
     alignItems: 'center',
     justifyContent: 'center',
   },
@@ -568,6 +539,7 @@ const styles = StyleSheet.create({
     ...StyleSheet.absoluteFillObject,
     justifyContent: 'flex-end',
     padding: 16,
+    backgroundColor: 'rgba(0,0,0,0.4)',
   },
   infoCard: {
     borderWidth: 1,

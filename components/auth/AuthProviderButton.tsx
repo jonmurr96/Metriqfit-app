@@ -26,22 +26,40 @@ export function AuthProviderButton({ provider, onPress, disabled = false, helper
           styles.button,
           {
             borderRadius: r.md,
-            borderColor: disabled ? `${c.border}` : `${c.primary}66`,
-            backgroundColor: pressed && !disabled ? `${c.primary}1F` : `${c.surface2}B5`,
-            opacity: disabled ? 0.7 : 1,
+            backgroundColor: pressed && !disabled
+              ? 'rgba(255, 255, 255, 0.09)'
+              : 'rgba(255, 255, 255, 0.04)',
+            borderColor: disabled
+              ? 'rgba(255, 255, 255, 0.06)'
+              : 'rgba(255, 255, 255, 0.12)',
+            opacity: disabled ? 0.4 : 1,
           },
         ]}
         accessibilityRole="button"
         accessibilityLabel={isGoogle ? 'Continue with Google' : 'Continue with Apple'}
         accessibilityHint={disabled ? 'This option is currently unavailable' : 'Signs in using your provider account'}
       >
-        <Ionicons name={isGoogle ? 'logo-google' : 'logo-apple'} size={18} color={c.text} />
-        <Text style={[styles.text, { color: c.text, fontFamily: ty.body.familySemibold }]}>
+        <Ionicons
+          name={isGoogle ? 'logo-google' : 'logo-apple'}
+          size={18}
+          color={disabled ? 'rgba(255,255,255,0.3)' : c.text}
+        />
+        <Text
+          style={[
+            styles.text,
+            {
+              color: disabled ? 'rgba(255,255,255,0.3)' : c.text,
+              fontFamily: ty.body.familySemibold,
+            },
+          ]}
+        >
           {isGoogle ? 'Continue with Google' : 'Continue with Apple'}
         </Text>
       </Pressable>
       {helperText ? (
-        <Text style={[styles.helper, { color: c.textMuted, fontFamily: ty.body.family }]}>{helperText}</Text>
+        <Text style={[styles.helper, { color: c.textMuted, fontFamily: ty.body.family }]}>
+          {helperText}
+        </Text>
       ) : null}
     </View>
   );
@@ -49,19 +67,21 @@ export function AuthProviderButton({ provider, onPress, disabled = false, helper
 
 const styles = StyleSheet.create({
   button: {
-    height: 50,
+    height: 52,
     borderWidth: 1,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    gap: 8,
-    paddingHorizontal: 14,
+    gap: 10,
+    paddingHorizontal: 16,
   },
   text: {
     fontSize: 14,
+    letterSpacing: 0.1,
   },
   helper: {
     fontSize: 12,
     lineHeight: 17,
+    textAlign: 'center',
   },
 });

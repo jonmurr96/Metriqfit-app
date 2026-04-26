@@ -13,6 +13,8 @@ import { MotiView } from 'moti';
 import { Ionicons } from '@expo/vector-icons';
 import { metriqfitTheme } from '../../lib/theme';
 import { useOnboarding, EquipmentAccess, MinutesPerWorkout, Injury, Weekday } from '../../lib/onboarding';
+import { useAuth } from '../../lib/auth';
+import { supabase } from '../../lib/supabase';
 import { PremiumHeader, PremiumFooter } from '../../components/onboarding/premium';
 
 const { spacing: s } = metriqfitTheme;
@@ -61,18 +63,21 @@ type EquipmentConfig = {
 const EQUIPMENT: EquipmentConfig[] = [
   { value: 'full_gym',           label: 'Full Gym',         icon: 'barbell-outline',         color: PURPLE },
   { value: 'dumbbells_only',     label: 'Dumbbells',        icon: 'fitness-outline',         color: CYAN },
-  { value: 'bands_only',         label: 'Resistance Bands', icon: 'infinite-outline',        color: '#22C55E' },
   { value: 'bodyweight_only',    label: 'Bodyweight Only',  icon: 'body-outline',            color: ORANGE },
 ];
 
 export default function TrainingScreen() {
   const { data, updateData, setCurrentStep } = useOnboarding();
+  const { user } = useAuth();
 
   // Backward-compat migrations
   React.useEffect(() => {
     // Merge old dumbbells options into single value
     if (data.equipment_access === 'dumbbells_plus_bench' || data.equipment_access === 'other') {
       updateData({ equipment_access: 'dumbbells_only' });
+    }
+    if ((data.equipment_access as string) === 'bands_only') {
+      updateData({ equipment_access: 'bodyweight_only' });
     }
     // Complete combined injury sets if user has partial legacy selections
     const hasKnees = data.injuries.includes('knees');
@@ -121,7 +126,7 @@ export default function TrainingScreen() {
       return;
     }
     const hasAll = mapsTo.every((i) => data.injuries.includes(i));
-    let next = data.injuries.filter((i) => i !== 'none');
+    let next: Injury[] = data.injuries.filter((i) => i !== 'none');
     if (hasAll) {
       next = next.filter((i) => !mapsTo.includes(i));
     } else {
@@ -141,6 +146,12 @@ export default function TrainingScreen() {
         preferred_days_off: derivedDaysOff,
       });
       setCurrentStep(7);
+      if (user?.id) {
+        supabase
+          .from('onboarding_answers')
+          .upsert({ user_id: user.id, last_onboarding_step: 'nutrition' }, { onConflict: 'user_id' })
+          .then(() => {});
+      }
       router.push('/(onboarding)/nutrition');
     }
   };

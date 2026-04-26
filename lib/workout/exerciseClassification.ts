@@ -19,7 +19,7 @@ export type PatternSlot =
   | 'vertical_pull'    // Lat pulldown, pull-up, chin-up, neutral-grip pulldown
   | 'chest_fly'        // Cable flye, DB flye, pec deck, cable crossover
   | 'shoulder_raise'   // Lateral raise, front raise, upright row, cable raise
-  | 'rear_delt'        // Face pull, rear delt flye, band pull-apart, reverse pec deck
+  | 'rear_delt'        // Face pull, rear delt flye, reverse pec deck
   | 'bicep_curl'       // All curl variations
   | 'tricep_ext'       // Pushdown, skull crusher, overhead extension, dip (isolation)
   | 'core'             // Plank, crunch, leg raise, ab wheel, Pallof press, dead bug
@@ -106,7 +106,7 @@ const NAME_SLOT_RULES: Array<{ patterns: string[]; slot: PatternSlot }> = [
   // Upper pull
   { patterns: ['barbell row', 'bent over row', 'pendlay row', 'dumbbell row', 'db row', 'one arm row', 't bar row', 'seal row', 'cable row', 'seated row', 'machine row', 'chest supported row', 'meadows row', 'kroc row'], slot: 'horizontal_pull' },
   { patterns: ['lat pulldown', 'pull up', 'pullup', 'pull-up', 'chin up', 'chinup', 'chin-up', 'pulldown', 'assisted pull'], slot: 'vertical_pull' },
-  { patterns: ['face pull', 'rear delt', 'reverse flye', 'reverse fly', 'band pull apart', 'prone y raise', 'w raise'], slot: 'rear_delt' },
+  { patterns: ['face pull', 'rear delt', 'reverse flye', 'reverse fly', 'prone y raise', 'w raise'], slot: 'rear_delt' },
 
   // Chest accessories after rear-delt matching so "Rear Delt Fly" does not get
   // misclassified as a chest fly.
@@ -189,7 +189,6 @@ export function inferPatternSlot(exercise: ProgramExercise): PatternSlot {
         name.includes('rear delt') ||
         name.includes('reverse fly') ||
         name.includes('reverse flye') ||
-        name.includes('band pull') ||
         name.includes('prone y') ||
         name.includes('w raise')
       ) {

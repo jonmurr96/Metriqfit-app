@@ -1,26 +1,20 @@
 import { useMemo, useRef, useState } from 'react';
-import { Alert, Linking, Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
+import { Alert, Linking, Pressable, StyleSheet, Text, View } from 'react-native';
 import { router } from 'expo-router';
+import { MotiView } from 'moti';
 
 import { useAuth } from '../../lib/auth';
 import { useTokens } from '../../lib/theme';
 import { AuthScreenShell } from '../../components/auth/AuthScreenShell';
-import { AuthTextField } from '../../components/auth/AuthTextField';
-import { AuthPasswordField } from '../../components/auth/AuthPasswordField';
-import { AuthPrimaryButton } from '../../components/auth/AuthPrimaryButton';
+import { FloatingLabelInput } from '../../components/auth/FloatingLabelInput';
+import { ShimmerButton } from '../../components/auth/ShimmerButton';
 import { AuthProviderButton } from '../../components/auth/AuthProviderButton';
 import { AuthFooterLinks } from '../../components/auth/AuthFooterLinks';
 
 const normalizeError = (message?: string): string => {
-  if (!message) {
-    return 'Something went wrong. Please try again.';
-  }
-
+  if (!message) return 'Something went wrong. Please try again.';
   const lowered = message.toLowerCase();
-  if (lowered.includes('already registered')) {
-    return 'An account with this email already exists. Please sign in instead.';
-  }
-  if (lowered.includes('user already exists')) {
+  if (lowered.includes('already registered') || lowered.includes('user already exists')) {
     return 'An account with this email already exists. Please sign in instead.';
   }
   if (lowered.includes('password')) {
@@ -55,16 +49,12 @@ export default function SignUpScreen() {
   const [error, setError] = useState('');
   const [successMessage, setSuccessMessage] = useState('');
 
-  const passwordRef = useRef<TextInput>(null);
-  const confirmRef = useRef<TextInput>(null);
+  const passwordRef = useRef<any>(null);
+  const confirmRef = useRef<any>(null);
 
   const passwordHint = useMemo(() => {
-    if (!password) {
-      return 'Use at least 6 characters.';
-    }
-    if (password.length < 6) {
-      return 'Password is too short.';
-    }
+    if (!password) return 'Use at least 6 characters.';
+    if (password.length < 6) return 'Password is too short.';
     return 'Looks good.';
   }, [password]);
 
@@ -76,13 +66,11 @@ export default function SignUpScreen() {
       setSuccessMessage('');
       return;
     }
-
     if (password !== confirmPassword) {
       setError('Passwords do not match.');
       setSuccessMessage('');
       return;
     }
-
     if (password.length < 6) {
       setError('Password must be at least 6 characters.');
       setSuccessMessage('');
@@ -99,7 +87,6 @@ export default function SignUpScreen() {
         setError(normalizeError(signUpError.message));
         return;
       }
-
       if (data?.user) {
         setSuccessMessage('Account created. Redirecting to onboarding...');
         router.replace('/(onboarding)/identity');
@@ -132,6 +119,7 @@ export default function SignUpScreen() {
   return (
     <AuthScreenShell
       title="Create your account"
+      titleMode="brandAnimated"
       subtitle="Build your personalized training and nutrition system."
       footer={
         <AuthFooterLinks
@@ -142,6 +130,7 @@ export default function SignUpScreen() {
         />
       }
     >
+      {/* OAuth Buttons */}
       <View style={{ gap: s.sm }}>
         <AuthProviderButton
           provider="google"
@@ -149,21 +138,20 @@ export default function SignUpScreen() {
           disabled={loading || !oauthAvailability.google}
           helperText={!oauthAvailability.google ? 'Google sign up is disabled in this environment.' : undefined}
         />
-
-        <AuthProviderButton
-          provider="apple"
-          disabled
-          helperText="Apple sign up is coming soon."
-        />
+        <AuthProviderButton provider="apple" disabled />
       </View>
 
+      {/* Divider */}
       <View style={styles.dividerRow}>
         <View style={[styles.dividerLine, { backgroundColor: `${c.primary}${theme.auth.dividerOpacity}` }]} />
-        <Text style={[styles.dividerText, { color: c.textMuted, fontFamily: ty.body.family }]}>or continue with email</Text>
+        <Text style={[styles.dividerText, { color: c.textMuted, fontFamily: ty.body.family }]}>
+          or continue with email
+        </Text>
         <View style={[styles.dividerLine, { backgroundColor: `${c.primary}${theme.auth.dividerOpacity}` }]} />
       </View>
 
-      <AuthTextField
+      {/* Email */}
+      <FloatingLabelInput
         label="Email"
         placeholder="you@example.com"
         value={email}
@@ -171,7 +159,6 @@ export default function SignUpScreen() {
         autoCapitalize="none"
         autoCorrect={false}
         keyboardType="email-address"
-        textContentType="oneTimeCode"
         autoComplete="email"
         returnKeyType="next"
         onSubmitEditing={() => passwordRef.current?.focus()}
@@ -180,17 +167,19 @@ export default function SignUpScreen() {
         accessibilityHint="Enter the email for your new account"
       />
 
-      <AuthPasswordField
+      {/* Password */}
+      <FloatingLabelInput
         ref={passwordRef}
         label="Password"
         placeholder="Create a strong password"
         value={password}
         onChangeText={setPassword}
+        isPassword
         hint={passwordHint}
         autoCapitalize="none"
         autoCorrect={false}
-        textContentType="oneTimeCode"
         autoComplete="off"
+        textContentType="nickname"
         returnKeyType="next"
         onSubmitEditing={() => confirmRef.current?.focus()}
         editable={!loading}
@@ -198,17 +187,19 @@ export default function SignUpScreen() {
         accessibilityHint="Create a password with at least six characters"
       />
 
-      <AuthPasswordField
+      {/* Confirm Password */}
+      <FloatingLabelInput
         ref={confirmRef}
         label="Confirm password"
         placeholder="Re-enter your password"
         value={confirmPassword}
         onChangeText={setConfirmPassword}
+        isPassword
         error={confirmError}
         autoCapitalize="none"
         autoCorrect={false}
-        textContentType="oneTimeCode"
         autoComplete="off"
+        textContentType="nickname"
         returnKeyType="done"
         onSubmitEditing={handleSignUp}
         editable={!loading}
@@ -216,23 +207,41 @@ export default function SignUpScreen() {
         accessibilityHint="Re-enter your password to confirm"
       />
 
+      {/* Error / Success Messages */}
       {error ? (
-        <Text style={[styles.messageText, { color: c.danger, fontFamily: ty.body.family }]}>{error}</Text>
+        <MotiView
+          from={{ opacity: 0, translateX: -8 }}
+          animate={{ opacity: 1, translateX: 0 }}
+          transition={{ type: 'spring', damping: 14 }}
+          style={[styles.messageBox, { borderLeftColor: c.danger, backgroundColor: `${c.danger}12` }]}
+        >
+          <Text style={[styles.messageText, { color: c.danger, fontFamily: ty.body.family }]}>{error}</Text>
+        </MotiView>
       ) : null}
 
       {!error && successMessage ? (
-        <Text style={[styles.messageText, { color: c.success, fontFamily: ty.body.family }]}>{successMessage}</Text>
+        <MotiView
+          from={{ opacity: 0 }}
+          animate={{ opacity: 1 }}
+          style={[styles.messageBox, { borderLeftColor: c.success, backgroundColor: `${c.success}12` }]}
+        >
+          <Text style={[styles.messageText, { color: c.success, fontFamily: ty.body.family }]}>{successMessage}</Text>
+        </MotiView>
       ) : null}
 
-      <AuthPrimaryButton
+      {/* Primary CTA */}
+      <ShimmerButton
         label="Create Account"
         onPress={handleSignUp}
         loading={loading}
         accessibilityHint="Creates your account and starts onboarding"
       />
 
+      {/* Legal */}
       <View style={styles.legalRow}>
-        <Text style={[styles.legalText, { color: c.textMuted, fontFamily: ty.body.family }]}>By continuing you agree to our </Text>
+        <Text style={[styles.legalText, { color: c.textMuted, fontFamily: ty.body.family }]}>
+          By continuing you agree to our{' '}
+        </Text>
         <Pressable onPress={() => openLegalLink('https://metriqfit.com/terms')}>
           <Text style={[styles.legalLink, { color: c.primary, fontFamily: ty.body.familySemibold }]}>Terms</Text>
         </Pressable>
@@ -250,34 +259,43 @@ const styles = StyleSheet.create({
   dividerRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 10,
+    gap: 12,
+    marginVertical: 4,
   },
   dividerLine: {
     flex: 1,
-    height: 1,
+    height: StyleSheet.hairlineWidth,
   },
   dividerText: {
-    fontSize: 12,
+    fontSize: 11,
     textAlign: 'center',
+    letterSpacing: 0.5,
+    textTransform: 'uppercase',
+  },
+  messageBox: {
+    borderLeftWidth: 3,
+    borderRadius: 8,
+    paddingVertical: 10,
+    paddingHorizontal: 14,
   },
   messageText: {
     fontSize: 13,
     lineHeight: 18,
-    textAlign: 'center',
   },
   legalRow: {
     flexDirection: 'row',
     flexWrap: 'wrap',
     justifyContent: 'center',
     alignItems: 'center',
-    marginTop: 6,
+    marginTop: 4,
   },
   legalText: {
-    fontSize: 12,
+    fontSize: 11,
     lineHeight: 18,
+    opacity: 0.7,
   },
   legalLink: {
-    fontSize: 12,
+    fontSize: 11,
     lineHeight: 18,
   },
 });

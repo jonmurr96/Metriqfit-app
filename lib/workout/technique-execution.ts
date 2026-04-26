@@ -11,7 +11,21 @@
  * and manage technique state throughout a workout session.
  */
 
-export type TechniqueType = 'superset' | 'drop_set' | 'tempo' | 'rest_pause' | 'amrap' | null;
+export type TechniqueType =
+  | 'straight_set'
+  | 'superset'
+  | 'drop_set'
+  | 'tempo'
+  | 'rest_pause'
+  | 'amrap'
+  | 'giant_set'
+  | 'cluster'
+  | 'cluster_set'
+  | 'failure_set'
+  | 'pyramid_set'
+  | 'warmup_protocol'
+  | 'pause_reps'
+  | null;
 
 export interface TechniqueMetadata {
   technique_type: TechniqueType;

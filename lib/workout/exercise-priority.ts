@@ -129,7 +129,7 @@ function usageMatchesContext(
   }
 
   const equipmentAccess = normalizeEquipmentAccess(context.equipmentAccess);
-  const limitedEquipment = ['dumbbells_plus_bench', 'dumbbells_only', 'bands_only', 'bodyweight_only'].includes(equipmentAccess);
+  const limitedEquipment = ['dumbbells_plus_bench', 'dumbbells_only', 'bodyweight_only'].includes(equipmentAccess);
 
   if (limitedEquipment && allowedUsage.includes('limited_equipment')) {
     return true;

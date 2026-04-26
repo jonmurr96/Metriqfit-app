@@ -49,6 +49,17 @@ export enum ProgressionModel {
   Density = 'Density',
 }
 
+export enum SetTechnique {
+  Straight_Set = 'straight_set',
+  Superset = 'superset',
+  Drop_Set = 'drop_set',
+  Cluster_Set = 'cluster_set',
+  Failure_Set = 'failure_set',
+  Giant_Set = 'giant_set',
+  Pyramid_Set = 'pyramid_set',
+  Rest_Pause = 'rest_pause',
+}
+
 export enum DayType {
   UpperStrength = 'UpperStrength',
   UpperHypertrophy = 'UpperHypertrophy',
@@ -174,6 +185,9 @@ export interface PlanTemplateSlot {
   reps_max: number;
   target_rpe: number;
   rest_seconds: number;
+  set_technique?: SetTechnique;
+  technique_group_id?: string;
+  technique_notes?: string;
 }
 
 export interface PlanTemplateDay {
@@ -212,6 +226,9 @@ export interface WorkoutExercise extends Exercise {
   target_rpe: number;
   rest_seconds: number;
   progression_model: ProgressionModel;
+  technique_type?: SetTechnique | null;
+  technique_config_json?: Record<string, unknown>;
+  technique_notes?: string | null;
   selection_metadata: {
     reason: string;
     fallback_path?: string;
@@ -227,6 +244,7 @@ export interface WorkoutExercise extends Exercise {
 export interface WorkoutDay {
   day_number: number;
   day_type: DayType;
+  cardio_note?: string | null;
   exercises: WorkoutExercise[];
 }
 

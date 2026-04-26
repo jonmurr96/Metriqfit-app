@@ -10,6 +10,8 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { MotiView } from 'moti';
 import { metriqfitTheme } from '../../lib/theme';
 import { useOnboarding } from '../../lib/onboarding';
+import { useAuth } from '../../lib/auth';
+import { supabase } from '../../lib/supabase';
 import { PremiumHeader, PremiumFooter } from '../../components/onboarding/premium';
 import { RulerPicker } from '../../components/onboarding/RulerPicker';
 
@@ -43,6 +45,7 @@ function inchesToCm(inches: number): number {
 
 export default function HeightScreen() {
   const { data, updateData, setCurrentStep } = useOnboarding();
+  const { user } = useAuth();
 
   // Internal tracking: total inches (source of truth)
   const storedInches =
@@ -95,6 +98,12 @@ export default function HeightScreen() {
   const handleContinue = () => {
     if (isValid) {
       setCurrentStep(4);
+      if (user?.id) {
+        supabase
+          .from('onboarding_answers')
+          .upsert({ user_id: user.id, last_onboarding_step: 'weight' }, { onConflict: 'user_id' })
+          .then(() => {});
+      }
       router.push('/(onboarding)/weight');
     }
   };

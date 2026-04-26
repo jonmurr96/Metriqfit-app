@@ -927,6 +927,31 @@ export async function getWorkoutPlanById(
   return decorateWorkoutPlan(data as WorkoutPlanWithDetails);
 }
 
+export async function getWorkoutPlanByGenerationRun(
+  userId: string,
+  generationRunId: string,
+): Promise<WorkoutPlanWithDetails | null> {
+  const { data, error } = await supabase
+    .from('user_workout_plans')
+    .select(WORKOUT_PLAN_DETAILS_SELECT)
+    .eq('user_id', userId)
+    .eq('generation_run_id', generationRunId)
+    .order('created_at', { ascending: false })
+    .limit(1)
+    .maybeSingle();
+
+  if (error) {
+    console.error('Failed to fetch workout plan by generation run:', error);
+    return null;
+  }
+
+  if (!data) {
+    return null;
+  }
+
+  return decorateWorkoutPlan(data as WorkoutPlanWithDetails);
+}
+
 /**
  * Get user's active nutrition plan
  */

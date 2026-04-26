@@ -11,16 +11,17 @@ interface PremiumHeaderProps {
   currentStep: number;
   totalSteps: number;
   showBack?: boolean;
+  onBack?: () => void;
 }
 
-export function PremiumHeader({ currentStep, totalSteps, showBack = true }: PremiumHeaderProps) {
+export function PremiumHeader({ currentStep, totalSteps, showBack = true, onBack }: PremiumHeaderProps) {
   const progress = (currentStep / totalSteps) * 100;
 
   return (
     <View style={styles.container}>
       {showBack ? (
         <Pressable
-          onPress={() => router.back()}
+          onPress={() => (onBack ? onBack() : router.back())}
           style={({ pressed }) => [
             styles.backButton,
             pressed && styles.backButtonPressed,

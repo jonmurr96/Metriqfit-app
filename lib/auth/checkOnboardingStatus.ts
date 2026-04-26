@@ -4,7 +4,8 @@ export interface OnboardingStatus {
   hasCompletedOnboarding: boolean;
   hasTargets: boolean;
   hasPlans: boolean;
-  hasSubscription: boolean;
+  hasCompletedPaywall: boolean;
+  lastOnboardingStep: string | null;
 }
 
 /**
@@ -15,10 +16,10 @@ export interface OnboardingStatus {
 export async function checkOnboardingStatus(
   userId: string
 ): Promise<OnboardingStatus> {
-  const [answersRes, targetsRes, plansRes, subscriptionRes] = await Promise.all([
+  const [answersRes, targetsRes, plansRes] = await Promise.all([
     supabase
       .from('onboarding_answers')
-      .select('completed_at')
+      .select('completed_at, paywall_completed_at, last_onboarding_step')
       .eq('user_id', userId)
       .maybeSingle(),
     supabase
@@ -32,18 +33,15 @@ export async function checkOnboardingStatus(
       .eq('user_id', userId)
       .eq('is_active', true)
       .maybeSingle(),
-    supabase
-      .from('subscriptions')
-      .select('id')
-      .eq('user_id', userId)
-      .maybeSingle(),
   ]);
 
+  const answers = answersRes.data as any;
+
   return {
-    hasCompletedOnboarding:
-      !answersRes.error && !!(answersRes.data as any)?.completed_at,
+    hasCompletedOnboarding: !answersRes.error && !!answers?.completed_at,
     hasTargets: !targetsRes.error && !!targetsRes.data,
     hasPlans: !plansRes.error && !!plansRes.data,
-    hasSubscription: !subscriptionRes.error && !!subscriptionRes.data,
+    hasCompletedPaywall: !answersRes.error && !!answers?.paywall_completed_at,
+    lastOnboardingStep: !answersRes.error ? (answers?.last_onboarding_step ?? null) : null,
   };
 }

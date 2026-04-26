@@ -25,19 +25,25 @@ export default function IndexPage() {
             hasCompletedOnboarding: false,
             hasTargets: false,
             hasPlans: false,
-            hasSubscription: false,
+            hasCompletedPaywall: false,
+            lastOnboardingStep: null,
           });
         } finally {
           setCheckingOnboarding(false);
         }
+      } else if (!authLoading) {
+        setOnboardingStatus(null);
+        setCheckingOnboarding(false);
       }
     }
 
     checkStatus();
   }, [user, authLoading]);
 
-  // Show loading screen while checking auth or onboarding status
-  if (authLoading || (isAuthenticated && checkingOnboarding)) {
+  // Show loading screen while checking auth or onboarding status.
+  // Also block rendering when status is still null (effect hasn't resolved yet)
+  // to prevent the fall-through-to-home race on the first render after auth.
+  if (authLoading || (isAuthenticated && (checkingOnboarding || !onboardingStatus))) {
     return (
       <View
         style={{
@@ -65,21 +71,26 @@ export default function IndexPage() {
     return <Redirect href="/(auth)/sign-in" />;
   }
 
-  // Authenticated but haven't completed onboarding
+  // Mid-onboarding: resume to the last step the user reached.
   if (onboardingStatus && !onboardingStatus.hasCompletedOnboarding) {
+    const step = onboardingStatus.lastOnboardingStep;
+    const validSteps = ['about-you', 'height', 'weight', 'goals', 'training', 'nutrition'];
+    if (step && validSteps.includes(step)) {
+      return <Redirect href={`/(onboarding)/${step}` as any} />;
+    }
     return <Redirect href="/(onboarding)/identity" />;
   }
 
-  // Authenticated and completed onboarding but no active plans yet.
+  // Completed questionnaire but plans not yet generated.
   if (onboardingStatus && onboardingStatus.hasCompletedOnboarding && !onboardingStatus.hasPlans) {
     return <Redirect href="/(onboarding)/plan-generation" />;
   }
 
-  // Plans generated but paywall not completed - must not skip to home.
-  if (onboardingStatus && onboardingStatus.hasCompletedOnboarding && onboardingStatus.hasPlans && !onboardingStatus.hasSubscription) {
-    return <Redirect href="/(onboarding)/paywall" />;
+  // Plans exist but paywall not completed — resume at plan-review (its Continue routes to paywall).
+  if (onboardingStatus && onboardingStatus.hasCompletedOnboarding && onboardingStatus.hasPlans && !onboardingStatus.hasCompletedPaywall) {
+    return <Redirect href="/(onboarding)/plan-review" />;
   }
 
-  // Authenticated, onboarding complete, plans exist, paywall completed - go to main app.
+  // All complete — go to main app.
   return <Redirect href="/(tabs)/home" />;
 }

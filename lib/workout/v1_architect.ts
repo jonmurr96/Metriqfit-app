@@ -3,6 +3,7 @@ import {
   Exercise,
   ExerciseTier,
   GoalBucket,
+  DayType,
   ProgressionModel,
   ReplacementGroup,
   SessionEnvironment,
@@ -14,6 +15,8 @@ import {
   SlotArchetype,
   ExperienceLevel,
   MovementPattern,
+  SetTechnique,
+  ContraindicationTag,
 } from '../../types/v1_engine.ts';
 import { coreExercises } from '../../loaders/seeds/exercises.ts';
 import { coreSubstitutions, secondaryGroupFallbacks } from '../../loaders/seeds/substitutions.ts';
@@ -34,8 +37,6 @@ export const EnvironmentEquipmentWhitelist: Record<SessionEnvironment, Equipment
   [SessionEnvironment.AptHotel]: [
     EquipmentCategory.DB,
     EquipmentCategory.BW,
-    EquipmentCategory.Machine,
-    EquipmentCategory.Cable,
     EquipmentCategory.Misc,
   ],
   [SessionEnvironment.Home]: [
@@ -60,6 +61,8 @@ export function hydrateTemplate(
     comfort: LiftComfort;
     injuries: string[];
     experience_level: ExperienceLevel;
+    session_duration_min?: number;
+    conditioning_goal?: boolean;
   },
   expectedDaysPerWeek?: number
 ): WorkoutPlan {
@@ -71,7 +74,7 @@ export function hydrateTemplate(
   }
 
   const hydratedDays: WorkoutDay[] = template.days.map((day) => {
-    const hydratedExercises: WorkoutExercise[] = day.slots.map((slot) => {
+    const hydratedExercises = day.slots.map((slot): WorkoutExercise | null => {
       // 1. Determine Primary Candidate (if defined by a 'preferred' ID - for now we search the group)
       // 2. Scan same group T1/T2
       let candidate = findExerciseInGroup(slot.architectural_group, [ExerciseTier.T1, ExerciseTier.T2], user_persona);
@@ -108,6 +111,11 @@ export function hydrateTemplate(
         candidate = findSafeFallbackExercise(slot.architectural_group, user_persona, 'movement_safe_fallback');
       }
 
+      if (!candidate && !slot.is_required) {
+        console.warn(`[v1_architect] Optional slot skipped for ${slot.architectural_group}; no exercise matched user constraints.`);
+        return null;
+      }
+
       // 7. Fatal Fail check (with detailed diagnostics)
       if (!candidate) {
         const allowedEquipment = EnvironmentEquipmentWhitelist[user_persona.environment];
@@ -124,6 +132,7 @@ export function hydrateTemplate(
       }
 
       const exerciseWithTweaks = applySlotTweaks(candidate, slot, user_persona.goal);
+      const technique = resolveSetTechnique(candidate, slot, user_persona);
 
       return {
         ...candidate,
@@ -133,8 +142,11 @@ export function hydrateTemplate(
         target_rpe: slot.target_rpe,
         rest_seconds: exerciseWithTweaks.rest_seconds,
         progression_model: slot.progression_model,
+        technique_type: technique.technique_type,
+        technique_config_json: technique.technique_config_json,
+        technique_notes: technique.technique_notes,
       };
-    });
+    }).filter((exercise): exercise is WorkoutExercise => Boolean(exercise));
 
     return {
       day_number: day.day_number,
@@ -142,6 +154,8 @@ export function hydrateTemplate(
       exercises: hydratedExercises,
     };
   });
+
+  applyGoalConditioningNotes(hydratedDays, user_persona.goal, Boolean(user_persona.conditioning_goal));
 
   return {
     family_id,
@@ -193,6 +207,9 @@ const GroupFallbackChain: Record<string, ReplacementGroup[]> = {
   // Athletic/Power tracks: if a Power_Dynamic_Primer slot can't fill, try Conditioning
   [ReplacementGroup.Power_Dynamic_Primer]: [
     ReplacementGroup.Conditioning_Metabolic_Finisher,
+  ],
+  [ReplacementGroup.Primary_Vertical_Press]: [
+    ReplacementGroup.Primary_Horizontal_Press,
   ],
   // Conditioning: if it can't fill, Power primers are acceptable
   [ReplacementGroup.Conditioning_Metabolic_Finisher]: [
@@ -285,7 +302,7 @@ const GroupMovementPatternRequirements: Record<ReplacementGroup, {
   },
   [ReplacementGroup.Isolation_Lateral_Delt]: {
     primary: MovementPattern.Iso,
-    acceptable: [MovementPattern.Iso, MovementPattern.VPress], // Delt isolation or vertical press (delt involvement)
+    acceptable: [MovementPattern.Iso], // Delt isolation must not become a press.
     bodyRegion: 'upper',
   },
   [ReplacementGroup.Isolation_Bicep_Flexion]: {
@@ -352,7 +369,6 @@ const IsolationMuscleFamilies: Partial<Record<ReplacementGroup, ReplacementGroup
   // Shoulder isolation - delts only
   [ReplacementGroup.Isolation_Lateral_Delt]: [
     ReplacementGroup.Isolation_Lateral_Delt,
-    ReplacementGroup.Primary_Vertical_Press, // Presses use delts
   ],
   // Chest isolation - chest only
   [ReplacementGroup.Isolation_Chest_Fly]: [
@@ -399,6 +415,7 @@ function findSafeFallbackExercise(
   }
 
   const allowedEquipment = EnvironmentEquipmentWhitelist[user.environment];
+  const normalizedInjuries = normalizeInjuryTags(user.injuries);
   
   // ISOLATION GROUPS: Enforce muscle-family matching
   // Hamstring slot → hamstring exercises only, NOT delt/chest/bicep
@@ -422,6 +439,10 @@ function findSafeFallbackExercise(
           return false;
         }
 
+        if (ex.external_id === 'ex_pike_push_up') {
+          return false;
+        }
+
         // Comfort filter
         if (user.comfort === LiftComfort.NoBarbell || user.comfort === LiftComfort.MachineDB) {
           if (ex.equipment_category === EquipmentCategory.Barbell) {
@@ -431,7 +452,7 @@ function findSafeFallbackExercise(
 
         // Injury filter
         const contra = ex.contraindications || [];
-        if (contra.some((tag) => user.injuries.includes(tag))) {
+        if (contra.some((tag) => normalizedInjuries.includes(tag))) {
           return false;
         }
 
@@ -439,7 +460,9 @@ function findSafeFallbackExercise(
       });
 
       if (familyCandidates.length > 0) {
-        // Rank by: same group first, then primary pattern, then tier
+        // Rank by: same group first, then primary pattern. When an isolation slot
+        // must fall back to a compound family, prefer lower-fatigue/simple options
+        // so a missing hamstring curl becomes a bridge before another loaded hinge.
         const ranked = familyCandidates.sort((a, b) => {
           const aSameGroup = a.architectural_group === requestedGroup ? 1 : 0;
           const bSameGroup = b.architectural_group === requestedGroup ? 1 : 0;
@@ -448,6 +471,16 @@ function findSafeFallbackExercise(
           const aIsPrimary = a.movement_pattern === requirements.primary ? 1 : 0;
           const bIsPrimary = b.movement_pattern === requirements.primary ? 1 : 0;
           if (aIsPrimary !== bIsPrimary) return bIsPrimary - aIsPrimary;
+
+          const fatigueRank: Record<string, number> = { Low: 3, Medium: 2, High: 1 };
+          const aFatigue = fatigueRank[String(a.fatigue_cost)] ?? 0;
+          const bFatigue = fatigueRank[String(b.fatigue_cost)] ?? 0;
+          if (aFatigue !== bFatigue) return bFatigue - aFatigue;
+
+          const setupRank: Record<string, number> = { Low: 3, Medium: 2, High: 1 };
+          const aSetup = setupRank[String(a.setup_complexity)] ?? 0;
+          const bSetup = setupRank[String(b.setup_complexity)] ?? 0;
+          if (aSetup !== bSetup) return bSetup - aSetup;
           
           const tierRank = { [ExerciseTier.T1]: 3, [ExerciseTier.T2]: 2, [ExerciseTier.T3]: 1, [ExerciseTier.T4A]: 0, [ExerciseTier.T4B]: 0 };
           return (tierRank[b.tier] || 0) - (tierRank[a.tier] || 0);
@@ -472,7 +505,7 @@ function findSafeFallbackExercise(
       }
       
       console.warn(`[v1_architect] No muscle-family fallback found for ${requestedGroup}. Acceptable families: [${muscleFamily.join(', ')}]`);
-      // Fall through to standard fallback (which will likely also fail for isolation)
+      return null;
     }
   }
   
@@ -488,6 +521,10 @@ function findSafeFallbackExercise(
       return false;
     }
 
+    if (ex.external_id === 'ex_pike_push_up') {
+      return false;
+    }
+
     // Comfort filter
     if (user.comfort === LiftComfort.NoBarbell || user.comfort === LiftComfort.MachineDB) {
       if (ex.equipment_category === EquipmentCategory.Barbell) {
@@ -497,7 +534,7 @@ function findSafeFallbackExercise(
 
     // Injury filter
     const contra = ex.contraindications || [];
-    if (contra.some((tag) => user.injuries.includes(tag))) {
+    if (contra.some((tag) => normalizedInjuries.includes(tag))) {
       return false;
     }
 
@@ -549,6 +586,7 @@ function findExerciseInGroup(
   const requireUnilateral = unilateralMapping?.requiresUnilateral ?? false;
 
   // Hard Filters
+  const normalizedInjuries = normalizeInjuryTags(user.injuries);
   const candidates = coreExercises.filter((ex) => {
     // Group Match
     if (ex.architectural_group !== targetGroup) return false;
@@ -572,6 +610,12 @@ function findExerciseInGroup(
       return false;
     }
 
+    // Pike push-ups are retained as a manual substitution/progression only. They
+    // are too skill-biased and hard to load consistently as generated defaults.
+    if (ex.external_id === 'ex_pike_push_up') {
+      return false;
+    }
+
     // Comfort Filter
     if (user.comfort === LiftComfort.NoBarbell || user.comfort === LiftComfort.MachineDB) {
       if (ex.equipment_category === EquipmentCategory.Barbell) {
@@ -581,7 +625,7 @@ function findExerciseInGroup(
 
     // Injury Filter
     const contra = ex.contraindications || [];
-    if (contra.some((tag) => user.injuries.includes(tag))) {
+    if (contra.some((tag) => normalizedInjuries.includes(tag))) {
       return false;
     }
 
@@ -645,6 +689,35 @@ function findExerciseInGroup(
   } as any;
 }
 
+function normalizeInjuryTags(injuries: string[]): ContraindicationTag[] {
+  const tags = new Set<ContraindicationTag>();
+  for (const injury of injuries || []) {
+    switch (String(injury).toLowerCase()) {
+      case 'shoulders':
+      case 'shoulder':
+      case ContraindicationTag.Shoulder_Impingement:
+        tags.add(ContraindicationTag.Shoulder_Impingement);
+        break;
+      case 'back':
+      case 'lower_back':
+      case ContraindicationTag.Lower_Back_Shearing:
+        tags.add(ContraindicationTag.Lower_Back_Shearing);
+        break;
+      case 'knees':
+      case 'knee':
+      case ContraindicationTag.Knee_Shear:
+        tags.add(ContraindicationTag.Knee_Shear);
+        break;
+      case 'wrists':
+      case 'wrist':
+      case ContraindicationTag.Wrist_Extension:
+        tags.add(ContraindicationTag.Wrist_Extension);
+        break;
+    }
+  }
+  return Array.from(tags);
+}
+
 /**
  * Applies conservative, slot-aware tweaks to exercise parameters.
  * Ensures templates don't drift too far while providing goal specialization.
@@ -659,9 +732,19 @@ function applySlotTweaks(
   switch (goal) {
     case GoalBucket.Strength:
       // Primary/Secondary lifts get significantly longer rest and tighter rep ranges
-      if (slot.archetype === SlotArchetype.PrimeCompound || slot.archetype === SlotArchetype.SecondaryCompound) {
+      if (
+        slot.archetype === SlotArchetype.PrimeCompound
+        || slot.archetype === SlotArchetype.SecondaryCompound
+        || String(exercise.architectural_group).startsWith('Primary_')
+        || String(exercise.architectural_group).startsWith('Secondary_')
+        || String(exercise.architectural_group).startsWith('Unilateral_')
+      ) {
+        const isPrime = slot.archetype === SlotArchetype.PrimeCompound;
+        const targetMin = isPrime ? 4 : 6;
+        const targetMax = isPrime ? 6 : 10;
         rest_seconds = Math.min(240, rest_seconds + 30);
-        reps_max = Math.min(reps_max, 6);
+        reps_min = Math.min(reps_min, targetMin);
+        reps_max = Math.min(reps_max, targetMax);
       }
       break;
 
@@ -703,6 +786,107 @@ function applySlotTweaks(
   }
 
   return { sets, reps_min, reps_max, rest_seconds };
+}
+
+function resolveSetTechnique(
+  exercise: Exercise,
+  slot: {
+    set_technique?: SetTechnique;
+    technique_group_id?: string;
+    technique_notes?: string;
+    archetype: SlotArchetype;
+  },
+  user: { goal: GoalBucket; environment: SessionEnvironment; experience_level: ExperienceLevel; session_duration_min?: number }
+): { technique_type: SetTechnique | null; technique_config_json: Record<string, unknown>; technique_notes: string | null } {
+  const requested = slot.set_technique ?? SetTechnique.Straight_Set;
+  if (requested === SetTechnique.Straight_Set || user.experience_level === ExperienceLevel.Beginner) {
+    return { technique_type: null, technique_config_json: {}, technique_notes: null };
+  }
+
+  const isCompound = slot.archetype === SlotArchetype.PrimeCompound || slot.archetype === SlotArchetype.SecondaryCompound;
+  const isIsolation = slot.archetype === SlotArchetype.Isolation;
+  const selectedExerciseIsIsolation = exercise.movement_pattern === MovementPattern.Iso
+    && String(exercise.architectural_group).startsWith('Isolation_');
+  const isStableEquipment = exercise.equipment_category === EquipmentCategory.Machine
+    || exercise.equipment_category === EquipmentCategory.Cable
+    || exercise.equipment_category === EquipmentCategory.DB
+    || exercise.equipment_category === EquipmentCategory.BW;
+  const highRiskCompound = isCompound && (
+    exercise.architectural_group === ReplacementGroup.Primary_Bilateral_Squat
+    || exercise.architectural_group === ReplacementGroup.Primary_Bilateral_Hinge
+    || exercise.fatigue_cost === 'High'
+  );
+
+  if (requested === SetTechnique.Cluster_Set) {
+    if (user.experience_level !== ExperienceLevel.Advanced || !isCompound || user.goal !== GoalBucket.Strength || highRiskCompound) {
+      return { technique_type: null, technique_config_json: {}, technique_notes: null };
+    }
+    return {
+      technique_type: requested,
+      technique_config_json: { miniSets: 3, intraSetRestSeconds: 15 },
+      technique_notes: slot.technique_notes ?? 'Cluster the working set into short mini-sets with brief intra-set rests.',
+    };
+  }
+
+  if (requested === SetTechnique.Drop_Set || requested === SetTechnique.Rest_Pause || requested === SetTechnique.Failure_Set) {
+    if (!isIsolation || !selectedExerciseIsIsolation || !isStableEquipment) {
+      return { technique_type: null, technique_config_json: {}, technique_notes: null };
+    }
+    if (requested === SetTechnique.Failure_Set && user.experience_level !== ExperienceLevel.Advanced) {
+      return { technique_type: null, technique_config_json: {}, technique_notes: null };
+    }
+    return {
+      technique_type: requested,
+      technique_config_json: { finalSetOnly: true, avoidFormBreakdown: true },
+      technique_notes: slot.technique_notes ?? 'Use only on the final set and stop if form changes.',
+    };
+  }
+
+  if (requested === SetTechnique.Giant_Set && user.experience_level !== ExperienceLevel.Advanced) {
+    return { technique_type: null, technique_config_json: {}, technique_notes: null };
+  }
+
+  if (requested === SetTechnique.Superset || requested === SetTechnique.Giant_Set) {
+    return {
+      technique_type: requested,
+      technique_config_json: { groupId: slot.technique_group_id ?? null, littleToNoRestBetweenExercises: true },
+      technique_notes: slot.technique_notes ?? 'Perform the grouped exercises back-to-back, then rest after the group.',
+    };
+  }
+
+  if (requested === SetTechnique.Pyramid_Set) {
+    return {
+      technique_type: requested,
+      technique_config_json: { increaseWeightAsRepsDecrease: true },
+      technique_notes: slot.technique_notes ?? 'Increase load gradually as reps decrease across sets.',
+    };
+  }
+
+  return { technique_type: null, technique_config_json: {}, technique_notes: null };
+}
+
+function applyGoalConditioningNotes(days: WorkoutDay[], goal: GoalBucket, conditioningGoal = false) {
+  if (!conditioningGoal && goal !== GoalBucket.FatLoss && goal !== GoalBucket.Athletic) return;
+  if (days.length < 3) return;
+
+  const hasConditioning = days.some((day) =>
+    day.exercises.some((exercise) =>
+      exercise.architectural_group === ReplacementGroup.Conditioning_Metabolic_Finisher
+      || exercise.architectural_group === ReplacementGroup.Power_Dynamic_Primer
+    )
+  );
+  if (hasConditioning) return;
+
+  const targetDay = days.find((day) =>
+    day.day_type === DayType.LowerHypertrophy
+    || day.day_type === DayType.Legs
+    || day.day_type === DayType.FullBodyGenFit
+    || day.day_type === DayType.FullBodyHypertrophy
+  ) ?? days[days.length - 1];
+
+  targetDay.cardio_note = goal === GoalBucket.Athletic
+    ? '+20-30 min cardio or intervals after lifting, controlled intensity.'
+    : '+20-30 min cardio after lifting, easy to moderate pace.';
 }
 
 export function getTierWeight(tier: ExerciseTier): number {

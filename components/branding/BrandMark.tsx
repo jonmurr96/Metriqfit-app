@@ -3,7 +3,7 @@ import { Image, StyleSheet, Text, View } from 'react-native';
 
 import { useTokens } from '../../lib/theme';
 
-type BrandMarkSize = 'xs' | 'sm' | 'md' | 'lg';
+type BrandMarkSize = 'xs' | 'sm' | 'md' | 'lg' | 'xl';
 type BrandMarkGlow = 'none' | 'soft' | 'hero';
 
 interface BrandMarkProps {
@@ -18,6 +18,7 @@ const SIZE_MAP: Record<BrandMarkSize, number> = {
   sm: 44,
   md: 72,
   lg: 112,
+  xl: 140,
 };
 
 export function BrandMark({

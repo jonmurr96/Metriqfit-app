@@ -18,6 +18,7 @@ import {
   type WeeklyLayoutAssignment,
 } from "../../../lib/workout/program-catalog.ts";
 import { buildWorkoutPlanDiff, type WorkoutPlanComparable } from "../../../lib/workout/plan-regeneration-diff.ts";
+import { publicExerciseNameCandidates } from "../../../lib/workout/v1-public-exercise-aliases.ts";
 import {
   selectExercisesForGeneratedSplitDay,
   type GeneratedSplitDayDefinition,
@@ -115,6 +116,21 @@ const corsHeaders = {
   "Access-Control-Allow-Methods": "POST, OPTIONS",
 };
 
+const DB_ALLOWED_TECHNIQUE_TYPES = new Set([
+  "tempo",
+  "pause_reps",
+  "superset",
+  "giant_set",
+  "drop_set",
+  "rest_pause",
+  "amrap",
+  "warmup_protocol",
+  "cluster",
+  "cluster_set",
+  "failure_set",
+  "pyramid_set",
+]);
+
 function jsonResponse(body: unknown, status = 200) {
   return new Response(JSON.stringify(body), {
     status,
@@ -123,6 +139,21 @@ function jsonResponse(body: unknown, status = 200) {
       ...corsHeaders,
     },
   });
+}
+
+function dbTechniqueTypeForExercise(exercise: any): string | null {
+  if (!exercise?.technique_type || exercise.technique_type === "straight_set") {
+    return null;
+  }
+
+  const techniqueType = String(exercise.technique_type);
+  if (!DB_ALLOWED_TECHNIQUE_TYPES.has(techniqueType)) {
+    throw new Error(
+      `Unsupported technique_type "${techniqueType}" for ${exercise.name || exercise.external_id || "exercise"}`,
+    );
+  }
+
+  return techniqueType;
 }
 
 async function storeV1WorkoutPlan(
@@ -173,15 +204,16 @@ async function storeV1WorkoutPlan(
 
   // Resolve V1 exercise names → public.exercises UUIDs (required by FK constraint).
   // coreExercises use string external_ids; public.exercises uses UUIDs. Bridge by name.
-  const allExerciseNames = [...new Set(
+  const allExerciseNames: string[] = [...new Set<string>(
     v1Plan.days.flatMap((d: any) =>
       d.exercises.map((ex: any) => ex.name as string)
     )
   )];
+  const publicExerciseNameLookupCandidates = [...new Set(allExerciseNames.flatMap(publicExerciseNameCandidates))];
   const { data: pubExercises, error: exerciseLookupError } = await supabase
     .from("exercises")
     .select("id, name")
-    .in("name", allExerciseNames);
+    .in("name", publicExerciseNameLookupCandidates);
   if (exerciseLookupError) {
     throw new Error(`V1 exercise name lookup failed: ${exerciseLookupError.message}`);
   }
@@ -189,15 +221,23 @@ async function storeV1WorkoutPlan(
   for (const ex of (pubExercises || [])) {
     if (!exerciseIdByName[ex.name]) exerciseIdByName[ex.name] = ex.id; // first match wins on duplicates
   }
+  const resolvePublicExerciseId = (v1Name: string) => {
+    for (const candidate of publicExerciseNameCandidates(v1Name)) {
+      const id = exerciseIdByName[candidate];
+      if (id) return id;
+    }
+    return null;
+  };
 
   for (const day of v1Plan.days) {
     if (day.day_type === 'Recovery') continue;
+    const dayFocus = day.cardio_note ? `${day.day_type} + ${day.cardio_note}` : day.day_type;
 
     const dayInsert = await insertWorkoutPlanDayWithFallback(supabase, {
       plan_id: planId,
       day_number: day.day_number,
       name: day.day_type,
-      focus: day.day_type,
+      focus: dayFocus,
       day_type: "workout",
       estimated_duration_min: Math.max(30, Math.floor(day.exercises.reduce((acc: number, ex: any) => acc + (ex.estimated_duration_seconds / 60), 0))),
     });
@@ -223,7 +263,7 @@ async function storeV1WorkoutPlan(
       }
 
       for (const [exerciseIndex, exercise] of day.exercises.entries()) {
-        const publicExerciseId = exerciseIdByName[exercise.name];
+        const publicExerciseId = resolvePublicExerciseId(exercise.name);
         if (!publicExerciseId) {
           warnings.push(`V1 exercise "${exercise.name}" (${exercise.external_id}) not found in public.exercises — skipped`);
           continue;
@@ -232,6 +272,8 @@ async function storeV1WorkoutPlan(
         const v1RepsMax = clamp(Number(exercise.reps_max || Math.max(10, v1RepsMin)), v1RepsMin, 100);
         const v1SetsTarget = clamp(Number(exercise.sets || 3), 1, 20);
         const v1RestSeconds = clamp(Number(exercise.rest_seconds || 90), 20, 300);
+        const techniqueType = dbTechniqueTypeForExercise(exercise);
+        const techniqueNotes = exercise.technique_notes ? ` Technique: ${exercise.technique_notes}` : "";
         const { error: exerciseError } = await supabase
           .from("user_workout_plan_exercises")
           .insert({
@@ -243,7 +285,9 @@ async function storeV1WorkoutPlan(
             reps_min: v1RepsMin,
             reps_max: v1RepsMax,
             rest_seconds: v1RestSeconds,
-            user_notes: `Progression: ${exercise.progression_model}`,
+            technique_type: techniqueType,
+            technique_config_json: exercise.technique_config_json || {},
+            user_notes: `Progression: ${exercise.progression_model}.${techniqueNotes}`,
           });
 
         if (exerciseError) {
@@ -1061,7 +1105,6 @@ const EQUIPMENT_ALLOWLISTS: Record<string, string[] | null> = {
   full_gym: null,
   dumbbells_only: ["dumbbell", "bodyweight", "none"],
   dumbbells_plus_bench: ["dumbbell", "bench", "bodyweight", "none"],
-  bands_only: ["band", "bands", "resistance_band", "bodyweight", "none"],
   bodyweight_only: ["bodyweight", "none"],
   other: null,
 };
@@ -1951,7 +1994,7 @@ async function fetchUserContext(supabase: SupabaseClient, userId: string): Promi
     supabase.from("onboarding_answers").select("answers").eq("user_id", userId).single(),
     supabase.from("user_targets").select("calories, protein_g, carbs_g, fat_g, water_ml").eq("user_id", userId).single(),
     supabase.from("exercises").select("id, name, category, equipment_required, primary_muscle, pattern, difficulty, popularity_score").limit(2000),
-    supabase.from("food_items").select("id, name, calories_per_100g, protein_per_100g, carbs_per_100g, fat_per_100g, fiber_per_100g, category, breakfast_score, lunch_dinner_score, preworkout_score, postworkout_score, evening_score, digestion_speed, fat_load, carb_speed, protein_leanness, formality, goal_form, variety_family, tags").limit(400),
+    supabase.from("food_items").select("id, name, calories_per_100g, protein_per_100g, carbs_per_100g, fat_per_100g, fiber_per_100g, category, breakfast_score, lunch_dinner_score, preworkout_score, postworkout_score, evening_score, digestion_speed, fat_load, carb_speed, protein_leanness, formality, goal_form, variety_family").limit(400),
   ]);
 
   if (profileRes.error || !profileRes.data) throw new Error(`Profile not found for user ${userId}. The auth trigger may not have created the profiles row. DB: ${profileRes.error?.message || "row missing"}`);
@@ -2041,8 +2084,60 @@ async function fetchUserContext(supabase: SupabaseClient, userId: string): Promi
       preworkout_score: f.preworkout_score ?? 0,
       postworkout_score: f.postworkout_score ?? 0,
       evening_score: f.evening_score ?? 0,
+      tags: Array.isArray(f.tags) ? f.tags : inferFoodTags(f),
     })),
   };
+}
+
+function inferFoodTags(food: any): string[] {
+  const tags = new Set<string>();
+  const name = String(food?.name || "").toLowerCase();
+  const category = String(food?.category || "").toLowerCase();
+  const protein = Number(food?.protein_per_100g || 0);
+  const carbs = Number(food?.carbs_per_100g || 0);
+  const fat = Number(food?.fat_per_100g || 0);
+
+  if (category.includes("protein")) tags.add("protein");
+  if (category.includes("carb") || category.includes("grain") || category.includes("fruit")) tags.add("carb");
+  if (category.includes("fat") || category.includes("oil") || category.includes("nut")) tags.add("fat");
+  if (category.includes("vegetable")) tags.add("veggie");
+  if (category.includes("fruit")) tags.add("fruit");
+
+  if (protein >= 10 && protein >= carbs * 0.45 && protein >= fat * 0.8) tags.add("protein");
+  if (carbs >= 15 && carbs >= protein) tags.add("carb");
+  if (fat >= 8 && fat >= protein * 0.6) tags.add("fat");
+
+  if (/(chicken|turkey|beef|steak|pork|salmon|tuna|cod|fish|shrimp|egg|yogurt|cottage|whey|protein|tofu|tempeh|beans|lentil|chickpea)/.test(name)) {
+    tags.add("protein");
+  }
+  if (/(rice|oat|potato|pasta|bread|tortilla|quinoa|banana|apple|berry|fruit)/.test(name)) {
+    tags.add("carb");
+  }
+  if (/(oil|avocado|almond|peanut|cashew|walnut|butter|cheese|chia|flax|seed)/.test(name)) {
+    tags.add("fat");
+  }
+  if (/(broccoli|spinach|lettuce|pepper|onion|vegetable|veggie|asparagus|zucchini|carrot)/.test(name)) {
+    tags.add("veggie");
+  }
+  if (/(oat|egg|yogurt|cereal|toast|bagel|banana|berry)/.test(name)) {
+    tags.add("breakfast");
+  }
+
+  const plantBased = /(tofu|tempeh|beans|lentil|chickpea|rice|oat|potato|pasta|bread|quinoa|fruit|vegetable|broccoli|spinach|avocado|nut|seed)/.test(name);
+  if (plantBased) {
+    tags.add("vegetarian");
+    tags.add("vegan");
+  } else if (/(egg|yogurt|milk|cheese)/.test(name)) {
+    tags.add("vegetarian");
+  }
+
+  if (!tags.size) {
+    if (protein >= carbs && protein >= fat) tags.add("protein");
+    else if (carbs >= fat) tags.add("carb");
+    else tags.add("fat");
+  }
+
+  return Array.from(tags);
 }
 
 function normalizeNameTerm(value: string | null | undefined) {
@@ -5183,9 +5278,12 @@ serve(async (req: Request) => {
           // STEP 3A: Map onboarding to V1 profile
           console.log(`[V1] [${requestId}] Step 3A: Mapping onboarding to V1 profile...`);
           const mapOnboardingToV1 = (onboarding: any): OnboardingProfileInput => {
+            const minutes = onboarding.minutes_per_workout === '90_plus'
+              ? 90
+              : Number(onboarding.minutes_per_workout || 60);
             let env = SessionEnvironment.Commercial;
             if (onboarding.equipment_access === 'bodyweight_only') env = SessionEnvironment.Bodyweight;
-            else if (onboarding.equipment_access === 'dumbbells_only' || onboarding.equipment_access === 'bands_only') env = SessionEnvironment.AptHotel;
+            else if (onboarding.equipment_access === 'dumbbells_only') env = SessionEnvironment.AptHotel;
             else if (onboarding.equipment_access === 'dumbbells_plus_bench') env = SessionEnvironment.Home;
 
             let exp = ExperienceLevel.Beginner;
@@ -5201,6 +5299,7 @@ serve(async (req: Request) => {
             // This is the primary way to reach the dedicated strength families (2-day and 3-day).
             // It is intentionally applied after goal_type so it can override gain_weight and general_fitness.
             if (onboarding.session_emphasis === 'strength') goal = GoalBucket.Strength;
+            else if (onboarding.session_emphasis === 'conditioning') goal = GoalBucket.Athletic;
 
             const weightDelta = typeof onboarding.target_weight_lb === 'number' && typeof onboarding.current_weight_lb === 'number'
               ? onboarding.target_weight_lb - onboarding.current_weight_lb
@@ -5210,6 +5309,7 @@ serve(async (req: Request) => {
             if (env === SessionEnvironment.Bodyweight) comfort = LiftComfort.NoBarbell;
             else if (env === SessionEnvironment.AptHotel) comfort = LiftComfort.MachineDB;
             else if (env === SessionEnvironment.Home) comfort = LiftComfort.MachineDB;
+            else if (exp === ExperienceLevel.Beginner) comfort = LiftComfort.MachineDB;
             else if (exp === ExperienceLevel.Advanced && onboarding.session_emphasis === 'strength') comfort = LiftComfort.BarbellAdv;
             // Big bulk goal for advanced users signals comfort with barbell work
             else if (exp === ExperienceLevel.Advanced && (onboarding.goal_type === 'build_muscle' || onboarding.goal_type === 'gain_weight') && weightDelta > 15) comfort = LiftComfort.BarbellAdv;
@@ -5219,7 +5319,8 @@ serve(async (req: Request) => {
               primaryGoal: goal,
               daysPerWeek: onboarding.training_days_per_week || 3,
               liftComfort: comfort,
-              environment: env
+              environment: env,
+              sessionDurationMin: Number.isFinite(minutes) ? minutes : 60,
             };
           };
 
@@ -5299,6 +5400,10 @@ serve(async (req: Request) => {
             comfort: profile.liftComfort,
             experience_level: profile.experienceLevel,
             injuries: workoutContext.onboarding.injuries || [],
+            session_duration_min: profile.sessionDurationMin,
+            conditioning_goal: workoutContext.onboarding.goal_type === 'lose_weight'
+              || workoutContext.onboarding.goal_type === 'increase_endurance'
+              || workoutContext.onboarding.session_emphasis === 'conditioning',
           };
           
           // STEP 3C: Hydrate template
@@ -5324,12 +5429,21 @@ serve(async (req: Request) => {
           );
           const v1FirstEx = v1WorkoutDays.find((d: any) => d.exercises?.length > 0)?.exercises?.[0];
           const v1ExercisesRenderable = !!(v1FirstEx?.sets && (v1FirstEx?.reps_min || v1FirstEx?.reps_max));
+          const v1Exercises = v1WorkoutDays.flatMap((d: any) => Array.isArray(d.exercises) ? d.exercises : []);
+          const blockedExerciseNames = ["Pike Push-Up"];
+          const blockedGeneratedExercises = v1Exercises
+            .filter((exercise: any) => blockedExerciseNames.includes(String(exercise?.name || "")))
+            .map((exercise: any) => exercise.name);
           const v1PreStoreDetails = {
             workout_day_count: v1WorkoutDays.length,
             has_exercises: v1HasExercises,
             exercises_renderable: v1ExercisesRenderable,
+            blocked_generated_exercises: blockedGeneratedExercises,
           };
-          const v1PreStorePassed = v1WorkoutDays.length > 0 && v1HasExercises && v1ExercisesRenderable;
+          const v1PreStorePassed = v1WorkoutDays.length > 0
+            && v1HasExercises
+            && v1ExercisesRenderable
+            && blockedGeneratedExercises.length === 0;
           if (!v1PreStorePassed) {
             console.error(`[V1] [${requestId}] Pre-store quality check FAILED — aborting DB writes:`, v1PreStoreDetails);
             await supabase
@@ -5337,7 +5451,9 @@ serve(async (req: Request) => {
               .update({
                 status: "failed",
                 completed_at: new Date().toISOString(),
-                validation_errors: ["Generated V1 plan failed pre-store quality check"],
+                validation_errors: blockedGeneratedExercises.length > 0
+                  ? [`Generated V1 plan included blocked exercise(s): ${blockedGeneratedExercises.join(", ")}`]
+                  : ["Generated V1 plan failed pre-store quality check"],
                 warnings_json: warnings,
               })
               .eq("id", runId);

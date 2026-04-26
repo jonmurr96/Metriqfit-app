@@ -747,7 +747,7 @@ export function selectSplit(input: SplitSelectorInput): SplitSelection {
   }
 
   // 4. Equipment-first gates
-  if (equipmentAccess === 'bodyweight_only' || equipmentAccess === 'bands_only') {
+  if (equipmentAccess === 'bodyweight_only') {
     return {
       familyKey: 'bodyweight_only_3',
       displayName: 'Bodyweight',

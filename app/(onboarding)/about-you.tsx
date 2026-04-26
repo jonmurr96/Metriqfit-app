@@ -12,6 +12,8 @@ import { MotiView } from 'moti';
 import { Ionicons } from '@expo/vector-icons';
 import { metriqfitTheme } from '../../lib/theme';
 import { useOnboarding } from '../../lib/onboarding';
+import { useAuth } from '../../lib/auth';
+import { supabase } from '../../lib/supabase';
 import { PremiumHeader, PremiumFooter, PremiumDatePicker } from '../../components/onboarding/premium';
 
 const { spacing: s } = metriqfitTheme;
@@ -22,12 +24,19 @@ const SURFACE = '#0A1128';
 
 export default function AboutYouScreen() {
   const { data, updateData, setCurrentStep } = useOnboarding();
+  const { user } = useAuth();
 
   const isValid = !!data.dob && !!data.sex;
 
   const handleContinue = () => {
     if (isValid) {
       setCurrentStep(3);
+      if (user?.id) {
+        supabase
+          .from('onboarding_answers')
+          .upsert({ user_id: user.id, last_onboarding_step: 'height' }, { onConflict: 'user_id' })
+          .then(() => {});
+      }
       router.push('/(onboarding)/height');
     }
   };

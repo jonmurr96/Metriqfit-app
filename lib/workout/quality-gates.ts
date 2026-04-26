@@ -150,7 +150,7 @@ const PUSH_SPLIT_TAGS = new Set(['push', 'chest', 'triceps']);
 const PULL_SPLIT_TAGS = new Set(['pull', 'back', 'biceps']);
 const LOWER_FOCUS_TAGS = new Set(['legs', 'lower', 'glutes', 'hamstrings', 'quads']);
 const UPPER_FOCUS_TAGS = new Set(['upper', 'push', 'pull', 'back', 'chest', 'shoulders', 'arms']);
-const REAR_DELT_KEYWORDS = ['rear delt', 'face pull', 'reverse pec', 'rear fly', 'band pull'];
+const REAR_DELT_KEYWORDS = ['rear delt', 'face pull', 'reverse pec', 'rear fly'];
 const REAR_DELT_MUSCLES = ['rear_delts', 'rear_delt'];
 const COMPOUND_PATTERNS = new Set([
   'horizontal_push',
@@ -679,7 +679,7 @@ export function runQualityGates(input: QualityGateInput): QualityGateResult {
   if (rearDeltTargetDays > 0 && rearDeltCoverageCount === 0) {
     rearDeltMissingCount = 1;
     warnings.push(
-      'No upper-body day includes rear delt work (face pulls, reverse flys, band pull-aparts). ' +
+      'No upper-body day includes rear delt work (face pulls or reverse flys). ' +
       'Add at least one rear delt movement across the week to protect shoulder health.',
     );
     fixes.push({ dayIndex: 0, type: 'add_rear_delt' });

@@ -12,7 +12,6 @@ export type EquipmentAccess =
   | 'full_gym'
   | 'dumbbells_plus_bench'
   | 'dumbbells_only'
-  | 'bands_only'
   | 'bodyweight_only'
   | 'other';
 
@@ -214,7 +213,6 @@ export function normalizeUserTrainingProfile(input: UserTrainingProfileInput): U
     equipmentAccess === 'full_gym'
     || equipmentAccess === 'dumbbells_plus_bench'
     || equipmentAccess === 'dumbbells_only'
-    || equipmentAccess === 'bands_only'
     || equipmentAccess === 'bodyweight_only'
   )
     ? equipmentAccess
