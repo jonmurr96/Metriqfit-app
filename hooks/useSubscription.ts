@@ -1,6 +1,6 @@
 /**
  * React Query hooks for Subscription Service
- * Handles Elite subscription status and purchases
+ * Handles Free / Premium / Elite subscription status and purchases.
  */
 
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
@@ -9,21 +9,29 @@ import {
   getSubscription,
   checkEntitlementStatus,
   getAvailablePackages,
+  getBillingIntegrationStatus,
+  getRevenueCatEntitlementIdentifier,
   purchasePackage,
   restorePurchases,
-  isEliteFeature,
+  syncSubscriptionFromRevenueCat,
+  canAccessFeature,
+  getFeatureRequiredTier,
+  getFeatureUpgradeTier,
   getFeatureLimit,
-  type Subscription,
-  type SubscriptionPackage,
-  type EntitlementStatus,
+  type BillingIntegrationStatus,
 } from '../services/subscriptionService';
+import {
+  presentHostedPaywallIfNeeded,
+  presentRevenueCatCustomerCenter,
+} from '../services/revenuecatUiService';
+import type { FeatureGateKey } from '../lib/subscription/plans';
 
 // Query Keys
 export const subscriptionKeys = {
   all: ['subscription'] as const,
   status: (userId: string) => [...subscriptionKeys.all, 'status', userId] as const,
   entitlement: (userId: string) => [...subscriptionKeys.all, 'entitlement', userId] as const,
-  packages: () => [...subscriptionKeys.all, 'packages'] as const,
+  packages: (userId: string) => [...subscriptionKeys.all, 'packages', userId] as const,
 };
 
 /**
@@ -41,7 +49,7 @@ export function useSubscription() {
 }
 
 /**
- * Check Elite entitlement status
+ * Check entitlement status
  */
 export function useEntitlementStatus() {
   const { user } = useAuth();
@@ -59,9 +67,12 @@ export function useEntitlementStatus() {
  * Get available subscription packages
  */
 export function useAvailablePackages() {
+  const { user } = useAuth();
+
   return useQuery({
-    queryKey: subscriptionKeys.packages(),
-    queryFn: getAvailablePackages,
+    queryKey: subscriptionKeys.packages(user?.id || ''),
+    queryFn: () => getAvailablePackages(user?.id),
+    enabled: !!user,
     staleTime: 30 * 60 * 1000, // 30 minutes
   });
 }
@@ -107,19 +118,55 @@ export function useRestorePurchases() {
   });
 }
 
+export function useHostedPaywall() {
+  const { user } = useAuth();
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: async () => presentHostedPaywallIfNeeded(getRevenueCatEntitlementIdentifier()),
+    onSuccess: async (outcome) => {
+      if (!user?.id) return;
+
+      if (outcome.success) {
+        await syncSubscriptionFromRevenueCat(user.id).catch((error) => {
+          console.warn('[RevenueCat] Post-paywall sync failed:', error);
+        });
+      }
+
+      await queryClient.invalidateQueries({
+        queryKey: subscriptionKeys.all,
+      });
+    },
+  });
+}
+
+export function useCustomerCenter() {
+  return useMutation({
+    mutationFn: () => presentRevenueCatCustomerCenter(),
+  });
+}
+
 /**
  * Hook for checking if user can access a feature
  */
-export function useFeatureAccess(feature: 'food_photo_scan' | 'barcode_scan' | 'unlimited_ai' | 'advanced_analytics') {
+export function useFeatureAccess(
+  feature: FeatureGateKey,
+) {
   const { data: entitlement, isLoading } = useEntitlementStatus();
 
-  const requiresElite = isEliteFeature(feature);
-  const hasAccess = !requiresElite || entitlement?.isElite || false;
+  const tier = entitlement?.tier || 'free';
+  const requiredTier = getFeatureRequiredTier(feature);
+  const upgradeTier = getFeatureUpgradeTier(feature);
+  const hasAccess = canAccessFeature(feature, tier);
 
   return {
     hasAccess,
-    requiresElite,
+    requiredTier,
+    upgradeTier,
+    requiresElite: requiredTier === 'elite',
+    isPremium: entitlement?.isPremium || false,
     isElite: entitlement?.isElite || false,
+    tier,
     isLoading,
   };
 }
@@ -130,13 +177,15 @@ export function useFeatureAccess(feature: 'food_photo_scan' | 'barcode_scan' | '
 export function useFeatureLimit(feature: 'ai_messages' | 'plan_regenerations' | 'food_scans') {
   const { data: entitlement, isLoading } = useEntitlementStatus();
 
-  const isElite = entitlement?.isElite || false;
-  const limit = getFeatureLimit(feature, isElite);
+  const tier = entitlement?.tier || 'free';
+  const limit = getFeatureLimit(feature, tier);
 
   return {
     limit,
     isUnlimited: limit === Infinity,
-    isElite,
+    tier,
+    isPremium: entitlement?.isPremium || false,
+    isElite: entitlement?.isElite || false,
     isLoading,
   };
 }
@@ -164,10 +213,17 @@ export function useSubscriptionUI() {
     isRestoring: restoreMutation.isPending,
 
     // Computed
+    tier: entitlementQuery.data?.tier || 'free',
+    planType: entitlementQuery.data?.planType || 'free',
+    planLabel: entitlementQuery.data?.planLabel || 'Free',
+    isPremium: entitlementQuery.data?.isPremium || false,
     isElite: entitlementQuery.data?.isElite || false,
     isTrialing: entitlementQuery.data?.isTrialing || false,
     trialEndsAt: entitlementQuery.data?.trialEndsAt,
     expiresAt: entitlementQuery.data?.expiresAt,
+    trialConfig: entitlementQuery.data?.trialConfig,
+    grandfatheredIntoTier: entitlementQuery.data?.grandfatheredIntoTier,
+    grandfatheredUntil: entitlementQuery.data?.grandfatheredUntil,
 
     // Actions
     purchase: purchaseMutation.mutate,
@@ -185,13 +241,24 @@ export function useSubscriptionUI() {
 export function usePaywall() {
   const entitlementQuery = useEntitlementStatus();
   const packagesQuery = useAvailablePackages();
+  const packages = packagesQuery.data || [];
 
   return {
-    shouldShowPaywall: !entitlementQuery.isLoading && !(entitlementQuery.data?.isElite ?? false),
+    shouldShowPaywall: !entitlementQuery.isLoading && (entitlementQuery.data?.tier ?? 'free') === 'free',
     isLoading: entitlementQuery.isLoading,
-    packages: packagesQuery.data || [],
-    monthlyPackage: packagesQuery.data?.find((p) => p.period === 'monthly'),
-    annualPackage: packagesQuery.data?.find((p) => p.period === 'annual'),
-    lifetimePackage: packagesQuery.data?.find((p) => p.period === 'lifetime'),
+    packages,
+    freeTier: entitlementQuery.data?.tier === 'free',
+    premiumMonthlyPackage: packages.find((p) => p.id === 'premium_monthly'),
+    premiumAnnualPackage: packages.find((p) => p.id === 'premium_annual'),
+    eliteMonthlyPackage: packages.find((p) => p.id === 'elite_monthly'),
+    eliteAnnualPackage: packages.find((p) => p.id === 'elite_annual'),
   };
+}
+
+export function useBillingStatus() {
+  return useQuery<BillingIntegrationStatus>({
+    queryKey: [...subscriptionKeys.all, 'billing-status'],
+    queryFn: async () => getBillingIntegrationStatus(),
+    staleTime: 60 * 1000,
+  });
 }

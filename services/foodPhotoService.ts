@@ -4,8 +4,11 @@
  */
 
 import { supabase } from '../lib/supabase';
+import { invokeFunction } from '../lib/supabase/invokeFunction';
 import type { Database } from '../lib/supabase/types';
 import * as FileSystem from 'expo-file-system';
+import { getFeatureLimit } from './subscriptionService';
+import { getSubscriptionTier, getTierLabel, type SubscriptionTier } from '../lib/subscription/plans';
 
 export interface RecognizedFood {
   name: string;
@@ -30,7 +33,8 @@ export interface FoodPhotoAnalysis {
 export interface PhotoScanUsage {
   scansToday: number;
   scansLimit: number;
-  isElite: boolean;
+  tier: SubscriptionTier;
+  isUnlimited: boolean;
   remainingScans: number;
 }
 
@@ -41,40 +45,45 @@ export async function getPhotoScanUsage(userId: string): Promise<PhotoScanUsage>
   // Check user subscription status
   const { data: subscription } = await supabase
     .from('subscriptions')
-    .select('entitlement_tier')
+    .select('plan_type, status, updated_at')
     .eq('user_id', userId)
-    .eq('is_active', true)
-    .single();
+    .in('status', ['active', 'trial', 'grace_period'])
+    .order('updated_at', { ascending: false })
+    .maybeSingle();
 
-  const isElite = subscription?.entitlement_tier === 'elite';
+  const tier = getSubscriptionTier(subscription?.plan_type);
+  const scansLimit = getFeatureLimit('food_scans', tier);
+  const isUnlimited = !Number.isFinite(scansLimit);
 
-  // Elite users have unlimited scans
-  if (isElite) {
+  if (isUnlimited) {
     return {
       scansToday: 0,
       scansLimit: -1, // -1 means unlimited
-      isElite: true,
+      tier,
+      isUnlimited: true,
       remainingScans: -1,
     };
   }
-
-  // Free users: 3 scans per day
   const today = new Date().toISOString().split('T')[0];
 
-  const { data: usage } = await supabase
+  const { data: usage, error: usageError } = await supabase
     .from('ai_usage_daily')
     .select('food_photo_scans')
     .eq('user_id', userId)
     .eq('usage_date', today)
-    .single();
+    .maybeSingle();
+
+  if (usageError && usageError.code !== 'PGRST116') {
+    throw usageError;
+  }
 
   const scansToday = usage?.food_photo_scans || 0;
-  const scansLimit = 3;
 
   return {
     scansToday,
-    scansLimit,
-    isElite: false,
+    scansLimit: Number(scansLimit),
+    tier,
+    isUnlimited: false,
     remainingScans: Math.max(0, scansLimit - scansToday),
   };
 }
@@ -85,10 +94,7 @@ export async function getPhotoScanUsage(userId: string): Promise<PhotoScanUsage>
 export async function canScanPhoto(userId: string): Promise<boolean> {
   const usage = await getPhotoScanUsage(userId);
 
-  // Elite users can always scan
-  if (usage.isElite) return true;
-
-  // Free users limited to 3/day
+  if (usage.isUnlimited) return true;
   return usage.remainingScans > 0;
 }
 
@@ -114,7 +120,7 @@ async function incrementPhotoScanUsage(userId: string): Promise<void> {
 async function imageUriToBase64(uri: string): Promise<string> {
   try {
     const base64 = await FileSystem.readAsStringAsync(uri, {
-      encoding: FileSystem.EncodingType.Base64,
+      encoding: 'base64',
     });
     return base64;
   } catch (error) {
@@ -137,8 +143,9 @@ export async function analyzeFoodPhoto(
   const canScan = await canScanPhoto(userId);
   if (!canScan) {
     const usage = await getPhotoScanUsage(userId);
+    const nextTierLabel = usage.tier === 'premium' ? 'Elite' : 'Premium';
     throw new Error(
-      `Daily scan limit reached (${usage.scansLimit} scans/day for free users). Upgrade to Elite for unlimited scans.`
+      `Daily scan limit reached (${usage.scansLimit} scans/day on ${getTierLabel(usage.tier)}). Upgrade to ${nextTierLabel} for ${usage.tier === 'premium' ? 'unlimited scans' : 'more scans'}.`
     );
   }
 
@@ -146,16 +153,18 @@ export async function analyzeFoodPhoto(
   const base64Image = await imageUriToBase64(photoUri);
 
   // Call Supabase Edge Function for AI analysis
-  const { data, error } = await supabase.functions.invoke('analyze-food-photo', {
-    body: {
-      image: base64Image,
-      userId,
-    },
-  });
+  const { data, parsedError, rawError } = await invokeFunction(() =>
+    supabase.functions.invoke('analyze-food-photo', {
+      body: {
+        image: base64Image,
+        userId,
+      },
+    })
+  );
 
-  if (error) {
-    console.error('AI food photo analysis error:', error);
-    throw new Error('Failed to analyze photo. Please try again.');
+  if (rawError) {
+    console.error('AI food photo analysis error:', rawError);
+    throw new Error(parsedError?.error || parsedError?.message || rawError?.message || 'Failed to analyze photo. Please try again.');
   }
 
   // Increment usage counter

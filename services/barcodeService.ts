@@ -5,6 +5,7 @@
 
 import { supabase } from '../lib/supabase';
 import { lookupBarcode, BarcodeLookupFood } from '../lib/Barcode Scan/barcodeLookupClient';
+import { checkEntitlementStatus } from './subscriptionService';
 
 export interface BarcodeScanResult {
   barcode: string;
@@ -31,6 +32,11 @@ export async function scanBarcode(
   barcode: string,
   userId: string
 ): Promise<BarcodeScanResult> {
+  const entitlement = await checkEntitlementStatus(userId);
+  if (!entitlement.isPremium) {
+    throw new Error('PREMIUM_REQUIRED');
+  }
+
   // First, try to lookup the barcode using the Edge Function
   const lookupResult = await lookupBarcode(barcode);
 
@@ -82,9 +88,10 @@ export async function scanBarcode(
         carbs_per_100g: lookupResult.carbs_g_100g || 0,
         fat_per_100g: lookupResult.fat_g_100g || 0,
         serving_size_g: 100,
-        serving_size_description: '100g',
+        serving_description: '100g',
         category: 'packaged',
-        source: lookupResult.source,
+        source: 'manual',
+        created_by_user_id: userId,
       })
       .select()
       .single();

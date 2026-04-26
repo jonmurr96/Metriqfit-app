@@ -14,7 +14,15 @@ export async function createRecipe(
     userId: string,
     name: string,
     instructions: string,
-    ingredients: { foodItemId: string; grams: number }[]
+    ingredients: { foodItemId: string; grams: number }[],
+    metadata?: {
+        sourceType?: 'manual' | 'url_import' | 'menu_import' | 'ai_generated';
+        sourceUrl?: string | null;
+        sourceDomain?: string | null;
+        importStatus?: 'parsed' | 'needs_review' | 'failed';
+        importConfidence?: number | null;
+        description?: string | null;
+    }
 ) {
     // 1. Create recipe
     const { data: recipe, error: recipeError } = await supabase
@@ -22,8 +30,14 @@ export async function createRecipe(
         .insert({
             user_id: userId,
             name,
+            description: metadata?.description || null,
             instructions,
-            is_public: false
+            is_public: false,
+            source_type: metadata?.sourceType || 'manual',
+            source_url: metadata?.sourceUrl || null,
+            source_domain: metadata?.sourceDomain || null,
+            import_status: metadata?.importStatus || 'parsed',
+            import_confidence: metadata?.importConfidence ?? null,
         })
         .select()
         .single();
@@ -43,6 +57,84 @@ export async function createRecipe(
         .insert(ingredientsData);
 
     if (ingredientsError) throw ingredientsError;
+
+    return recipe;
+}
+
+/**
+ * Upsert an imported recipe by creating a new one or updating an existing recipe id.
+ */
+export async function upsertImportedRecipe(
+    userId: string,
+    input: {
+        existingRecipeId?: string;
+        name: string;
+        description?: string | null;
+        instructions?: string | null;
+        ingredients: { foodItemId: string; grams: number }[];
+        sourceType: 'url_import' | 'menu_import' | 'ai_generated';
+        sourceUrl?: string | null;
+        sourceDomain?: string | null;
+        importStatus?: 'parsed' | 'needs_review' | 'failed';
+        importConfidence?: number | null;
+    }
+) {
+    if (!input.existingRecipeId) {
+        return createRecipe(
+            userId,
+            input.name,
+            input.instructions || '',
+            input.ingredients,
+            {
+                sourceType: input.sourceType,
+                sourceUrl: input.sourceUrl || null,
+                sourceDomain: input.sourceDomain || null,
+                importStatus: input.importStatus || 'parsed',
+                importConfidence: input.importConfidence ?? null,
+                description: input.description || null,
+            }
+        );
+    }
+
+    const { data: recipe, error: recipeError } = await supabase
+        .from('recipes')
+        .update({
+            name: input.name,
+            description: input.description || null,
+            instructions: input.instructions || null,
+            source_type: input.sourceType,
+            source_url: input.sourceUrl || null,
+            source_domain: input.sourceDomain || null,
+            import_status: input.importStatus || 'parsed',
+            import_confidence: input.importConfidence ?? null,
+        })
+        .eq('id', input.existingRecipeId)
+        .eq('user_id', userId)
+        .select()
+        .single();
+
+    if (recipeError || !recipe) {
+        throw recipeError || new Error('Failed to update recipe');
+    }
+
+    await supabase
+        .from('recipe_ingredients')
+        .delete()
+        .eq('recipe_id', recipe.id);
+
+    const ingredientsData = input.ingredients.map((ing) => ({
+        recipe_id: recipe.id,
+        food_item_id: ing.foodItemId,
+        quantity_grams: ing.grams
+    }));
+
+    if (ingredientsData.length) {
+        const { error: ingredientsError } = await supabase
+            .from('recipe_ingredients')
+            .insert(ingredientsData);
+
+        if (ingredientsError) throw ingredientsError;
+    }
 
     return recipe;
 }

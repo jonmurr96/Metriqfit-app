@@ -13,10 +13,12 @@ export default function ProgressLayout() {
       }}
     >
       <Stack.Screen name="index" />
+      <Stack.Screen name="personal-records" />
+      <Stack.Screen name="photos" />
       <Stack.Screen name="daily-summary" />
       <Stack.Screen name="trends" />
       <Stack.Screen name="weekly-review" />
+      <Stack.Screen name="photo-compare" />
     </Stack>
   );
 }
-

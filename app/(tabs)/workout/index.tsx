@@ -1,407 +1,467 @@
-import { useState } from 'react';
-import { StyleSheet, View, Text, ScrollView, Pressable, Platform } from 'react-native';
-import { useRouter } from 'expo-router';
+import { useCallback, useEffect, useMemo } from 'react';
+import { Alert, AppState, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { useFocusEffect, useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { MotiView } from 'moti';
+import { useQueryClient } from '@tanstack/react-query';
+
 import { useTokens } from '../../../lib/theme';
-import { TabBarIcon } from '../../../components/navigation/TabBarIcon';
+import { useAuth } from '../../../lib/auth/AuthProvider';
+import { PremiumBackground } from '../../../components/premium/PremiumBackground';
 import { GlassCard } from '../../../components/premium/GlassCard';
-import { RingIconButton } from '../../../components/common/RingIconButton';
-import { NextWorkoutCard } from '../../../components/workout/NextWorkoutCard';
-import { useTodaysWorkout, useActiveWorkoutPlan } from '../../../hooks/usePlan';
+import { WorkoutWeekStrip } from '../../../components/workout/home/WorkoutWeekStrip';
+import { WorkoutQuickAccessRow } from '../../../components/workout/home/WorkoutQuickAccessRow';
+import { WorkoutToolsGrid } from '../../../components/workout/home/WorkoutToolsGrid';
+import { WorkoutPrimaryActionCard } from '../../../components/workout/home/WorkoutPrimaryActionCard';
+import { WorkoutUtilityTile } from '../../../components/workout/home/WorkoutUtilityTile';
+import { useWorkoutDashboard } from '../../../hooks/useWorkoutDashboard';
+import { planKeys, useMarkDayCompleted } from '../../../hooks/usePlan';
+import { useFinishSession, workoutKeys } from '../../../hooks/useWorkout';
+import type { WorkoutActionKey } from '../../../lib/workout/dashboard-state';
+import { getActiveSession } from '../../../services/workoutService';
+import {
+  trackWorkoutHomeHeroRendered,
+  trackWorkoutHomeHeroTapped,
+  trackWorkoutHomeQuickAccessTapped,
+  trackWorkoutHomeResumeTapped,
+  trackWorkoutHomeToolTapped,
+  trackWorkoutHomeViewed,
+  trackWorkoutRecommendationRendered,
+} from '../../../lib/analytics/analyticsService';
 
 export default function WorkoutHomeScreen() {
-  const { c, s, ty, r, glass, shadow, animation } = useTokens();
+  const { c, s, ty, r, animation } = useTokens();
   const router = useRouter();
   const insets = useSafeAreaInsets();
-  
-  // Fetch active plan to get status for all days
-  const { data: activePlan } = useActiveWorkoutPlan();
-  const { data: todaysWorkout } = useTodaysWorkout();
+  const queryClient = useQueryClient();
+  const { user } = useAuth();
+  const dashboard = useWorkoutDashboard();
+  const finishSession = useFinishSession();
+  const markDayCompleted = useMarkDayCompleted();
+  const activeSessionId = dashboard.raw.activeSession?.id;
+  const activeSessionPlanDayId = dashboard.raw.activeSession?.plan_day_id;
 
-  // State for selected day in calendar
-  const [selectedDate, setSelectedDate] = useState(new Date());
+  const isBusy = finishSession.isPending || markDayCompleted.isPending;
 
-  // Derive selected workout from the plan based on selectedDate
-  const selectedDayIndex = selectedDate.getDay(); // 0-6 (Sun-Sat)
-  // Convert JS Date (0=Sun, 1=Mon...) to Plan Day Number (1=Mon, 7=Sun) needed for lookup
-  const planDayNumber = selectedDayIndex === 0 ? 7 : selectedDayIndex;
-  
-  const selectedPlanDay = activePlan?.days?.find(d => d.day_number === planDayNumber);
+  const refreshWorkoutHomeState = useCallback(() => {
+    queryClient.invalidateQueries({ queryKey: workoutKeys.activeSession() });
+    queryClient.invalidateQueries({ queryKey: planKeys.workout() });
+  }, [queryClient]);
 
-  // Quick Access with ring icons
-  const shortcuts = [
-    { label: 'My Plan', icon: 'calendar', route: '/(tabs)/workout/my-plan' },
-    { label: 'Programs', icon: 'barbell', route: '/(tabs)/workout/program-browser' },
-    { label: 'Exercises', icon: 'fitness', route: '/(tabs)/workout/exercise-library' },
-    { label: 'History', icon: 'stats-chart', route: '/(tabs)/workout/workout-history' },
-  ];
+  useFocusEffect(
+    useCallback(() => {
+      refreshWorkoutHomeState();
+    }, [refreshWorkoutHomeState]),
+  );
 
-  const today = new Date();
-  // Reset time for accurate date comparison
-  today.setHours(0, 0, 0, 0);
-  
-  const currentDayIndex = today.getDay();
-  const mondayOffset = currentDayIndex === 0 ? -6 : 1 - currentDayIndex;
+  useEffect(() => {
+    const subscription = AppState.addEventListener('change', (nextState) => {
+      if (nextState === 'active') {
+        refreshWorkoutHomeState();
+      }
+    });
 
-  const weekDays = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'].map((day, i) => {
-    const date = new Date(today);
-    date.setDate(today.getDate() + mondayOffset + i);
-    date.setHours(0, 0, 0, 0);
-
-    const isToday = date.getTime() === today.getTime();
-    const isSelected = selectedDate.getDate() === date.getDate() && selectedDate.getMonth() === date.getMonth();
-    const isPast = date.getTime() < today.getTime();
-    
-    // Find matching plan day (1=Mon ... 7=Sun)
-    const dayNum = i + 1;
-    const planDay = activePlan?.days?.find(d => d.day_number === dayNum);
-    
-    // Determine status
-    const isCompleted = planDay?.is_completed;
-    const isMissed = isPast && planDay && !isCompleted && !planDay.is_rest_day; // Assuming we want to track missed workouts (optional logic tweak depending on 'is_rest_day' field existence, inferred from context)
-    
-    // Correct 'isMissed' logic: if it was a workout day, it's in the past, and not completed.
-    // Note: The types check later might show if 'is_rest_day' exists. Use 'name' check if needed.
-    // For now, simple check: if it has exercises and is past and not completed.
-    const hasExercises = planDay?.exercises && planDay.exercises.length > 0;
-    const markedMissed = isPast && hasExercises && !isCompleted;
-
-    return {
-      day,
-      date: date.getDate(),
-      fullDate: date,
-      isToday,
-      isSelected,
-      isCompleted,
-      isMissed: markedMissed,
-      hasDot: hasExercises && !isCompleted && !markedMissed, // Show dot for future/today scheduled
+    return () => {
+      subscription.remove();
     };
-  });
+  }, [refreshWorkoutHomeState]);
+
+  useEffect(() => {
+    trackWorkoutHomeViewed({
+      has_plan: !!dashboard.raw.activePlan,
+      hero_mode: dashboard.state.hero.mode,
+      has_active_session: !!dashboard.raw.activeSession,
+    });
+  }, [dashboard.raw.activePlan, dashboard.raw.activeSession, dashboard.state.hero.mode]);
+
+  useEffect(() => {
+    trackWorkoutHomeHeroRendered({
+      mode: dashboard.state.hero.mode,
+      primary_action: dashboard.state.hero.primaryAction,
+    });
+  }, [dashboard.state.hero.mode, dashboard.state.hero.primaryAction]);
+
+  useEffect(() => {
+    if (dashboard.state.coachQueue.mode !== 'recommendations') return;
+
+    trackWorkoutRecommendationRendered({
+      recommendation_count: dashboard.state.coachQueue.items.length,
+      top_recommendation: dashboard.state.coachQueue.items[0]?.recommendationType,
+    });
+  }, [dashboard.state.coachQueue]);
+
+  const handleFinishSession = useCallback(() => {
+    const sessionId = activeSessionId;
+
+    if (!sessionId) return;
+
+    Alert.alert(
+      'Finish Workout',
+      'All planned work is logged. Finish this session now?',
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Finish',
+          onPress: async () => {
+            try {
+              await finishSession.mutateAsync({ sessionId });
+
+              if (activeSessionPlanDayId) {
+                try {
+                  await markDayCompleted.mutateAsync(activeSessionPlanDayId);
+                } catch (error) {
+                  console.warn('Failed to mark plan day complete from workout home', error);
+                }
+              }
+
+              trackWorkoutHomeHeroTapped({ action: 'finish_session', mode: dashboard.state.hero.mode });
+              router.push({
+                pathname: '/(tabs)/workout/summary',
+                params: { sessionId },
+              });
+            } catch (error: any) {
+              Alert.alert('Unable to finish workout', error?.message || 'Try again.');
+            }
+          },
+        },
+      ],
+    );
+  }, [
+    activeSessionId,
+    activeSessionPlanDayId,
+    dashboard.state.hero.mode,
+    finishSession,
+    markDayCompleted,
+    router,
+  ]);
+
+  const handleResumeSession = useCallback(async () => {
+    trackWorkoutHomeResumeTapped({ mode: dashboard.state.hero.mode });
+
+    if (!user?.id) {
+      router.push('/(tabs)/workout/my-plan');
+      return;
+    }
+
+    const latestActiveSession = await queryClient.fetchQuery({
+      queryKey: workoutKeys.activeSession(),
+      queryFn: () => getActiveSession(user.id),
+    });
+
+    if (latestActiveSession?.id && (latestActiveSession.exercises?.length || 0) > 0) {
+      router.push('/(tabs)/workout/active-session');
+      return;
+    }
+
+    await queryClient.invalidateQueries({ queryKey: workoutKeys.all });
+    Alert.alert(
+      'Session unavailable',
+      'That unfinished session expired when the day rolled over. Open your plan to start the correct workout for today.',
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Open Plan',
+          onPress: () => router.push('/(tabs)/workout/my-plan'),
+        },
+      ],
+    );
+  }, [dashboard.state.hero.mode, queryClient, router, user?.id]);
+
+  const runAction = useCallback((action: WorkoutActionKey) => {
+    switch (action) {
+      case 'resume_session':
+        void handleResumeSession();
+        return;
+      case 'finish_session':
+        handleFinishSession();
+        return;
+      case 'start_workout':
+        trackWorkoutHomeHeroTapped({ action, mode: dashboard.state.hero.mode });
+        if (dashboard.raw.todayEntry?.session_type === 'workout' && dashboard.raw.todayEntry.plan_day_id) {
+          router.push({
+            pathname: '/(tabs)/workout/day-preview',
+            params: { dayId: dashboard.raw.todayEntry.plan_day_id },
+          });
+          return;
+        }
+        router.push('/(tabs)/workout/my-plan');
+        return;
+      case 'view_summary': {
+        trackWorkoutHomeHeroTapped({ action, mode: dashboard.state.hero.mode });
+        const sessionId = dashboard.state.hero.completedSessionId || dashboard.raw.todayEntry?.completed_session_id;
+        if (!sessionId) {
+          router.push('/(tabs)/workout/workout-history');
+          return;
+        }
+        router.push({
+          pathname: '/(tabs)/workout/summary',
+          params: { sessionId },
+        });
+        return;
+      }
+      case 'open_plan':
+        trackWorkoutHomeHeroTapped({ action, mode: dashboard.state.hero.mode });
+        router.push('/(tabs)/workout/my-plan');
+        return;
+      case 'browse_programs':
+      case 'open_programs':
+        trackWorkoutHomeHeroTapped({ action, mode: dashboard.state.hero.mode });
+        router.push('/(tabs)/workout/program-browser');
+        return;
+      case 'generate_plan':
+        trackWorkoutHomeHeroTapped({ action, mode: dashboard.state.hero.mode });
+        router.push('/(tabs)/workout/my-plan');
+        return;
+      case 'open_adaptation':
+        router.push('/(tabs)/workout/adaptation');
+        return;
+      case 'open_history':
+        router.push('/(tabs)/workout/workout-history');
+        return;
+      case 'open_tools':
+        router.push('/(tabs)/workout/tools');
+        return;
+      case 'open_notes':
+        trackWorkoutHomeHeroTapped({ action, mode: dashboard.state.hero.mode });
+        router.push('/(tabs)/workout/workout-notes');
+        return;
+      case 'open_exercise_library':
+        router.push('/(tabs)/workout/exercise-library');
+        return;
+      case 'open_program_builder':
+        router.push('/(tabs)/workout/program-builder');
+        return;
+      case 'import_plan':
+        router.push('/(tabs)/workout/import-plan');
+        return;
+      case 'open_one_rep_max':
+        router.push('/(tabs)/workout/calculators/one-rep-max');
+        return;
+      case 'open_plate_calculator':
+        router.push('/(tabs)/workout/calculators/plate-calculator');
+        return;
+      default:
+        return;
+    }
+  }, [
+    dashboard.raw.todayEntry,
+    dashboard.state.hero.completedSessionId,
+    dashboard.state.hero.mode,
+    handleResumeSession,
+    handleFinishSession,
+    router,
+  ]);
+
+  const quickActions = useMemo(
+    () => dashboard.state.compact.quickActions.map((item) => ({
+      label: item.label,
+      icon: item.icon,
+      onPress: () => {
+        trackWorkoutHomeQuickAccessTapped({ slot: 'quick_action', label: item.label });
+        runAction(item.action);
+      },
+    })),
+    [dashboard.state.compact.quickActions, runAction],
+  );
+
+  const resourceItems = useMemo(
+    () => dashboard.state.compact.resources.map((item) => ({
+      label: item.label,
+      icon: item.icon,
+      onPress: () => {
+        trackWorkoutHomeToolTapped({ slot: 'resource', action: item.label });
+        runAction(item.action);
+      },
+    })),
+    [dashboard.state.compact.resources, runAction],
+  );
+
+  const isInitialLoading =
+    dashboard.isLoading
+    && !dashboard.raw.activePlan
+    && !dashboard.raw.activeSession
+    && !dashboard.raw.todayEntry
+    && dashboard.raw.history.length === 0;
 
   return (
-    <ScrollView
-      style={[styles.container, { backgroundColor: c.bg }]}
-      contentContainerStyle={[
-        styles.content,
-        { paddingTop: insets.top + s.lg, paddingBottom: 100 },
-      ]}
-    >
-      {/* Header */}
-      <MotiView
-        from={{ opacity: 0, translateY: -10 }}
-        animate={{ opacity: 1, translateY: 0 }}
-        transition={{ type: 'timing', duration: animation.duration.normal }}
-        style={[styles.header, { paddingHorizontal: s.xl }]}
+    <PremiumBackground variant="default">
+      <ScrollView
+        style={styles.container}
+        contentContainerStyle={[styles.content, { paddingTop: insets.top + s.lg, paddingBottom: 120 }]}
       >
-        <Text
-          style={[
-            styles.headerLabel,
-            {
-              color: c.textMuted,
-              fontFamily: ty.body.familySemibold,
-              fontSize: ty.sizes.xs,
-              letterSpacing: 1.5,
-              marginBottom: s.xs,
-            },
-          ]}
+        <MotiView
+          from={{ opacity: 0, translateY: -10 }}
+          animate={{ opacity: 1, translateY: 0 }}
+          transition={{ type: 'timing', duration: animation.duration.normal }}
+          style={[styles.header, { paddingHorizontal: s.lg }]}
         >
-          YOUR TRAINING
-        </Text>
-        <Text
-          style={[
-            styles.title,
-            {
-              color: c.text,
-              fontFamily: ty.heading.family,
-              fontSize: ty.sizes.h2,
-            },
-          ]}
-        >
-          Workout
-        </Text>
-      </MotiView>
+          <View style={{ gap: s.xs, flex: 1, minWidth: 0, paddingRight: s.sm }}>
+            <Text
+              style={{
+                color: c.textMuted,
+                fontFamily: ty.body.familySemibold,
+                fontSize: ty.sizes.xs,
+                letterSpacing: 1.4,
+              }}
+            >
+              WORKOUT
+            </Text>
+            <Text
+              numberOfLines={1}
+              adjustsFontSizeToFit
+              minimumFontScale={0.7}
+              style={{
+                color: c.text,
+                fontFamily: ty.heading.family,
+                fontSize: ty.sizes.h2,
+                letterSpacing: -0.5,
+              }}
+            >
+              {dashboard.dateLabel}
+            </Text>
+          </View>
 
-      {/* Tall Vertical Day Pills - Stadium Shape */}
-      <MotiView
-        from={{ opacity: 0, translateX: -20 }}
-        animate={{ opacity: 1, translateX: 0 }}
-        transition={{ type: 'timing', duration: animation.duration.normal, delay: 100 }}
-        style={[styles.dayPillsSection, { marginTop: s.lg, paddingLeft: s.lg }]}
-      >
-        <ScrollView
-          horizontal
-          showsHorizontalScrollIndicator={false}
-          contentContainerStyle={{ paddingRight: s.lg, gap: 10 }}
-        >
-          {weekDays.map((item, i) => {
-            // Priority of styles: Selected > Today > Completed/Missed > Default
-            let borderColor = `${c.border}60`;
-            let borderWidth = 1;
+          <View
+            style={{
+              paddingHorizontal: s.sm,
+              paddingVertical: s.xs,
+              borderRadius: r.pill,
+              backgroundColor: `${c.primary}14`,
+              borderWidth: 1,
+              borderColor: `${c.primary}33`,
+              flexShrink: 0,
+              maxWidth: '38%',
+            }}
+          >
+            <Text
+              numberOfLines={1}
+              adjustsFontSizeToFit
+              minimumFontScale={0.75}
+              style={{
+                color: c.primary,
+                fontFamily: ty.body.familySemibold,
+                fontSize: ty.sizes.xs,
+                letterSpacing: 0.8,
+              }}
+            >
+              {dashboard.state.hero.chipLabel}
+            </Text>
+          </View>
+        </MotiView>
 
-            if (item.isSelected) {
-               borderColor = c.primary; 
-               // Selected overrides others with a fill usually, but let's stick to the pill design
-            } else if (item.isCompleted) {
-              borderColor = c.primary; // Blue ring for completed
-            } else if (item.isMissed) {
-              borderColor = c.error || '#FF4444'; // Red ring for missed
-            } else if (item.isToday) {
-               borderColor = c.primary;
-            }
+        <View style={{ marginTop: s.lg }}>
+          <WorkoutWeekStrip
+            days={dashboard.weekDays.map((day) => ({
+              ...day,
+              onPress: () => {
+                if (day.sessionType === 'workout' && day.planDayId) {
+                  router.push({
+                    pathname: '/(tabs)/workout/day-preview',
+                    params: { dayId: day.planDayId },
+                  });
+                  return;
+                }
+                router.push('/(tabs)/workout/my-plan');
+              },
+            }))}
+          />
+        </View>
 
-            return (
-              <MotiView
-                key={`${item.day}-${i}`}
-                from={{ opacity: 0, scale: 0.9 }}
-                animate={{ opacity: 1, scale: 1 }}
-                transition={{ type: 'spring', damping: 15, delay: 150 + i * 50 }}
+        <View style={{ gap: s.lg, paddingHorizontal: s.lg, marginTop: s.lg }}>
+          {isInitialLoading ? (
+            <GlassCard
+              intensity="medium"
+              style={{
+                borderRadius: r.xl,
+                borderWidth: 1,
+                borderColor: `${c.primary}24`,
+              }}
+            >
+              <Text
+                style={{
+                  color: c.text,
+                  fontFamily: ty.heading.familySemibold,
+                  fontSize: ty.sizes.lg,
+                }}
               >
-                <Pressable
-                  onPress={() => setSelectedDate(item.fullDate)}
-                  style={({ pressed }) => [
-                    styles.dayPill,
-                    {
-                      // Fill logic: Today = Filled. Selected = Filled (Stronger). Others = Surface/Transparent
-                      backgroundColor: item.isSelected 
-                        ? c.primary 
-                        : item.isToday 
-                          ? `${c.primary}40` // Light blue fill for today
-                          : c.surface,
-                      
-                      borderRadius: 28,
-                      borderWidth: item.isSelected ? 0 : borderWidth,
-                      borderColor: borderColor,
-                      transform: [{ scale: pressed ? 0.95 : 1 }],
-                    },
-                    // Shadow for selected
-                    item.isSelected && {
-                      shadowColor: c.primary,
-                      shadowOffset: { width: 0, height: 4 },
-                      shadowOpacity: 0.3,
-                      shadowRadius: 8,
-                    }
-                  ]}
+                Loading workout dashboard...
+              </Text>
+              <Text
+                style={{
+                  color: c.textMuted,
+                  fontFamily: ty.body.family,
+                  fontSize: ty.sizes.sm,
+                  marginTop: s.sm,
+                }}
+              >
+                Pulling today’s session, weekly schedule, and recovery signals together.
+              </Text>
+            </GlassCard>
+          ) : (
+            <>
+              <View style={{ gap: s.sm }}>
+                <Text
+                  style={{
+                    color: c.textMuted,
+                    fontFamily: ty.body.familySemibold,
+                    fontSize: ty.sizes.sm,
+                    letterSpacing: 1.2,
+                  }}
                 >
-                  <Text
-                    style={[
-                      styles.dayLabel,
-                      {
-                        color: item.isSelected ? c.bg : c.textMuted,
-                        fontFamily: ty.body.familySemibold,
-                        fontSize: 10,
-                        letterSpacing: 0.8,
-                      },
-                    ]}
-                  >
-                    {item.day.toUpperCase()}
-                  </Text>
-                  <Text
-                    style={[
-                      styles.dayDate,
-                      {
-                        color: item.isSelected ? c.bg : c.text,
-                        fontFamily: ty.heading.familySemibold,
-                        fontSize: 22,
-                        marginTop: 4,
-                      },
-                    ]}
-                  >
-                    {item.date}
-                  </Text>
-                  
-                  {/* Status Indicator Dot (if not selected/today and has functionality) */}
-                  {!item.isSelected && !item.isToday && (
-                    <View style={{ marginTop: 6, opacity: 0.8 }}>
-                       {item.isCompleted && (
-                         <View style={{ width: 6, height: 6, borderRadius: 3, backgroundColor: c.primary }} />
-                       )}
-                       {item.isMissed && (
-                         <View style={{ width: 6, height: 6, borderRadius: 3, backgroundColor: c.error || '#FF4444' }} />
-                       )}
-                       {item.hasDot && (
-                         <View style={{ width: 6, height: 6, borderRadius: 3, backgroundColor: c.textMuted }} />
-                       )}
-                    </View>
-                  )}
-                </Pressable>
-              </MotiView>
-            );
-          })}
-        </ScrollView>
-      </MotiView>
+                  TODAY'S WORKOUT
+                </Text>
+                <WorkoutPrimaryActionCard
+                  state={dashboard.state.compact.primaryCard}
+                  onPress={() => runAction(dashboard.state.compact.primaryCard.action)}
+                  disabled={dashboard.isRefreshing || isBusy}
+                />
+              </View>
 
-      {/* Quick Access - Ring Icon Buttons */}
-      <MotiView
-        from={{ opacity: 0, translateY: 20 }}
-        animate={{ opacity: 1, translateY: 0 }}
-        transition={{ type: 'timing', duration: animation.duration.normal, delay: 200 }}
-        style={[styles.section, { marginTop: s.xl, paddingHorizontal: s.lg }]}
-      >
-        <Text
-          style={[
-            styles.sectionTitle,
-            {
-              color: c.textMuted,
-              fontFamily: ty.body.familySemibold,
-              fontSize: ty.sizes.sm,
-              letterSpacing: 1.5,
-              marginBottom: s.lg,
-            },
-          ]}
-        >
-          QUICK ACCESS
-        </Text>
-        <View style={styles.shortcuts}>
-          {shortcuts.map((item, index) => (
-            <RingIconButton
-              key={item.label}
-              icon={item.icon}
-              label={item.label}
-              onPress={() => router.push(item.route as any)}
-              size={60}
-              delay={300 + index * 80}
-            />
-          ))}
+              <View style={{ flexDirection: 'row', gap: s.sm }}>
+                <WorkoutUtilityTile
+                  state={dashboard.state.compact.myPlanTile}
+                  onPress={() => runAction(dashboard.state.compact.myPlanTile.action)}
+                />
+                <WorkoutUtilityTile
+                  state={dashboard.state.compact.changeProgramTile}
+                  onPress={() => runAction(dashboard.state.compact.changeProgramTile.action)}
+                />
+              </View>
+
+              <View style={{ gap: s.sm }}>
+                <Text
+                  style={{
+                    color: c.textMuted,
+                    fontFamily: ty.body.familySemibold,
+                    fontSize: ty.sizes.sm,
+                    letterSpacing: 1.2,
+                  }}
+                >
+                  DO NOW
+                </Text>
+                <WorkoutQuickAccessRow items={quickActions} delayBase={160} size={56} />
+              </View>
+
+              <WorkoutToolsGrid items={resourceItems} title="RESOURCES" />
+            </>
+          )}
         </View>
-      </MotiView>
-
-      {/* Tools Section */}
-      <MotiView
-        from={{ opacity: 0, translateY: 20 }}
-        animate={{ opacity: 1, translateY: 0 }}
-        transition={{ type: 'timing', duration: animation.duration.normal, delay: 300 }}
-        style={[styles.section, { marginTop: s.xl, paddingHorizontal: s.lg }]}
-      >
-        <Text
-          style={[
-            styles.sectionTitle,
-            {
-              color: c.primary,
-              fontFamily: ty.body.familySemibold,
-              fontSize: ty.sizes.lg,
-              letterSpacing: 0.5,
-              marginBottom: s.md,
-            },
-          ]}
-        >
-          Tools
-        </Text>
-        <View style={{ flexDirection: 'row', gap: s.md }}>
-          {/* 1RM Calculator */}
-          <View style={{ flex: 1 }}>
-            <Pressable
-              onPress={() => router.push('/(tabs)/workout/calculators/one-rep-max')}
-              style={({ pressed }) => ({ opacity: pressed ? 0.8 : 1 })}
-            >
-              <GlassCard
-                glowEffect
-                intensity="medium"
-                style={{
-                  height: 100,
-                  borderWidth: 1,
-                  borderColor: c.primary + '40'
-                }}
-              >
-                <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center' }}>
-                  <TabBarIcon name="barbell-outline" color={c.primary} size={32} />
-                  <Text style={{
-                    color: c.text,
-                    marginTop: s.sm,
-                    fontFamily: ty.body.familyMedium,
-                    fontSize: ty.sizes.md,
-                    textAlign: 'center'
-                  }}>
-                    1RM
-                  </Text>
-                </View>
-              </GlassCard>
-            </Pressable>
-          </View>
-
-          {/* Plate Calculator */}
-          <View style={{ flex: 1 }}>
-            <Pressable
-              onPress={() => router.push('/(tabs)/workout/calculators/plate-calculator')}
-              style={({ pressed }) => ({ opacity: pressed ? 0.8 : 1 })}
-            >
-              <GlassCard
-                glowEffect
-                intensity="medium"
-                style={{
-                  height: 100,
-                  borderWidth: 1,
-                  borderColor: c.primary + '40'
-                }}
-              >
-                <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center' }}>
-                  <TabBarIcon name="calculator-outline" color={c.primary} size={32} />
-                  <Text style={{
-                    color: c.text,
-                    marginTop: s.sm,
-                    fontFamily: ty.body.familyMedium,
-                    fontSize: ty.sizes.md,
-                    textAlign: 'center'
-                  }}>
-                    Plate Calculator
-                  </Text>
-                </View>
-              </GlassCard>
-            </Pressable>
-          </View>
-        </View>
-      </MotiView>
-
-      {/* Selected Day's Workout Card */}
-      <View style={{ paddingHorizontal: s.lg, marginTop: s.xl }}>
-        <NextWorkoutCard
-          delay={400}
-          workoutName={selectedPlanDay?.name || 'Rest Day'}
-          workoutType={selectedPlanDay 
-            ? `Scheduled for ${selectedDate.toLocaleDateString('en-US', { weekday: 'long' })}` 
-            : 'No workout scheduled'}
-          duration={(selectedPlanDay as any)?.duration_minutes || 0}
-          onPress={() => {
-            if (selectedPlanDay?.id) {
-              router.push({
-                pathname: '/(tabs)/workout/day-preview',
-                params: { dayId: selectedPlanDay.id }
-              });
-            }
-          }}
-        />
-      </View>
-    </ScrollView >
+      </ScrollView>
+    </PremiumBackground>
   );
 }
 
 const styles = StyleSheet.create({
   container: {
     flex: 1,
+    backgroundColor: 'transparent',
   },
   content: {
-    flexGrow: 1,
+    paddingBottom: 120,
   },
   header: {
-    marginBottom: 8,
-  },
-  headerLabel: {},
-  title: {
-    letterSpacing: -0.5,
-  },
-  dayPillsSection: {},
-  dayPill: {
-    width: 52,
-    height: 88,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  dayLabel: {},
-  dayDate: {},
-  section: {},
-  sectionTitle: {},
-  shortcuts: {
     flexDirection: 'row',
-    justifyContent: 'space-around',
+    alignItems: 'center',
+    justifyContent: 'space-between',
   },
 });

@@ -31,7 +31,6 @@ export default function PlateCalculatorScreen() {
                         <PlateCalculator
                             initialWeight={135}
                             onClose={() => router.back()}
-                            animated={false}
                         />
                     </View>
                 </View>

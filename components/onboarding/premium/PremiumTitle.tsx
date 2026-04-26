@@ -1,9 +1,9 @@
 import React from 'react';
 import { View, Text, StyleSheet, Platform } from 'react-native';
-import { LinearGradient } from 'expo-linear-gradient';
+import Svg, { Defs, LinearGradient as SvgGradient, Stop, Text as SvgText } from 'react-native-svg';
 import { metriqfitTheme } from '../../../lib/theme';
 
-const { colors: c, spacing: s, type: ty, gradients: g } = metriqfitTheme;
+const { colors: c, spacing: s, gradients: g } = metriqfitTheme;
 
 interface PremiumTitleProps {
   line1: string;
@@ -12,6 +12,11 @@ interface PremiumTitleProps {
 }
 
 export function PremiumTitle({ line1, line2Gradient, subtitle }: PremiumTitleProps) {
+  const gradientId = React.useMemo(
+    () => `onboarding-title-${line1}-${line2Gradient}`.replace(/[^a-z0-9_-]/gi, '').toLowerCase(),
+    [line1, line2Gradient]
+  );
+
   const renderGradientText = () => {
     if (Platform.OS === 'web') {
       return (
@@ -32,16 +37,33 @@ export function PremiumTitle({ line1, line2Gradient, subtitle }: PremiumTitlePro
     }
 
     return (
-      <View style={styles.gradientContainer}>
-        <LinearGradient
-          colors={g.onboardingTitle as any}
-          start={{ x: 0, y: 0 }}
-          end={{ x: 1, y: 0 }}
-          style={StyleSheet.absoluteFill}
-        />
-        <Text style={[styles.titleGradient, { color: g.onboardingTitle[0] }]}>
+      <View style={styles.gradientContainer} accessible accessibilityRole="header" accessibilityLabel={line2Gradient}>
+        <Text style={[styles.titleGradient, styles.gradientTextSizer]}>
           {line2Gradient}
         </Text>
+        <Svg
+          pointerEvents="none"
+          width="100%"
+          height={styles.titleGradient.lineHeight as number}
+          style={styles.gradientSvg}
+        >
+          <Defs>
+            <SvgGradient id={gradientId} x1="0%" y1="0%" x2="100%" y2="0%">
+              <Stop offset="0%" stopColor={g.onboardingTitle[0]} />
+              <Stop offset="100%" stopColor={g.onboardingTitle[1]} />
+            </SvgGradient>
+          </Defs>
+          <SvgText
+            x="0"
+            y={30}
+            fill={`url(#${gradientId})`}
+            fontSize={styles.titleGradient.fontSize as number}
+            fontFamily="Unbounded_700Bold"
+            fontWeight="700"
+          >
+            {line2Gradient}
+          </SvgText>
+        </Svg>
       </View>
     );
   };
@@ -63,6 +85,7 @@ const styles = StyleSheet.create({
   },
   gradientContainer: {
     position: 'relative',
+    justifyContent: 'center',
   },
   titleLine1: {
     fontSize: 30,
@@ -74,6 +97,12 @@ const styles = StyleSheet.create({
     fontSize: 30,
     fontFamily: 'Unbounded_700Bold',
     lineHeight: 38,
+  },
+  gradientTextSizer: {
+    opacity: 0,
+  },
+  gradientSvg: {
+    ...StyleSheet.absoluteFillObject,
   },
   subtitle: {
     fontSize: 14,

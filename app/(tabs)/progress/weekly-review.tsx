@@ -1,119 +1,246 @@
-import { StyleSheet, View, Text, Pressable, ScrollView } from 'react-native';
+import React, { useEffect } from 'react';
+import { ActivityIndicator, Pressable, ScrollView, StyleSheet, Text, useWindowDimensions, View } from 'react-native';
 import { useRouter } from 'expo-router';
-import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { useTokens } from '../../../lib/theme';
-import { TabBarIcon } from '../../../components/navigation/TabBarIcon';
+import { ProgressSectionShell, WeeklyReviewSummary } from '../../../components/progress';
 import { GlassCard } from '../../../components/premium/GlassCard';
-import { useNutritionStats } from '../../../hooks/useNutrition';
-import { useUserDashboard } from '../../../hooks/useUser';
+import { SubscriptionFeatureGate } from '../../../components/premium/SubscriptionFeatureGate';
+import { useFeatureAccess } from '../../../hooks/useSubscription';
+import { useProgressWeeklyReview } from '../../../hooks/useProgressReview';
+import {
+  trackEvent,
+  trackProgressReviewCtaTapped,
+  trackProgressWeeklyReviewViewed,
+} from '../../../lib/analytics';
+import { useTokens } from '../../../lib/theme';
+
+function weightDirectionLabel(direction: 'up' | 'down' | 'flat' | 'unknown') {
+  if (direction === 'up') return 'Moving up';
+  if (direction === 'down') return 'Moving down';
+  if (direction === 'flat') return 'Holding steady';
+  return 'Not enough data';
+}
 
 export default function WeeklyReviewScreen() {
   const { c, s, ty, r } = useTokens();
   const router = useRouter();
-  const insets = useSafeAreaInsets();
+  const { width } = useWindowDimensions();
+  const analyticsAccess = useFeatureAccess('advanced_analytics');
+  const { data: snapshot, isLoading } = useProgressWeeklyReview();
+  const useStackedMetricCards = width < 440;
 
-  // Real data
-  const { data: stats } = useNutritionStats(7);
-  const { calorieTarget } = useUserDashboard();
+  useEffect(() => {
+    if (snapshot) {
+      trackProgressWeeklyReviewViewed({ status: snapshot.status });
+    }
+  }, [snapshot]);
 
-  // Calculate averages
-  const days = stats ? Object.values(stats) : [];
-  const avgCalories = days.length > 0
-    ? Math.round(days.reduce((acc, curr) => acc + curr.calories, 0) / days.length)
-    : 0;
-  const avgProtein = days.length > 0
-    ? Math.round(days.reduce((acc, curr) => acc + curr.protein, 0) / days.length)
-    : 0;
+  useEffect(() => {
+    if (!analyticsAccess.isLoading && !analyticsAccess.hasAccess) {
+      trackEvent('feature_gate_viewed', {
+        feature: 'advanced_analytics',
+        source: 'progress_weekly_review',
+        required_tier: analyticsAccess.upgradeTier,
+      });
+    }
+  }, [analyticsAccess.hasAccess, analyticsAccess.isLoading, analyticsAccess.upgradeTier]);
+
+  if ((isLoading || analyticsAccess.isLoading) && !snapshot) {
+    return (
+      <View style={[styles.loadingContainer, { backgroundColor: c.bg }]}>
+        <ActivityIndicator size="large" color={c.primary} />
+      </View>
+    );
+  }
+
+  if (!analyticsAccess.hasAccess) {
+    return (
+      <ProgressSectionShell
+        title="Weekly Review"
+        primarySection="review"
+        secondarySection="review"
+        secondaryItem="weekly"
+      >
+        <View style={{ paddingHorizontal: s.lg, paddingBottom: 80 }}>
+          <SubscriptionFeatureGate
+            requiredTier={analyticsAccess.upgradeTier}
+            title="Unlock weekly review"
+            subtitle="Weekly review and coaching summaries are part of Premium analytics."
+            ctaLabel="See Premium Plans"
+          />
+        </View>
+      </ProgressSectionShell>
+    );
+  }
+
+  if (!snapshot) return null;
 
   return (
-    <View style={[styles.container, { backgroundColor: c.bg, paddingTop: insets.top }]}>
-      {/* Header */}
-      <View style={[styles.header, { paddingHorizontal: s.lg }]}>
-        <Pressable
-          onPress={() => router.back()}
-          style={[styles.backButton, { backgroundColor: c.surface }]}
-          accessibilityLabel="Go back"
-          accessibilityRole="button"
-        >
-          <TabBarIcon name="chevron-back" color={c.text} size={24} />
-        </Pressable>
-        <Text
+    <ProgressSectionShell
+      title="Weekly Review"
+      primarySection="review"
+      secondarySection="review"
+      secondaryItem="weekly"
+    >
+      <ScrollView
+        contentContainerStyle={{ paddingHorizontal: s.lg, paddingBottom: 80, gap: s.lg }}
+        showsVerticalScrollIndicator={false}
+      >
+        <WeeklyReviewSummary
+          status={snapshot.status}
+          headline={snapshot.headline}
+          subheadline={snapshot.subheadline}
+        />
+
+        <View
           style={[
-            styles.title,
+            styles.duoRow,
             {
-              color: c.text,
-              fontFamily: ty.heading.familySemibold,
-              fontSize: ty.sizes.xl,
+              gap: s.md,
+              flexDirection: useStackedMetricCards ? 'column' : 'row',
             },
           ]}
         >
-          Weekly Review
-        </Text>
-        <View style={styles.placeholder} />
-      </View>
+          <GlassCard style={{ padding: 18, flex: 1 }}>
+            <Text style={{ color: c.textMuted, fontFamily: ty.body.familySemibold, fontSize: ty.sizes.xs }}>
+              Best metric
+            </Text>
+            <Text style={{ color: c.text, fontFamily: ty.heading.familySemibold, fontSize: ty.sizes.lg, marginTop: s.md }}>
+              {snapshot.bestMetric.label}
+            </Text>
+            <Text style={{ color: c.primary, fontFamily: ty.body.familySemibold, fontSize: ty.sizes.md, marginTop: s.xs }}>
+              {snapshot.bestMetric.value}
+            </Text>
+            <Text style={{ color: c.textMuted, fontFamily: ty.body.family, fontSize: ty.sizes.xs, marginTop: s.sm }}>
+              {snapshot.bestMetric.detail}
+            </Text>
+          </GlassCard>
 
-      {/* Content */}
-      <ScrollView contentContainerStyle={[styles.content, { padding: s.lg }]}>
-        <GlassCard>
-          <Text style={{ color: c.textMuted, fontFamily: ty.body.familySemibold, marginBottom: 8, textTransform: 'uppercase', fontSize: 10 }}>
-            Last 7 Days Average
+          <GlassCard style={{ padding: 18, flex: 1 }}>
+            <Text style={{ color: c.textMuted, fontFamily: ty.body.familySemibold, fontSize: ty.sizes.xs }}>
+              Weakest area
+            </Text>
+            <Text style={{ color: c.text, fontFamily: ty.heading.familySemibold, fontSize: ty.sizes.lg, marginTop: s.md }}>
+              {snapshot.weakestArea.label}
+            </Text>
+            <Text style={{ color: c.warning, fontFamily: ty.body.familySemibold, fontSize: ty.sizes.md, marginTop: s.xs }}>
+              {snapshot.weakestArea.value}
+            </Text>
+            <Text style={{ color: c.textMuted, fontFamily: ty.body.family, fontSize: ty.sizes.xs, marginTop: s.sm }}>
+              {snapshot.weakestArea.detail}
+            </Text>
+          </GlassCard>
+        </View>
+
+        <GlassCard style={{ padding: 18 }}>
+          <Text style={{ color: c.text, fontFamily: ty.heading.familySemibold, fontSize: ty.sizes.md }}>
+            Training block
           </Text>
+          <Text style={{ color: c.text, fontFamily: ty.heading.familySemibold, fontSize: ty.sizes.h3, marginTop: s.md }}>
+            {snapshot.training.sessionsCompleted} sessions
+          </Text>
+          <Text style={{ color: c.textMuted, fontFamily: ty.body.family, fontSize: ty.sizes.sm, marginTop: s.xs }}>
+            Volume {snapshot.training.volumeDirection}
+            {snapshot.training.volumeChangePercent != null
+              ? ` ${snapshot.training.volumeChangePercent > 0 ? '+' : ''}${snapshot.training.volumeChangePercent}%`
+              : ' --'}
+          </Text>
+          <Text style={{ color: c.textMuted, fontFamily: ty.body.family, fontSize: ty.sizes.sm, marginTop: s.sm }}>
+            {snapshot.training.consistencySummary}
+          </Text>
+        </GlassCard>
 
-          <View style={styles.row}>
-            <View>
-              <Text style={{ color: c.text, fontSize: 32, fontFamily: ty.heading.family }}>
-                {avgCalories}
-              </Text>
-              <Text style={{ color: c.textMuted, fontSize: 12 }}>Avg Calories</Text>
-            </View>
-            <View>
-              <Text style={{ color: c.text, fontSize: 32, fontFamily: ty.heading.family }}>
-                {avgProtein}g
-              </Text>
-              <Text style={{ color: c.textMuted, fontSize: 12 }}>Avg Protein</Text>
-            </View>
-          </View>
-
-          <View style={{ marginTop: 16, borderTopWidth: 1, borderTopColor: c.border, paddingTop: 16 }}>
-            <Text style={{ color: c.primary, textAlign: 'center' }}>
-              {avgCalories < (calorieTarget || 2000) ? 'Below Target' : 'On/Over Target'} of {calorieTarget || 2000} kcal
+        <GlassCard style={{ padding: 18 }}>
+          <Text style={{ color: c.text, fontFamily: ty.heading.familySemibold, fontSize: ty.sizes.md }}>
+            Body block
+          </Text>
+          <Text style={{ color: c.text, fontFamily: ty.body.familySemibold, fontSize: ty.sizes.md, marginTop: s.md }}>
+            {weightDirectionLabel(snapshot.body.weightDirection)}
+          </Text>
+          <Text style={{ color: c.textMuted, fontFamily: ty.body.family, fontSize: ty.sizes.sm, marginTop: s.xs }}>
+            Weight delta {snapshot.body.weightDeltaKg == null ? '--' : `${snapshot.body.weightDeltaKg > 0 ? '+' : ''}${snapshot.body.weightDeltaKg} kg`}
+            {' · '}
+            Body-fat delta {snapshot.body.bodyFatDelta == null ? 'limited confidence' : `${snapshot.body.bodyFatDelta > 0 ? '+' : ''}${snapshot.body.bodyFatDelta}%`}
+          </Text>
+          <Text style={{ color: c.textMuted, fontFamily: ty.body.family, fontSize: ty.sizes.sm, marginTop: s.sm }}>
+            {snapshot.body.circumferenceDelta
+              ? `Waist ${snapshot.body.circumferenceDelta.waistCm == null ? '--' : `${snapshot.body.circumferenceDelta.waistCm > 0 ? '+' : ''}${snapshot.body.circumferenceDelta.waistCm} cm`} · Hips ${snapshot.body.circumferenceDelta.hipsCm == null ? '--' : `${snapshot.body.circumferenceDelta.hipsCm > 0 ? '+' : ''}${snapshot.body.circumferenceDelta.hipsCm} cm`}`
+              : 'Circumference trends are limited this week.'}
+          </Text>
+          <View
+            style={[
+              styles.inlineBadge,
+              {
+                marginTop: s.md,
+                borderRadius: r.pill,
+                backgroundColor: snapshot.body.confidence === 'high' ? `${c.success}14` : `${c.warning}14`,
+              },
+            ]}
+          >
+            <Text
+              style={{
+                color: snapshot.body.confidence === 'high' ? c.success : c.warning,
+                fontFamily: ty.body.familySemibold,
+                fontSize: ty.sizes.xs,
+              }}
+            >
+              {snapshot.body.confidence === 'high' ? 'High confidence' : 'Limited confidence'}
             </Text>
           </View>
         </GlassCard>
+
+        <GlassCard style={{ padding: 18 }}>
+          <Text style={{ color: c.text, fontFamily: ty.heading.familySemibold, fontSize: ty.sizes.md }}>
+            Check-in readiness
+          </Text>
+          <Text style={{ color: c.textMuted, fontFamily: ty.body.family, fontSize: ty.sizes.sm, marginTop: s.md }}>
+            {snapshot.checkInStatus.state === 'fresh'
+              ? 'You have a fresh body checkpoint this week.'
+              : snapshot.checkInStatus.state === 'stale'
+                ? 'Body checkpoints are getting stale. A new weekly check-in would sharpen this review.'
+                : 'No photo checkpoints yet. A weekly check-in will unlock better body context.'}
+          </Text>
+          <Pressable
+            onPress={() => {
+              trackProgressReviewCtaTapped({ cta_id: 'weekly_open_checkin' });
+              router.push('/check-in');
+            }}
+            style={[styles.primaryButton, { marginTop: s.md, borderRadius: r.md, backgroundColor: c.primary }]}
+          >
+            <Text style={{ color: c.bg, fontFamily: ty.body.familySemibold }}>Open Weekly Check-in</Text>
+          </Pressable>
+        </GlassCard>
+
+        <GlassCard style={{ padding: 18, marginBottom: s.lg }}>
+          <Text style={{ color: c.text, fontFamily: ty.heading.familySemibold, fontSize: ty.sizes.md }}>
+            Focus next week
+          </Text>
+          <Text style={{ color: c.textMuted, fontFamily: ty.body.family, fontSize: ty.sizes.sm, marginTop: s.md, lineHeight: 20 }}>
+            {snapshot.nextWeekFocus}
+          </Text>
+        </GlassCard>
       </ScrollView>
-    </View>
+    </ProgressSectionShell>
   );
 }
 
 const styles = StyleSheet.create({
-  container: {
+  loadingContainer: {
     flex: 1,
-  },
-  header: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    paddingVertical: 16,
-  },
-  backButton: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
     alignItems: 'center',
     justifyContent: 'center',
   },
-  title: {
-    letterSpacing: -0.3,
-  },
-  placeholder: {
-    width: 40,
-  },
-  content: {
-    paddingBottom: 40,
-  },
-  row: {
+  duoRow: {
     flexDirection: 'row',
-    justifyContent: 'space-around',
-    marginTop: 8
-  }
+  },
+  inlineBadge: {
+    alignSelf: 'flex-start',
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+  },
+  primaryButton: {
+    minHeight: 48,
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: 16,
+  },
 });

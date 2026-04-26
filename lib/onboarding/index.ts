@@ -1,4 +1,6 @@
 export { OnboardingProvider, useOnboarding } from './OnboardingContext';
+export { normalizeOnboardingAnswers } from './normalize';
+export { resolvePreferredDaysOff, formatWeekday } from './schedule';
 export type { 
   OnboardingData,
   GoalType,
@@ -14,4 +16,19 @@ export type {
   Injury,
   AllergyExclusion,
   RefusedFood,
+  ProgressionPreference,
+  SessionEmphasis,
+  PrepDiscipline,
+  PrepPhase,
+  // NEW: Enhanced Nutrition Types
+  ProteinSource,
+  CarbSource,
+  FatSource,
+  WakeTime,
+  FirstMealDelay,
+  LastMealBeforeBed,
+  TrainingTime,
+  CarbTolerance,
+  CookingLevel,
 } from './OnboardingContext';
+export type { NormalizedWeekday, PreferredDaysOffResolution } from './schedule';

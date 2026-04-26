@@ -7,9 +7,12 @@ import { TabBarIcon } from '../../components/navigation/TabBarIcon';
 
 interface ChatInputBarProps {
   onSend?: (message: string) => void;
+  onQuickActionsPress?: () => void;
   placeholder?: string;
   maxLength?: number;
   disabled?: boolean;
+  quickActionLabel?: string;
+  bottomOffset?: number;
 }
 
 /**
@@ -17,9 +20,12 @@ interface ChatInputBarProps {
  */
 export function ChatInputBar({
   onSend,
+  onQuickActionsPress,
   placeholder = 'Ask your AI coach...',
   maxLength = 500,
   disabled = false,
+  quickActionLabel = 'Open coach actions',
+  bottomOffset = 0,
 }: ChatInputBarProps) {
   const { c, s, ty, r, glass } = useTokens();
   const insets = useSafeAreaInsets();
@@ -44,7 +50,7 @@ export function ChatInputBar({
           borderTopColor: `${c.primary}30`,
           paddingHorizontal: s.lg,
           paddingTop: s.md,
-          paddingBottom: insets.bottom > 0 ? insets.bottom : s.md,
+          paddingBottom: (insets.bottom > 0 ? insets.bottom : s.md) + bottomOffset,
         },
         Platform.OS === 'web' && {
           backdropFilter: 'blur(12px)',
@@ -72,6 +78,28 @@ export function ChatInputBar({
           } as any,
         ]}
       >
+        {onQuickActionsPress ? (
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel={quickActionLabel}
+            onPress={onQuickActionsPress}
+            style={({ pressed }) => [
+              styles.quickActionButton,
+              {
+                borderRadius: r.md,
+                borderWidth: 1,
+                borderColor: `${c.primary}40`,
+                backgroundColor: pressed ? c.surface2 : 'transparent',
+              },
+            ]}
+          >
+            <TabBarIcon
+              name="sparkles"
+              color={c.primary}
+              size={18}
+            />
+          </Pressable>
+        ) : null}
         <TextInput
           style={[
             styles.input,
@@ -98,6 +126,8 @@ export function ChatInputBar({
         >
           {/* Ring send button with glow */}
           <Pressable
+            accessibilityRole="button"
+            accessibilityLabel={hasMessage ? 'Send message to coach' : 'Enter a message to enable send'}
             style={({ pressed }) => [
               styles.sendButton,
               {
@@ -160,6 +190,13 @@ const styles = StyleSheet.create({
     alignItems: 'flex-end',
     paddingHorizontal: 12,
     paddingVertical: 8,
+    gap: 8,
+  },
+  quickActionButton: {
+    width: 40,
+    height: 40,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   input: {
     flex: 1,

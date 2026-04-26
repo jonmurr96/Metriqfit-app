@@ -10,6 +10,7 @@
 
 import { supabase } from '../lib/supabase';
 import type { Database } from '../lib/supabase/types';
+import { awardXP } from './gamificationService';
 
 // ============================================================================
 // Types
@@ -59,6 +60,19 @@ export async function logWater(
 
   if (error) throw error;
   if (!data) throw new Error('Failed to log water');
+
+  try {
+    const dateStr = (loggedAt || new Date().toISOString()).split('T')[0];
+    const summary = await getDailyWaterSummary(userId, dateStr);
+    
+    // Only attempt string match if reached 100% target or beyond
+    if (summary.percentageComplete >= 100) {
+      await awardXP(userId, 'water_goal_hit');
+    }
+  } catch (err) {
+    console.error('Gamification tracking failed for water', err);
+  }
+
   return data;
 }
 
@@ -81,20 +95,31 @@ export async function deleteWaterLog(logId: string): Promise<void> {
  * @param date - Date in YYYY-MM-DD format
  */
 export async function getDailyWaterLogs(userId: string, date: string): Promise<WaterLog[]> {
-  // Get start and end of day in ISO format
-  const startOfDay = `${date}T00:00:00.000Z`;
-  const endOfDay = `${date}T23:59:59.999Z`;
-
+  // Use PostgreSQL's date casting to compare only the date part in the database's timezone
+  // This avoids timezone conversion issues by comparing dates directly
   const { data, error } = await supabase
     .from('water_logs')
     .select('*')
     .eq('user_id', userId)
-    .gte('logged_at', startOfDay)
-    .lte('logged_at', endOfDay)
+    .gte('logged_at', `${date}T00:00:00`)
+    .lt('logged_at', `${date}T23:59:59.999`)
     .order('logged_at', { ascending: false });
 
   if (error) throw error;
-  return data || [];
+
+  // Additional client-side filtering to ensure we only get logs from the specified date
+  // This handles any edge cases where timezone differences might cause issues
+  const filtered = (data || []).filter(log => {
+    const logDate = new Date(log.logged_at);
+    const targetDate = new Date(`${date}T12:00:00`); // Use noon to avoid timezone edge cases
+    return (
+      logDate.getFullYear() === targetDate.getFullYear() &&
+      logDate.getMonth() === targetDate.getMonth() &&
+      logDate.getDate() === targetDate.getDate()
+    );
+  });
+
+  return filtered;
 }
 
 /**

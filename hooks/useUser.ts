@@ -6,7 +6,16 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useAuth } from '../lib/auth/AuthProvider';
 import { supabase } from '../lib/supabase';
-import type { Database } from '../lib/supabase/types';
+import type { Database, Json } from '../lib/supabase/types';
+import {
+  DEFAULT_DISPLAY_PREFERENCES,
+  DEFAULT_NOTIFICATION_PREFERENCES,
+  normalizeDisplayPreferences,
+  normalizeNotificationPreferences,
+  type DisplayPreferences,
+  type NotificationPreferences,
+} from '../lib/preferences';
+import { DEFAULT_MEAL_TIMES, type MealTimes } from '../services/mealTimesService';
 
 // Types
 export interface Profile {
@@ -20,6 +29,10 @@ export interface Profile {
   current_weight_kg: number | null;
   unit_system: 'metric' | 'imperial';
   avatar_url: string | null;
+  meal_times: MealTimes | null;
+  notification_preferences: NotificationPreferences | null;
+  display_preferences: DisplayPreferences | null;
+  push_token: string | null;
   created_at: string;
   updated_at: string;
 }
@@ -52,6 +65,15 @@ export interface Measurement {
   created_at: string;
 }
 
+export interface OnboardingAnswersRecord {
+  id: string;
+  user_id: string;
+  answers: Database['public']['Tables']['onboarding_answers']['Row']['answers'];
+  completed_at: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
 // Query Keys
 export const userKeys = {
   all: ['user'] as const,
@@ -62,6 +84,29 @@ export const userKeys = {
     [...userKeys.measurements(userId), 'history', limit] as const,
   onboarding: (userId: string) => [...userKeys.all, 'onboarding', userId] as const,
 };
+
+function normalizeMealTimes(value: unknown): MealTimes {
+  const raw = value && typeof value === 'object' ? (value as Partial<MealTimes>) : {};
+  return {
+    breakfast: typeof raw.breakfast === 'string' ? raw.breakfast : DEFAULT_MEAL_TIMES.breakfast,
+    lunch: typeof raw.lunch === 'string' ? raw.lunch : DEFAULT_MEAL_TIMES.lunch,
+    dinner: typeof raw.dinner === 'string' ? raw.dinner : DEFAULT_MEAL_TIMES.dinner,
+    snack: typeof raw.snack === 'string' ? raw.snack : DEFAULT_MEAL_TIMES.snack,
+  };
+}
+
+function toProfile(row: Database['public']['Tables']['profiles']['Row']): Profile {
+  return {
+    ...row,
+    meal_times: normalizeMealTimes(row.meal_times),
+    notification_preferences: normalizeNotificationPreferences(
+      row.notification_preferences ?? DEFAULT_NOTIFICATION_PREFERENCES,
+    ),
+    display_preferences: normalizeDisplayPreferences(
+      row.display_preferences ?? DEFAULT_DISPLAY_PREFERENCES,
+    ),
+  };
+}
 
 /**
  * Get user profile
@@ -74,7 +119,7 @@ export async function getProfile(userId: string): Promise<Profile | null> {
     .single();
 
   if (error && error.code !== 'PGRST116') throw error;
-  return data;
+  return data ? toProfile(data) : null;
 }
 
 /**
@@ -104,6 +149,20 @@ export async function getMeasurements(userId: string, limit = 30): Promise<Measu
 
   if (error) throw error;
   return data || [];
+}
+
+/**
+ * Get onboarding answers payload.
+ */
+export async function getOnboardingAnswers(userId: string): Promise<OnboardingAnswersRecord | null> {
+  const { data, error } = await supabase
+    .from('onboarding_answers')
+    .select('*')
+    .eq('user_id', userId)
+    .single();
+
+  if (error && error.code !== 'PGRST116') throw error;
+  return data;
 }
 
 /**
@@ -160,18 +219,39 @@ export async function updateProfile(
   userId: string,
   updates: Partial<Omit<Profile, 'id' | 'user_id' | 'created_at' | 'updated_at'>>
 ): Promise<Profile> {
+  const profileUpdates: Database['public']['Tables']['profiles']['Update'] = {
+    updated_at: new Date().toISOString(),
+  };
+
+  if (updates.email !== undefined) profileUpdates.email = updates.email;
+  if (updates.first_name !== undefined) profileUpdates.first_name = updates.first_name;
+  if (updates.last_name !== undefined) profileUpdates.last_name = updates.last_name;
+  if (updates.date_of_birth !== undefined) profileUpdates.date_of_birth = updates.date_of_birth;
+  if (updates.sex !== undefined) profileUpdates.sex = updates.sex;
+  if (updates.height_cm !== undefined) profileUpdates.height_cm = updates.height_cm;
+  if (updates.current_weight_kg !== undefined) {
+    profileUpdates.current_weight_kg = updates.current_weight_kg;
+  }
+  if (updates.unit_system !== undefined) profileUpdates.unit_system = updates.unit_system;
+  if (updates.avatar_url !== undefined) profileUpdates.avatar_url = updates.avatar_url;
+  if (updates.push_token !== undefined) profileUpdates.push_token = updates.push_token;
+  if (updates.meal_times !== undefined) profileUpdates.meal_times = updates.meal_times as unknown as Json;
+  if (updates.notification_preferences !== undefined) {
+    profileUpdates.notification_preferences = updates.notification_preferences as unknown as Json;
+  }
+  if (updates.display_preferences !== undefined) {
+    profileUpdates.display_preferences = updates.display_preferences as unknown as Json;
+  }
+
   const { data, error } = await supabase
     .from('profiles')
-    .update({
-      ...updates,
-      updated_at: new Date().toISOString()
-    } satisfies Database['public']['Tables']['profiles']['Update'])
+    .update(profileUpdates)
     .eq('id', userId)
     .select()
     .single();
 
   if (error) throw error;
-  return data!;
+  return toProfile(data!);
 }
 
 /**
@@ -294,6 +374,20 @@ export function useUserTargets() {
     queryFn: () => getUserTargets(user!.id),
     enabled: !!user,
     staleTime: 5 * 60 * 1000,
+  });
+}
+
+/**
+ * Get onboarding answers JSON payload.
+ */
+export function useOnboardingAnswers() {
+  const { user } = useAuth();
+
+  return useQuery({
+    queryKey: userKeys.onboarding(user?.id || ''),
+    queryFn: () => getOnboardingAnswers(user!.id),
+    enabled: !!user,
+    staleTime: 10 * 60 * 1000,
   });
 }
 
@@ -425,4 +519,35 @@ export function useStreak() {
   });
 }
 
+/**
+ * Count workout sessions completed this week (Monday through today)
+ */
+async function getWorkoutsThisWeek(userId: string): Promise<number> {
+  const now = new Date();
+  // Get start of week (Monday)
+  const dayOfWeek = now.getDay(); // 0 = Sun, 1 = Mon...
+  const daysToMonday = dayOfWeek === 0 ? 6 : dayOfWeek - 1;
+  const monday = new Date(now);
+  monday.setDate(now.getDate() - daysToMonday);
+  monday.setHours(0, 0, 0, 0);
 
+  const { count, error } = await supabase
+    .from('workout_sessions')
+    .select('*', { count: 'exact', head: true })
+    .eq('user_id', userId)
+    .gte('started_at', monday.toISOString());
+
+  if (error) throw error;
+  return count || 0;
+}
+
+export function useWorkoutsThisWeek() {
+  const { user } = useAuth();
+
+  return useQuery({
+    queryKey: ['user', 'workoutsThisWeek', user?.id],
+    queryFn: () => getWorkoutsThisWeek(user!.id),
+    enabled: !!user,
+    staleTime: 5 * 60 * 1000, // 5 minutes
+  });
+}

@@ -7,18 +7,20 @@ import { useAuth } from '../../lib/auth/AuthProvider';
 import { useTokens } from '../../lib/theme';
 import { AnimatedCalorieRing } from '../../components/premium/AnimatedCalorieRing';
 import { GlassCard } from '../../components/premium/GlassCard';
-import { getDailyTotals } from '../../services/nutritionService';
 import { getUserTargets } from '../../hooks/useUser';
 
-interface MacroData {
-  consumed: number;
-  target: number;
+interface MacroDashboardProps {
+  consumed?: {
+    calories: number;
+    protein: number;
+    carbs: number;
+    fat: number;
+  } | null;
 }
 
-export function MacroDashboard() {
-  const { c, s, ty, r } = useTokens();
+export function MacroDashboard({ consumed }: MacroDashboardProps = {}) {
+  const { c, s, ty } = useTokens();
   const { user } = useAuth();
-  const today = new Date().toISOString().split('T')[0];
 
   // Fetch user targets
   const {
@@ -33,21 +35,8 @@ export function MacroDashboard() {
     staleTime: 5 * 60 * 1000, // 5 minutes
   });
 
-  // Fetch today's consumed totals
-  const {
-    data: consumed,
-    isLoading: consumedLoading,
-    error: consumedError,
-    refetch: refetchConsumed
-  } = useQuery({
-    queryKey: ['nutrition-daily-total', user?.id, today],
-    queryFn: () => getDailyTotals(user!.id, today),
-    enabled: !!user,
-    refetchInterval: 30000, // Refresh every 30 seconds
-  });
-
   // Show error state
-  if (targetsError || consumedError) {
+  if (targetsError) {
     return (
       <View style={[styles.container, { paddingVertical: s.xl }]}>
         <Ionicons name="cloud-offline-outline" size={32} color={c.textMuted} />
@@ -65,7 +54,6 @@ export function MacroDashboard() {
         <Pressable
           onPress={() => {
             refetchTargets();
-            refetchConsumed();
           }}
           style={{ padding: s.sm }}
         >
@@ -76,7 +64,7 @@ export function MacroDashboard() {
   }
 
   // Show loading state
-  if (targetsLoading || consumedLoading) {
+  if (targetsLoading) {
     return (
       <View style={[styles.container, { paddingVertical: s.xl }]}>
         <ActivityIndicator size="large" color={c.primary} />
@@ -102,9 +90,13 @@ export function MacroDashboard() {
     fat: { consumed: Math.round(consumed?.fat || 0), target: targets?.fat_g || 65 },
   };
 
-  const proteinPercent = Math.round((data.protein.consumed / data.protein.target) * 100);
-  const carbsPercent = Math.round((data.carbs.consumed / data.carbs.target) * 100);
-  const fatPercent = Math.round((data.fat.consumed / data.fat.target) * 100);
+  const safePercent = (consumed: number, target: number) => {
+    if (!target || target <= 0) return 0;
+    return Math.round((consumed / target) * 100);
+  };
+  const proteinPercent = safePercent(data.protein.consumed, data.protein.target);
+  const carbsPercent = safePercent(data.carbs.consumed, data.carbs.target);
+  const fatPercent = safePercent(data.fat.consumed, data.fat.target);
 
   const macroCards = [
     {

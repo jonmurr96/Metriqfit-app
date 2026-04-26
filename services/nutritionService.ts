@@ -1,11 +1,13 @@
 // Nutrition Service - Supabase Integration
+import Constants from 'expo-constants';
 import { supabase } from '../lib/supabase';
 import type { Database } from '../lib/supabase/types';
+import { getNutritionPlanMeal, repairNutritionPlanMappings } from './planService';
+import { toLocalDateKey } from '../lib/home/dashboard-state';
+import { awardXP, updateStreak } from './gamificationService';
 
 // Database row types
 type FoodItemRow = Database['public']['Tables']['food_items']['Row'];
-type MealLogRow = Database['public']['Tables']['meal_logs']['Row'];
-type MealLogItemRow = Database['public']['Tables']['meal_log_items']['Row'];
 
 // Service types - mapped from database schema
 export interface FoodItem {
@@ -23,9 +25,82 @@ export interface FoodItem {
   servingSizeG: number | null;
   servingDescription: string | null;
   barcode: string | null;
+  externalSourceId: string | null;
   source: 'internal' | 'usda_fdc' | 'openfoodfacts' | 'manual';
   imageUrl: string | null;
   isVerified: boolean;
+}
+
+/**
+ * Returns a broad UTC range that encompasses the given local date string (YYYY-MM-DD)
+ * across any timezone. Used for initial Supabase filtering before precise client-side date matching.
+ */
+const getWideUtcRangeForLocalDate = (dateStr: string) => {
+  const date = new Date(dateStr);
+  const start = new Date(date);
+  start.setUTCDate(start.getUTCDate() - 1);
+  const end = new Date(date);
+  end.setUTCDate(end.getUTCDate() + 1);
+  
+  return {
+    startUtc: `${start.toISOString().split('T')[0]}T00:00:00Z`,
+    endUtc: `${end.toISOString().split('T')[0]}T23:59:59Z`,
+  };
+};
+
+export interface ExternalFoodSearchResult {
+  provider: 'usda_fdc' | 'openfoodfacts';
+  externalId: string;
+  barcode: string | null;
+  name: string;
+  brand: string | null;
+  imageUrl: string | null;
+  caloriesPer100g: number;
+  proteinPer100g: number;
+  carbsPer100g: number;
+  fatPer100g: number;
+  servingSizeG: number | null;
+  servingDescription: string | null;
+  confidence: number | null;
+}
+
+export interface UpsertExternalFoodItemInput {
+  provider: ExternalFoodSearchResult['provider'];
+  externalId: string;
+  barcode?: string | null;
+  name: string;
+  brand?: string | null;
+  imageUrl?: string | null;
+  caloriesPer100g: number;
+  proteinPer100g: number;
+  carbsPer100g: number;
+  fatPer100g: number;
+  servingSizeG?: number | null;
+  servingDescription?: string | null;
+}
+
+export interface FoodCatalogSearchResult {
+  kind: 'local' | 'external';
+  localFood?: FoodItem;
+  externalFood?: ExternalFoodSearchResult;
+}
+
+export interface ExternalFoodSearchMetadata {
+  cacheStatus?: 'hit' | 'miss' | 'stale-fallback';
+  providerStatus?: {
+    openfoodfacts?: 'ok' | 'timeout' | 'error';
+    usda?: 'ok' | 'timeout' | 'error';
+  };
+  providerTimingsMs?: {
+    openfoodfacts?: number;
+    usda?: number;
+    total?: number;
+  };
+}
+
+interface ExternalFoodSearchResponse extends ExternalFoodSearchMetadata {
+  ok: boolean;
+  results?: ExternalFoodSearchResult[];
 }
 
 export interface MacroBreakdown {
@@ -63,8 +138,77 @@ export interface MealLog {
   items: MealLogItem[];
 }
 
+export interface LogPlannedMealInput {
+  planMealId: string;
+  date?: string;
+}
+
+export interface LogPlannedMealResult {
+  mealLogId: string;
+  mealSlot: MealSlot;
+  loggedItemCount: number;
+  loggedCalories: number;
+  planMealId: string;
+  plannedMealName: string;
+}
+
+export interface FavoriteFood {
+  favoriteId: string;
+  createdAt: string;
+  food: FoodItem;
+}
+
+export interface UpsertUserFoodInput {
+  name: string;
+  brand?: string | null;
+  category?: string | null;
+  caloriesPer100g: number;
+  proteinPer100g: number;
+  carbsPer100g: number;
+  fatPer100g: number;
+  fiberPer100g?: number | null;
+  sugarPer100g?: number | null;
+  sodiumPer100g?: number | null;
+  servingSizeG?: number | null;
+  servingDescription?: string | null;
+  imageUrl?: string | null;
+  barcode?: string | null;
+}
+
+type MealLogInsertItem = {
+  foodItemId: string;
+  grams: number;
+  calories: number;
+  protein: number;
+  carbs: number;
+  fat: number;
+};
+
+function mapMealLogRecord(log: any): MealLog {
+  return {
+    id: log.id,
+    userId: log.user_id,
+    mealSlot: log.meal_slot,
+    loggedAt: log.logged_at,
+    notes: log.notes,
+    items: (log.items || []).map((item: any) => ({
+      id: item.id,
+      mealLogId: item.meal_log_id,
+      foodItemId: item.food_item_id,
+      grams: item.grams,
+      calories: item.calories,
+      protein: item.protein,
+      carbs: item.carbs,
+      fat: item.fat,
+      food: mapFoodItemRow(item.food),
+    })),
+  };
+}
+
 // Helper: Convert database row to service type
 function mapFoodItemRow(row: FoodItemRow): FoodItem {
+  const rowWithExternalSource = row as FoodItemRow & { external_source_id?: string | null };
+
   return {
     id: row.id,
     name: row.name,
@@ -80,10 +224,101 @@ function mapFoodItemRow(row: FoodItemRow): FoodItem {
     servingSizeG: row.serving_size_g,
     servingDescription: row.serving_description,
     barcode: row.barcode,
+    externalSourceId: rowWithExternalSource.external_source_id ?? null,
     source: row.source,
     imageUrl: row.image_url,
     isVerified: row.is_verified,
   };
+}
+
+function mapExternalFoodSearchResult(result: any): ExternalFoodSearchResult {
+  return {
+    provider: result.provider,
+    externalId: result.externalId,
+    barcode: result.barcode ?? null,
+    name: result.name,
+    brand: result.brand ?? null,
+    imageUrl: result.imageUrl ?? null,
+    caloriesPer100g: result.caloriesPer100g,
+    proteinPer100g: result.proteinPer100g,
+    carbsPer100g: result.carbsPer100g,
+    fatPer100g: result.fatPer100g,
+    servingSizeG: result.servingSizeG ?? null,
+    servingDescription: result.servingDescription ?? null,
+    confidence: typeof result.confidence === 'number' ? result.confidence : null,
+  };
+}
+
+function mapFavoriteFoodRecord(
+  record: { id: string; created_at: string; food_item: FoodItemRow | FoodItemRow[] | null },
+): FavoriteFood | null {
+  const foodItem = Array.isArray(record.food_item) ? record.food_item[0] : record.food_item;
+
+  if (!foodItem) {
+    return null;
+  }
+
+  return {
+    favoriteId: record.id,
+    createdAt: record.created_at,
+    food: mapFoodItemRow(foodItem),
+  };
+}
+
+const edgeFunctionUrl = Constants.expoConfig?.extra?.supabaseUrl || process.env.EXPO_PUBLIC_SUPABASE_URL || '';
+const edgeFunctionAnonKey = Constants.expoConfig?.extra?.supabaseAnonKey || process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY || '';
+
+function logSearchTiming(
+  scope: 'local' | 'external',
+  query: string,
+  durationMs: number,
+  detail?: Record<string, unknown>,
+) {
+  if (!__DEV__) return;
+
+  console.log(`[nutrition-search:${scope}]`, {
+    query,
+    durationMs,
+    ...detail,
+  });
+}
+
+async function invokeEdgeFunction<T>(
+  functionName: string,
+  body: Record<string, unknown>,
+  signal?: AbortSignal,
+): Promise<T> {
+  if (!edgeFunctionUrl || !edgeFunctionAnonKey) {
+    throw new Error('Supabase edge functions are not configured');
+  }
+
+  const response = await fetch(`${edgeFunctionUrl}/functions/v1/${functionName}`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      apikey: edgeFunctionAnonKey,
+      Authorization: `Bearer ${edgeFunctionAnonKey}`,
+    },
+    body: JSON.stringify(body),
+    signal,
+  });
+
+  const responseText = await response.text();
+  let payload: any = null;
+
+  if (responseText) {
+    try {
+      payload = JSON.parse(responseText);
+    } catch {
+      payload = null;
+    }
+  }
+
+  if (!response.ok) {
+    throw new Error(payload?.error || `Failed to call ${functionName}`);
+  }
+
+  return payload as T;
 }
 
 /**
@@ -104,6 +339,173 @@ export async function getFoodById(id: string): Promise<FoodItem | null> {
   return data ? mapFoodItemRow(data) : null;
 }
 
+export async function createUserFood(
+  userId: string,
+  input: UpsertUserFoodInput,
+): Promise<FoodItem> {
+  const { data, error } = await supabase.rpc('create_user_food_item', {
+    p_name: input.name,
+    p_brand: input.brand ?? null,
+    p_category: input.category ?? null,
+    p_calories_per_100g: input.caloriesPer100g,
+    p_protein_per_100g: input.proteinPer100g,
+    p_carbs_per_100g: input.carbsPer100g,
+    p_fat_per_100g: input.fatPer100g,
+    p_fiber_per_100g: input.fiberPer100g ?? null,
+    p_sugar_per_100g: input.sugarPer100g ?? null,
+    p_sodium_per_100g: input.sodiumPer100g ?? null,
+    p_serving_size_g: input.servingSizeG ?? null,
+    p_serving_description: input.servingDescription ?? null,
+    p_image_url: input.imageUrl ?? null,
+    p_barcode: input.barcode ?? null,
+  });
+
+  if (!error && data) {
+    return mapFoodItemRow(data as FoodItemRow);
+  }
+
+  console.warn('Falling back to direct manual food insert:', error);
+
+  const brandValue = input.brand?.trim() || null;
+  const existingQuery = supabase
+    .from('food_items')
+    .select('*')
+    .eq('created_by_user_id', userId)
+    .eq('source', 'manual')
+    .eq('name', input.name.trim())
+    .limit(1);
+
+  const existingBrandQuery = brandValue
+    ? existingQuery.eq('brand', brandValue)
+    : existingQuery.is('brand', null);
+
+  const { data: existingRows, error: existingError } = await existingBrandQuery;
+
+  if (existingError) {
+    console.error('Error checking for existing user food item:', existingError);
+  }
+
+  const existingRow = existingRows?.[0];
+  if (existingRow) {
+    return mapFoodItemRow(existingRow);
+  }
+
+  const { data: insertedFood, error: insertError } = await supabase
+    .from('food_items')
+    .insert({
+      name: input.name.trim(),
+      brand: brandValue,
+      category: input.category ?? null,
+      calories_per_100g: input.caloriesPer100g,
+      protein_per_100g: input.proteinPer100g,
+      carbs_per_100g: input.carbsPer100g,
+      fat_per_100g: input.fatPer100g,
+      fiber_per_100g: input.fiberPer100g ?? null,
+      sugar_per_100g: input.sugarPer100g ?? null,
+      sodium_per_100g: input.sodiumPer100g ?? null,
+      serving_size_g: input.servingSizeG ?? null,
+      serving_description: input.servingDescription ?? null,
+      image_url: input.imageUrl ?? null,
+      barcode: input.barcode ?? null,
+      source: 'manual',
+      is_verified: false,
+      created_by_user_id: userId,
+    })
+    .select('*')
+    .single();
+
+  if (insertError || !insertedFood) {
+    console.error('Error creating user food item:', insertError);
+    throw new Error('Failed to create saved food');
+  }
+
+  return mapFoodItemRow(insertedFood);
+}
+
+export async function getFavoriteFoods(userId: string, query?: string): Promise<FavoriteFood[]> {
+  const { data, error } = await supabase
+    .from('food_favorites')
+    .select(`
+      id,
+      created_at,
+      food_item:food_items(*)
+    `)
+    .eq('user_id', userId)
+    .order('created_at', { ascending: false });
+
+  if (error) {
+    console.error('Error fetching favorite foods:', error);
+    return [];
+  }
+
+  const favorites = (data || [])
+    .map((record) => mapFavoriteFoodRecord(record as { id: string; created_at: string; food_item: FoodItemRow | FoodItemRow[] | null }))
+    .filter((record): record is FavoriteFood => Boolean(record));
+
+  if (!query?.trim()) {
+    return favorites;
+  }
+
+  const searchTerm = query.trim().toLowerCase();
+  return favorites.filter(({ food }) =>
+    food.name.toLowerCase().includes(searchTerm)
+    || food.brand?.toLowerCase().includes(searchTerm),
+  );
+}
+
+export async function getFavoriteFoodIds(userId: string, foodIds?: string[]): Promise<string[]> {
+  let request = supabase
+    .from('food_favorites')
+    .select('food_item_id')
+    .eq('user_id', userId);
+
+  if (foodIds?.length) {
+    request = request.in('food_item_id', foodIds);
+  }
+
+  const { data, error } = await request;
+
+  if (error) {
+    console.error('Error fetching favorite food ids:', error);
+    return [];
+  }
+
+  return (data || []).map((record) => record.food_item_id);
+}
+
+export async function addFavoriteFood(userId: string, foodItemId: string): Promise<void> {
+  const { error } = await supabase
+    .from('food_favorites')
+    .upsert(
+      {
+        user_id: userId,
+        food_item_id: foodItemId,
+      },
+      {
+        onConflict: 'user_id,food_item_id',
+        ignoreDuplicates: true,
+      },
+    );
+
+  if (error) {
+    console.error('Error saving favorite food:', error);
+    throw new Error('Failed to save food');
+  }
+}
+
+export async function removeFavoriteFood(userId: string, foodItemId: string): Promise<void> {
+  const { error } = await supabase
+    .from('food_favorites')
+    .delete()
+    .eq('user_id', userId)
+    .eq('food_item_id', foodItemId);
+
+  if (error) {
+    console.error('Error removing favorite food:', error);
+    throw new Error('Failed to remove saved food');
+  }
+}
+
 /**
  * Search food items by name or brand
  * Uses PostgreSQL full-text search
@@ -113,7 +515,9 @@ export async function searchFoods(query: string, limit = 50): Promise<FoodItem[]
     return [];
   }
 
+  const normalizedQuery = query.trim();
   const searchTerm = `%${query.toLowerCase()}%`;
+  const startedAt = Date.now();
 
   const { data, error } = await supabase
     .from('food_items')
@@ -128,7 +532,142 @@ export async function searchFoods(query: string, limit = 50): Promise<FoodItem[]
     return [];
   }
 
+  logSearchTiming('local', normalizedQuery, Date.now() - startedAt, {
+    resultCount: data.length,
+  });
+
   return data.map(mapFoodItemRow);
+}
+
+export async function searchExternalFoods(
+  query: string,
+  limit = 10,
+  signal?: AbortSignal,
+): Promise<ExternalFoodSearchResult[]> {
+  if (!query || query.trim().length === 0) {
+    return [];
+  }
+
+  const normalizedQuery = query.trim();
+  const startedAt = Date.now();
+
+  try {
+    const data = await invokeEdgeFunction<ExternalFoodSearchResponse>(
+      'search-food-catalog',
+      {
+        query: normalizedQuery,
+        limit,
+      },
+      signal,
+    );
+
+    if (!data?.ok || !Array.isArray(data.results)) {
+      return [];
+    }
+
+    logSearchTiming('external', normalizedQuery, Date.now() - startedAt, {
+      resultCount: data.results.length,
+      cacheStatus: data.cacheStatus,
+      providerStatus: data.providerStatus,
+      providerTimingsMs: data.providerTimingsMs,
+    });
+
+    return data.results.map(mapExternalFoodSearchResult);
+  } catch (error) {
+    if (error instanceof Error && error.name === 'AbortError') {
+      logSearchTiming('external', normalizedQuery, Date.now() - startedAt, {
+        aborted: true,
+      });
+      return [];
+    }
+
+    console.error('Error searching external foods:', error);
+    return [];
+  }
+}
+
+export async function searchFoodCatalog(
+  query: string,
+  limit = 50,
+): Promise<FoodCatalogSearchResult[]> {
+  if (!query || query.trim().length === 0) {
+    return [];
+  }
+
+  const [localResults, externalResults] = await Promise.all([
+    searchFoods(query, limit),
+    searchExternalFoods(query, Math.min(limit, 10)),
+  ]);
+
+  const localExternalKeys = new Set(
+    localResults
+      .filter((food) => food.externalSourceId)
+      .map((food) => `${food.source}:${food.externalSourceId}`),
+  );
+  const localBarcodes = new Set(
+    localResults
+      .map((food) => food.barcode?.trim())
+      .filter((barcode): barcode is string => Boolean(barcode)),
+  );
+
+  const filteredExternalResults = externalResults.filter((food) => {
+    const externalKey = `${food.provider}:${food.externalId}`;
+    const barcode = food.barcode?.trim();
+
+    if (localExternalKeys.has(externalKey)) {
+      return false;
+    }
+
+    if (barcode && localBarcodes.has(barcode)) {
+      return false;
+    }
+
+    return true;
+  });
+
+  return [
+    ...localResults.map((food) => ({
+      kind: 'local' as const,
+      localFood: food,
+    })),
+    ...filteredExternalResults.map((food) => ({
+      kind: 'external' as const,
+      externalFood: food,
+    })),
+  ];
+}
+
+export async function upsertExternalFoodItem(
+  input: UpsertExternalFoodItemInput,
+): Promise<FoodItem> {
+  const data = await invokeEdgeFunction<{ ok: boolean; foodItemId?: string; error?: string }>(
+    'upsert-external-food-item',
+    {
+      provider: input.provider,
+      externalId: input.externalId,
+      barcode: input.barcode ?? null,
+      name: input.name,
+      brand: input.brand ?? null,
+      imageUrl: input.imageUrl ?? null,
+      caloriesPer100g: input.caloriesPer100g,
+      proteinPer100g: input.proteinPer100g,
+      carbsPer100g: input.carbsPer100g,
+      fatPer100g: input.fatPer100g,
+      servingSizeG: input.servingSizeG ?? null,
+      servingDescription: input.servingDescription ?? null,
+    },
+  );
+
+  if (!data?.ok || !data.foodItemId) {
+    throw new Error(data?.error || 'Failed to import food');
+  }
+
+  const food = await getFoodById(data.foodItemId);
+  if (!food) {
+    throw new Error('Imported food is not available yet');
+  }
+
+  return food;
 }
 
 /**
@@ -145,6 +684,143 @@ export function calculateMacros(food: FoodItem, grams: number): MacroBreakdown {
     fat: Math.round(food.fatPer100g * multiplier * 10) / 10,
     fiber: Math.round((food.fiberPer100g || 0) * multiplier * 10) / 10,
   };
+}
+
+function getLogDateInfo(date?: Date | string) {
+  if (typeof date === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(date)) {
+    return {
+      loggedAt: new Date(`${date}T12:00:00`).toISOString(),
+      loggedDate: date,
+    };
+  }
+
+  const resolved = date instanceof Date ? date : new Date();
+  const loggedAt = resolved.toISOString();
+  return {
+    loggedAt,
+    loggedDate: toLocalDateKey(resolved),
+  };
+}
+
+function parseLocalDateInput(date: string | Date) {
+  if (date instanceof Date) return new Date(date);
+  if (/^\d{4}-\d{2}-\d{2}$/.test(date)) return new Date(`${date}T12:00:00`);
+  return new Date(date);
+}
+
+async function getOrCreateMealLog(
+  userId: string,
+  mealSlot: MealSlot,
+  date?: Date | string,
+  notes?: string | null,
+) {
+  const { loggedAt, loggedDate } = getLogDateInfo(date);
+
+  const { data: existingMealLog, error: existingMealLogError } = await supabase
+    .from('meal_logs')
+    .select('*')
+    .eq('user_id', userId)
+    .eq('meal_slot', mealSlot)
+    .gte('logged_at', `${loggedDate}T00:00:00`)
+    .lte('logged_at', `${loggedDate}T23:59:59`)
+    .maybeSingle();
+
+  if (existingMealLogError) {
+    console.error('Error loading meal log:', existingMealLogError);
+    throw new Error('Failed to load meal log');
+  }
+
+  if (existingMealLog) {
+    return existingMealLog;
+  }
+
+  const { data: newMealLog, error: mealLogError } = await supabase
+    .from('meal_logs')
+    .insert({
+      user_id: userId,
+      meal_slot: mealSlot,
+      logged_at: loggedAt,
+      ...(notes ? { notes } : {}),
+    })
+    .select()
+    .single();
+
+  if (mealLogError || !newMealLog) {
+    console.error('Error creating meal log:', mealLogError);
+    throw new Error('Failed to create meal log');
+  }
+
+  return newMealLog;
+}
+
+async function insertMealLogItems(
+  mealLogId: string,
+  items: MealLogInsertItem[],
+) {
+  const { data, error } = await supabase
+    .from('meal_log_items')
+    .insert(
+      items.map((item) => ({
+        meal_log_id: mealLogId,
+        food_item_id: item.foodItemId,
+        grams: item.grams,
+        calories: item.calories,
+        protein: item.protein,
+        carbs: item.carbs,
+        fat: item.fat,
+      })),
+    )
+    .select();
+
+  if (error || !data) {
+    console.error('Error creating meal log items:', error);
+    throw new Error('Failed to log meal items');
+  }
+
+  return data;
+}
+
+async function getMealLogCountForLocalDate(
+  userId: string,
+  date?: Date | string,
+): Promise<number> {
+  const { loggedDate } = getLogDateInfo(date);
+  const { startUtc, endUtc } = getWideUtcRangeForLocalDate(loggedDate);
+
+  const { data: mealLogs, error } = await supabase
+    .from('meal_logs')
+    .select('id, logged_at')
+    .eq('user_id', userId)
+    .gte('logged_at', startUtc)
+    .lte('logged_at', endUtc);
+
+  if (error) {
+    console.error('Error loading meal logs for streak check:', error);
+    throw new Error('Failed to load meal logs');
+  }
+
+  return (
+    mealLogs?.filter((mealLog) => toLocalDateKey(new Date(mealLog.logged_at)) === loggedDate)
+      .length || 0
+  );
+}
+
+async function applyMealLogGamification(
+  userId: string,
+  mealSlot: MealSlot,
+  grams: number,
+  date?: Date | string,
+) {
+  const { loggedDate } = getLogDateInfo(date);
+
+  await awardXP(userId, 'meal_logged', { mealSlot, grams });
+
+  const dailyMealCount = await getMealLogCountForLocalDate(userId, date);
+
+  if (dailyMealCount >= 3) {
+    await updateStreak(userId, 'nutrition', loggedDate);
+    await updateStreak(userId, 'fitness', loggedDate);
+  }
 }
 
 /**
@@ -167,63 +843,24 @@ export async function logFood(
   // Calculate macros for this portion
   const macros = calculateMacros(food, grams);
 
-  // Use provided date or current date/time
-  const loggedAt = date ? date.toISOString() : new Date().toISOString();
-  const loggedDate = loggedAt.split('T')[0]; // YYYY-MM-DD
-
-  // Check if meal_log exists for this user, date, and meal slot
-  const { data: existingMealLog } = await supabase
-    .from('meal_logs')
-    .select('*')
-    .eq('user_id', userId)
-    .eq('meal_slot', mealSlot)
-    .gte('logged_at', `${loggedDate}T00:00:00`)
-    .lte('logged_at', `${loggedDate}T23:59:59`)
-    .maybeSingle();
-
-  let mealLogId: string;
-
-  if (existingMealLog) {
-    // Use existing meal log
-    mealLogId = existingMealLog.id;
-  } else {
-    // Create new meal log
-    const { data: newMealLog, error: mealLogError } = await supabase
-      .from('meal_logs')
-      .insert({
-        user_id: userId,
-        meal_slot: mealSlot,
-        logged_at: loggedAt,
-      })
-      .select()
-      .single();
-
-    if (mealLogError) {
-      console.error('Error creating meal log:', mealLogError);
-      throw new Error('Failed to create meal log');
-    }
-
-    mealLogId = newMealLog.id;
-  }
-
-  // Insert meal log item
-  const { data: mealLogItem, error: itemError } = await supabase
-    .from('meal_log_items')
-    .insert({
-      meal_log_id: mealLogId,
-      food_item_id: foodId,
+  const mealLog = await getOrCreateMealLog(userId, mealSlot, date);
+  const [mealLogItem] = await insertMealLogItems(mealLog.id, [
+    {
+      foodItemId: foodId,
       grams,
       calories: macros.calories,
       protein: macros.protein,
       carbs: macros.carbs,
       fat: macros.fat,
-    })
-    .select()
-    .single();
+    },
+  ]);
 
-  if (itemError) {
-    console.error('Error creating meal log item:', itemError);
-    throw new Error('Failed to log food item');
+  // Award XP and update streaks (non-blocking, fail gracefully)
+  try {
+    await applyMealLogGamification(userId, mealSlot, grams, date);
+  } catch (gamificationError) {
+    // Log error but don't fail the meal logging
+    console.error('[NutritionService] Gamification error:', gamificationError);
   }
 
   return {
@@ -239,6 +876,110 @@ export async function logFood(
   };
 }
 
+export async function logPlannedMeal(
+  userId: string,
+  input: LogPlannedMealInput,
+): Promise<LogPlannedMealResult> {
+  let plannedMeal = await getNutritionPlanMeal(input.planMealId);
+
+  if (!plannedMeal) {
+    throw new Error('Planned meal not found');
+  }
+
+  if (!plannedMeal.can_direct_log && plannedMeal.mapping_state === 'repairable' && plannedMeal.plan_id) {
+    await repairNutritionPlanMappings(plannedMeal.plan_id);
+    plannedMeal = await getNutritionPlanMeal(input.planMealId);
+  }
+
+  if (!plannedMeal) {
+    throw new Error('Planned meal not found');
+  }
+
+  const selectedVariant = plannedMeal.selected_variant;
+  const loggableItems = (selectedVariant?.items || []).filter((item) => typeof item.grams === 'number' && item.grams > 0);
+
+  if (!selectedVariant || !loggableItems.length) {
+    throw new Error('This planned meal can’t be logged directly yet. Add food manually.');
+  }
+
+  const mealItems = await Promise.all(
+    loggableItems.map(async (item) => {
+      if (!item.food_item_id || !item.grams || item.grams <= 0) {
+        throw new Error('This planned meal can’t be logged directly yet. Add food manually.');
+      }
+
+      const hasStoredMacros = [
+        item.calories,
+        item.protein,
+        item.carbs,
+        item.fat,
+      ].every((value) => typeof value === 'number' && Number.isFinite(value));
+
+      if (hasStoredMacros) {
+        return {
+          foodItemId: item.food_item_id,
+          grams: item.grams,
+          calories: Number(item.calories),
+          protein: Number(item.protein),
+          carbs: Number(item.carbs),
+          fat: Number(item.fat),
+        };
+      }
+
+      const food = await getFoodById(item.food_item_id);
+      if (!food) {
+        throw new Error('This planned meal can’t be logged directly yet. Add food manually.');
+      }
+
+      const macros = calculateMacros(food, item.grams);
+      return {
+        foodItemId: item.food_item_id,
+        grams: item.grams,
+        calories: macros.calories,
+        protein: macros.protein,
+        carbs: macros.carbs,
+        fat: macros.fat,
+      };
+    }),
+  );
+
+  const mealLog = await getOrCreateMealLog(
+    userId,
+    plannedMeal.meal_slot,
+    input.date,
+    `Planned meal: ${selectedVariant.name || plannedMeal.name}`,
+  );
+
+  await insertMealLogItems(mealLog.id, mealItems);
+
+  try {
+    const totalLoggedGrams = mealItems.reduce(
+      (total, item) => total + Number(item.grams || 0),
+      0,
+    );
+
+    await applyMealLogGamification(
+      userId,
+      plannedMeal.meal_slot,
+      totalLoggedGrams,
+      input.date,
+    );
+  } catch (gamificationError) {
+    console.error('[NutritionService] Gamification error:', gamificationError);
+  }
+
+  return {
+    mealLogId: mealLog.id,
+    mealSlot: plannedMeal.meal_slot,
+    loggedItemCount: mealItems.length,
+    loggedCalories: Math.round(
+      mealItems.reduce((total, item) => total + Number(item.calories || 0), 0),
+    ),
+    planMealId: plannedMeal.id,
+    plannedMealName: selectedVariant.name || plannedMeal.name || 'Planned meal',
+  };
+}
+
 /**
  * Get total nutrition for a given day
  * Sums all meal_log_items for the user on the specified date
@@ -247,25 +988,43 @@ export async function getDailyNutritionTotal(
   userId: string,
   date: Date
 ): Promise<MacroBreakdown> {
-  const startOfDay = new Date(date);
-  startOfDay.setHours(0, 0, 0, 0);
-  const endOfDay = new Date(date);
-  endOfDay.setHours(23, 59, 59, 999);
+  // Convert date to YYYY-MM-DD format to avoid timezone issues
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, '0');
+  const day = String(date.getDate()).padStart(2, '0');
+  const dateStr = `${year}-${month}-${day}`;
 
-  // Query all meal logs for the day
-  const { data: mealLogs, error: mealLogsError } = await supabase
+  const { startUtc, endUtc } = getWideUtcRangeForLocalDate(dateStr);
+  
+  // Query all meal logs for the day using date string instead of ISO timestamps
+  const { data: allMealLogs, error: mealLogsError } = await supabase
     .from('meal_logs')
-    .select('id')
+    .select('id, logged_at')
     .eq('user_id', userId)
-    .gte('logged_at', startOfDay.toISOString())
-    .lte('logged_at', endOfDay.toISOString());
+    .gte('logged_at', startUtc)
+    .lte('logged_at', endUtc);
 
   if (mealLogsError) {
     console.error('Error fetching meal logs:', mealLogsError);
     return { calories: 0, protein: 0, carbs: 0, fat: 0, fiber: 0 };
   }
 
-  if (!mealLogs || mealLogs.length === 0) {
+  if (!allMealLogs || allMealLogs.length === 0) {
+    return { calories: 0, protein: 0, carbs: 0, fat: 0, fiber: 0 };
+  }
+
+  // Client-side filter to ensure we only get logs from the specified date
+  // This handles timezone edge cases where DB timestamps might be in different timezone
+  const mealLogs = allMealLogs.filter(log => {
+    const logDate = new Date(log.logged_at);
+    return (
+      logDate.getFullYear() === date.getFullYear() &&
+      logDate.getMonth() === date.getMonth() &&
+      logDate.getDate() === date.getDate()
+    );
+  });
+
+  if (mealLogs.length === 0) {
     return { calories: 0, protein: 0, carbs: 0, fat: 0, fiber: 0 };
   }
 
@@ -307,13 +1066,16 @@ export async function getDailyNutritionTotal(
  * Get all meals for a given day with their food items
  */
 export async function getMealsForDay(userId: string, date: Date): Promise<MealLog[]> {
-  const startOfDay = new Date(date);
-  startOfDay.setHours(0, 0, 0, 0);
-  const endOfDay = new Date(date);
-  endOfDay.setHours(23, 59, 59, 999);
+  // Convert date to YYYY-MM-DD format to avoid timezone issues
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, '0');
+  const day = String(date.getDate()).padStart(2, '0');
+  const dateStr = `${year}-${month}-${day}`;
 
-  // Query meal logs with their items and food details
-  const { data: mealLogs, error } = await supabase
+  const { startUtc, endUtc } = getWideUtcRangeForLocalDate(dateStr);
+
+  // Query meal logs with their items and food details using date string
+  const { data: allMealLogs, error } = await supabase
     .from('meal_logs')
     .select(`
       *,
@@ -323,8 +1085,8 @@ export async function getMealsForDay(userId: string, date: Date): Promise<MealLo
       )
     `)
     .eq('user_id', userId)
-    .gte('logged_at', startOfDay.toISOString())
-    .lte('logged_at', endOfDay.toISOString())
+    .gte('logged_at', startUtc)
+    .lte('logged_at', endUtc)
     .order('logged_at', { ascending: true });
 
   if (error) {
@@ -332,25 +1094,17 @@ export async function getMealsForDay(userId: string, date: Date): Promise<MealLo
     return [];
   }
 
-  // Map to service types
-  return mealLogs.map((log: any) => ({
-    id: log.id,
-    userId: log.user_id,
-    mealSlot: log.meal_slot,
-    loggedAt: log.logged_at,
-    notes: log.notes,
-    items: (log.items || []).map((item: any) => ({
-      id: item.id,
-      mealLogId: item.meal_log_id,
-      foodItemId: item.food_item_id,
-      grams: item.grams,
-      calories: item.calories,
-      protein: item.protein,
-      carbs: item.carbs,
-      fat: item.fat,
-      food: mapFoodItemRow(item.food),
-    })),
-  }));
+  // Client-side filter to ensure we only get logs from the specified date
+  const mealLogs = (allMealLogs || []).filter(log => {
+    const logDate = new Date(log.logged_at);
+    return (
+      logDate.getFullYear() === date.getFullYear() &&
+      logDate.getMonth() === date.getMonth() &&
+      logDate.getDate() === date.getDate()
+    );
+  });
+
+  return mealLogs.map(mapMealLogRecord);
 }
 
 /**
@@ -396,8 +1150,19 @@ export async function getDailyTotals(
   userId: string,
   date: string
 ): Promise<DailyNutritionTotals> {
-  const dateObj = new Date(date);
-  return getDailyNutritionTotal(userId, dateObj);
+  const dateObj = parseLocalDateInput(date);
+
+  if (__DEV__) {
+    console.log('[getDailyTotals] Input date:', date, '| Parsed:', dateObj.toISOString());
+  }
+
+  const result = await getDailyNutritionTotal(userId, dateObj);
+
+  if (__DEV__) {
+    console.log('[getDailyTotals] Result:', result);
+  }
+
+  return result;
 }
 
 /**
@@ -406,8 +1171,49 @@ export async function getDailyTotals(
  * @param date - Date string in YYYY-MM-DD format
  */
 export async function getDailyMeals(userId: string, date: string): Promise<MealLog[]> {
-  const dateObj = new Date(date);
-  return getMealsForDay(userId, dateObj);
+  const dateObj = parseLocalDateInput(date);
+
+  if (__DEV__) {
+    console.log('[getDailyMeals] Input date:', date, '| Parsed:', dateObj.toISOString());
+  }
+
+  const result = await getMealsForDay(userId, dateObj);
+
+  if (__DEV__) {
+    console.log('[getDailyMeals] Found', result.length, 'meals');
+  }
+
+  return result;
+}
+
+export async function getMealLogById(mealLogId: string): Promise<MealLog | null> {
+  const { data, error } = await supabase
+    .from('meal_logs')
+    .select(`
+      *,
+      items:meal_log_items(
+        *,
+        food:food_items(*)
+      )
+    `)
+    .eq('id', mealLogId)
+    .maybeSingle();
+
+  if (error) {
+    console.error('Error fetching meal log by id:', error);
+    return null;
+  }
+
+  return data ? mapMealLogRecord(data) : null;
+}
+
+export async function getLoggedMealDetail(
+  userId: string,
+  date: string,
+  mealSlot: MealSlot,
+): Promise<MealLog | null> {
+  const meals = await getDailyMeals(userId, date);
+  return meals.find((meal) => meal.mealSlot === mealSlot) || null;
 }
 
 /**
@@ -444,7 +1250,8 @@ export async function getNutritionStats(
   // For now, let's just return the days we have data for, UI can fill gaps.
 
   mealLogs?.forEach((log: any) => {
-    const date = log.logged_at.split('T')[0];
+    // Precise local date key to avoid timezone drift in stats grouping
+    const date = toLocalDateKey(new Date(log.logged_at));
 
     if (!stats[date]) {
       stats[date] = { calories: 0, protein: 0, carbs: 0, fat: 0, fiber: 0 };
@@ -465,8 +1272,8 @@ export async function getNutritionStats(
  * Copy all meals from one day to another
  */
 export async function copyDayMeals(userId: string, fromDate: string, toDate: string): Promise<void> {
-  const from = new Date(fromDate);
-  const to = new Date(toDate);
+  const from = parseLocalDateInput(fromDate);
+  const to = parseLocalDateInput(toDate);
 
   // 1. Get original meals
   const originalMeals = await getMealsForDay(userId, from);

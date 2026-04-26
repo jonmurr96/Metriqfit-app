@@ -12,7 +12,7 @@ interface TargetInput {
   minutes_per_workout: string;
   experience_level: ExperienceLevel;
   avg_steps?: number | null;
-  target_weight_lb?: number | null;
+  target_weight_lb: number;
   target_date?: string | null;
 }
 
@@ -41,9 +41,11 @@ const CALORIE_ADJUSTMENTS: Record<GoalType, { mode: string; kcal?: number; min_k
   maintain_weight: { mode: 'offset', kcal: 0 },
   general_fitness: { mode: 'offset', kcal: 0 },
   increase_endurance: { mode: 'offset', kcal: 150 },
-  lose_weight: { mode: 'range_deficit', min_kcal: 300, max_kcal: 600, default_kcal: 450 },
+  lose_weight: { mode: 'range_deficit', min_kcal: 300, max_kcal: 700, default_kcal: 450 },
   recomp: { mode: 'range_deficit', min_kcal: 150, max_kcal: 350, default_kcal: 250 },
-  gain_weight: { mode: 'range_surplus', min_kcal: 200, max_kcal: 400, default_kcal: 300 },
+  gain_weight: { mode: 'range_surplus', min_kcal: 200, max_kcal: 500, default_kcal: 300 },
+  build_muscle: { mode: 'range_surplus', min_kcal: 250, max_kcal: 600, default_kcal: 350 },
+  get_fitter: { mode: 'offset', kcal: 0 },
 };
 
 const PROTEIN_G_PER_LB: Record<GoalType, Record<ExperienceLevel, number>> = {
@@ -53,6 +55,8 @@ const PROTEIN_G_PER_LB: Record<GoalType, Record<ExperienceLevel, number>> = {
   general_fitness: { beginner: 0.8, intermediate: 0.9, advanced: 1.0 },
   increase_endurance: { beginner: 0.8, intermediate: 0.9, advanced: 1.0 },
   gain_weight: { beginner: 0.8, intermediate: 0.9, advanced: 1.0 },
+  build_muscle: { beginner: 0.85, intermediate: 0.95, advanced: 1.05 },
+  get_fitter: { beginner: 0.8, intermediate: 0.9, advanced: 1.0 },
 };
 
 const FAT_G_PER_LB_DEFAULT = 0.35;
@@ -110,6 +114,9 @@ export function calculateTargets(input: TargetInput): TargetOutput {
   const tdee = bmr * activityMultiplier;
 
   const adjustment = CALORIE_ADJUSTMENTS[goal_type];
+  if (!adjustment) {
+    throw new Error(`Invalid or missing goal type: ${String(goal_type)}`);
+  }
   let goalAdjustment = 0;
 
   if (adjustment.mode === 'offset') {
@@ -120,12 +127,30 @@ export function calculateTargets(input: TargetInput): TargetOutput {
     goalAdjustment = adjustment.default_kcal || 300;
   }
 
+  // Scale adjustment by target weight delta for more aggressive/personalized targets
+  const weightDelta = (input.target_weight_lb ?? current_weight_lb) - current_weight_lb;
+  if (adjustment.mode === 'range_deficit' && weightDelta < 0) {
+    const scale = clamp(Math.abs(weightDelta) / 20, 0.5, 1.5); // 0.5x for small deltas, 1.5x for large
+    goalAdjustment = -(clamp((adjustment.default_kcal || 450) * scale, adjustment.min_kcal || 300, adjustment.max_kcal || 700));
+  } else if (adjustment.mode === 'range_surplus' && weightDelta > 0) {
+    const scale = clamp(weightDelta / 20, 0.6, 1.6);
+    goalAdjustment = clamp((adjustment.default_kcal || 350) * scale, adjustment.min_kcal || 200, adjustment.max_kcal || 600);
+  } else if (adjustment.mode === 'offset') {
+    // For get_fitter / maintain, nudge slightly toward target if there's a small delta
+    if (Math.abs(weightDelta) >= 5) {
+      goalAdjustment = clamp(weightDelta * 5, -150, 150);
+    }
+  }
+
   let calories = tdee + goalAdjustment;
   const minCalories = SAFETY_MIN_CALORIES[sex];
   calories = Math.max(calories, minCalories);
   calories = roundToNearest(calories, 10);
 
-  const proteinPerLb = PROTEIN_G_PER_LB[goal_type][experience_level];
+  const proteinPerLb = PROTEIN_G_PER_LB[goal_type]?.[experience_level];
+  if (proteinPerLb === undefined) {
+    throw new Error(`Invalid goal type or experience level: ${String(goal_type)}, ${String(experience_level)}`);
+  }
   let protein_g = current_weight_lb * proteinPerLb;
   protein_g = roundToNearest(protein_g, 5);
 

@@ -5,15 +5,16 @@
 
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useAuth } from '../lib/auth/AuthProvider';
+import { progressMetricKeys } from './useProgressMetrics';
+import { nutritionDashboardKeys } from './useNutritionDashboard';
 import {
   logWater,
   getDailyWaterLogs,
   getDailyWaterSummary,
   deleteWaterLog,
   getWaterHistory,
-  type WaterLog,
-  type DailyWaterSummary,
 } from '../services/waterService';
+import type { XPAwardResult } from '../types/gamification';
 
 // Query Keys
 export const waterKeys = {
@@ -82,12 +83,15 @@ export function useLogWater() {
     mutationFn: (amountMl: number) => logWater(user!.id, amountMl),
     onSuccess: () => {
       const targetDate = new Date().toISOString().split('T')[0];
-      // Invalidate logs and summary for today
       queryClient.invalidateQueries({
-        queryKey: waterKeys.logs(user!.id, targetDate),
+        queryKey: waterKeys.all,
       });
       queryClient.invalidateQueries({
-        queryKey: waterKeys.summary(user!.id, targetDate),
+        queryKey: nutritionDashboardKeys.today(user!.id, targetDate),
+      });
+      // Home and readiness surfaces derive hydration from progress snapshot.
+      queryClient.invalidateQueries({
+        queryKey: progressMetricKeys.all,
       });
     },
   });
@@ -97,7 +101,6 @@ export function useLogWater() {
  * Delete water log mutation
  */
 export function useDeleteWaterLog() {
-  const { user } = useAuth();
   const queryClient = useQueryClient();
 
   return useMutation({
@@ -106,6 +109,9 @@ export function useDeleteWaterLog() {
       // Invalidate all water queries since we don't know the date
       queryClient.invalidateQueries({
         queryKey: waterKeys.all,
+      });
+      queryClient.invalidateQueries({
+        queryKey: nutritionDashboardKeys.all,
       });
     },
   });

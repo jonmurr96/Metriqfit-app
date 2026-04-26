@@ -9,27 +9,40 @@ import { useAuth } from '../../../lib/auth';
 import { TabBarIcon } from '../../../components/navigation/TabBarIcon';
 import { NutritionSummaryCard } from '../../../components/nutrition/NutritionSummaryCard';
 import { HydrationCard } from '../../../components/nutrition/HydrationCard';
-import { MealTimeline } from '../../../components/nutrition/MealTimeline';
+import { TodayMealPlanList } from '../../../components/nutrition/TodayMealPlanList';
 import { RingIconButton } from '../../../components/common/RingIconButton';
 import { useDailyWaterSummary } from '../../../hooks/useWater';
-import { useDailyMeals } from '../../../hooks/useNutrition';
-import { getUserTargets } from '../../../hooks/useUser';
-import { getDailyTotals } from '../../../services/nutritionService';
-import { useActiveNutritionPlan } from '../../../hooks/usePlan';
-import { useCopyMeals } from '../../../hooks/useNutrition';
+import { useCopyMeals, useDailyMeals, useDailyTotals, useLogPlannedMeal } from '../../../hooks/useNutrition';
+import { getUserTargets, useStreak, useProfile } from '../../../hooks/useUser';
+import { useActiveNutritionPlan, useNutritionPlanDay } from '../../../hooks/usePlan';
+import { useFormattedMealTimes } from '../../../hooks/useMealTimes';
+import { usePrepCoachState } from '../../../hooks/usePrepCoach';
+import { buildHomeMealPreviewItems } from '../../../lib/nutrition/home-meal-preview';
+import { getDefaultFoodMeasurement } from '../../../lib/nutrition/displayUnits';
+import { getMealSlotLabel, MEAL_SLOT_ORDER } from '../../../lib/nutrition/meal-slots';
+import type { MealSlot } from '../../../services/nutritionService';
+import { toLocalDateKey } from '../../../lib/home/dashboard-state';
 
-import { VoiceInput } from '../../../components/ai/VoiceInput';
+
 
 export default function NutritionHomeScreen() {
-  const { c, s, ty, r, animation, glass } = useTokens();
+  const { c, s, ty, r, animation } = useTokens();
   const router = useRouter();
   const insets = useSafeAreaInsets();
   const { user } = useAuth();
+  const { data: streak } = useStreak();
+  const { data: prepState } = usePrepCoachState();
+  const { data: profile } = useProfile();
 
   const { mutate: copyMeals } = useCopyMeals();
+  const logPlannedMealMutation = useLogPlannedMeal();
 
-  const today = new Date().toISOString().split('T')[0];
+  const today = toLocalDateKey(new Date());
+  const todayDayOfWeek = new Date().getDay();
   const { data: waterSummary } = useDailyWaterSummary(today);
+  
+  // Fetch user's preferred meal times
+  const mealTimes = useFormattedMealTimes();
 
   // Fetch user targets (same as MacroDashboard)
   const { data: targets } = useQuery({
@@ -40,131 +53,24 @@ export default function NutritionHomeScreen() {
   });
 
   // Fetch today's consumed totals
-  const { data: consumed } = useQuery({
-    queryKey: ['nutrition-daily-total', user?.id, today],
-    queryFn: () => getDailyTotals(user!.id, today),
-    enabled: !!user,
-    refetchInterval: 30000,
-  });
+  const { data: consumed } = useDailyTotals(today);
 
   // Fetch active plan
   const { data: nutritionPlan } = useActiveNutritionPlan();
+  const { data: dayPlan } = useNutritionPlanDay(todayDayOfWeek, {
+    enabled: !!nutritionPlan,
+    planId: nutritionPlan?.id,
+  });
 
   // Fetch actual logs for today
   const { data: dailyMeals } = useDailyMeals(today);
 
-  // Transform plan data for the timeline, overlaying actual logs
-  const planMeals = React.useMemo(() => {
-    // We need at least a basic structure. If no plan, define default slots.
-    const structure = nutritionPlan?.meal_structure || {
-      breakfast: [],
-      lunch: [],
-      dinner: [],
-      snacks: []
-    };
+  const displayFoodMeasurement = (profile?.display_preferences?.food_measurement as any) ?? getDefaultFoodMeasurement(profile?.unit_system);
 
-    const meals = [];
-
-    // Helper to get logged items for a slot
-    const getLoggedItems = (slot: string) => {
-      if (!dailyMeals) return [];
-      // The service returns data with joined tables, so we need to rely on the shape we know exists
-      // even if TS isn't perfectly inferred without a deep recursive type.
-      // Also handling DB column names vs camelCase transformations if relevant.
-      // Based on useDailyMeals -> getDailyMeals -> supabase.from('meal_logs')...
-      // DB columns are snake_case.
-
-      // Service returns camelCase mapped objects
-      const mealLog = dailyMeals.find((m: any) => m.mealSlot.toLowerCase() === slot.toLowerCase());
-      if (!mealLog || !mealLog.items) return [];
-
-      return mealLog.items.map((item: any) => ({
-        name: item.food?.name || 'Unknown Food',
-        portion: `${item.grams}g`,
-        calories: item.calories
-      }));
-    };
-
-    // Helper to calculate total calories for a slot from logs
-    const getLoggedCalories = (slot: string) => {
-      const items = getLoggedItems(slot);
-      return items.reduce((sum, item) => sum + item.calories, 0);
-    };
-
-    if (structure.breakfast !== undefined) {
-      const loggedItems = getLoggedItems('breakfast');
-      const currentCalories = getLoggedCalories('breakfast');
-      const goalCalories = Math.round(targets?.calories ? targets.calories * 0.25 : 500);
-
-      meals.push({
-        name: 'Breakfast',
-        time: '8:30 AM',
-        calories: currentCalories,
-        goalCalories: goalCalories,
-        color: '#F97316',
-        // Show logged items if any, otherwise empty (don't show plan items as "eaten")
-        items: loggedItems,
-        isGoalMet: currentCalories >= goalCalories * 0.9 && currentCalories <= goalCalories * 1.1 // +/- 10%
-      });
-    }
-
-    if (structure.lunch !== undefined) {
-      const loggedItems = getLoggedItems('lunch');
-      const currentCalories = getLoggedCalories('lunch');
-      const goalCalories = Math.round(targets?.calories ? targets.calories * 0.35 : 700);
-
-      meals.push({
-        name: 'Lunch',
-        time: '1:00 PM',
-        calories: currentCalories,
-        goalCalories: goalCalories,
-        color: '#88E6EA',
-        items: loggedItems,
-        isGoalMet: currentCalories >= goalCalories * 0.9 && currentCalories <= goalCalories * 1.1
-      });
-    }
-
-    if (structure.dinner !== undefined) {
-      const loggedItems = getLoggedItems('dinner');
-      const currentCalories = getLoggedCalories('dinner');
-      const goalCalories = Math.round(targets?.calories ? targets.calories * 0.30 : 600);
-
-      meals.push({
-        name: 'Dinner',
-        time: '7:30 PM',
-        calories: currentCalories,
-        goalCalories: goalCalories,
-        color: '#A855F7',
-        items: loggedItems,
-        isGoalMet: currentCalories >= goalCalories * 0.9 && currentCalories <= goalCalories * 1.1
-      });
-    }
-
-    if (structure.snacks !== undefined) {
-      const loggedItems = getLoggedItems('snack'); // Note: 'snack' singular in DB enum usually
-      const currentCalories = getLoggedCalories('snack');
-      const goalCalories = Math.round(targets?.calories ? targets.calories * 0.10 : 200);
-
-      meals.push({
-        name: 'Snacks',
-        time: 'Anytime',
-        calories: currentCalories,
-        goalCalories: goalCalories,
-        color: '#6B7280',
-        items: loggedItems,
-        isGoalMet: currentCalories <= goalCalories // For snacks, staying under is often the goal, or just tracking
-      });
-    }
-
-    return meals;
-  }, [nutritionPlan, targets, dailyMeals]);
-
-  const handleTranscription = (text: string) => {
-    router.push({
-      pathname: '/(tabs)/nutrition/food-search',
-      params: { query: text, autoAdd: 'true' }
-    });
-  };
+  const mealPreviewItems = React.useMemo(
+    () => buildHomeMealPreviewItems(dayPlan?.meals, dailyMeals, displayFoodMeasurement),
+    [dayPlan?.meals, dailyMeals, displayFoodMeasurement],
+  );
 
   const handleCopyYesterday = () => {
     const yesterday = new Date();
@@ -188,34 +94,119 @@ export default function NutritionHomeScreen() {
     router.push('/log-water-sheet');
   };
 
-  const handleAddFood = (mealName: string) => {
-    // Map display name to lower case slot name (e.g. "Snacks" -> "snack")
-    const slot = mealName.toLowerCase() === 'snacks' ? 'snack' : mealName.toLowerCase();
+  const handleAddFood = (slot: MealSlot) => {
     router.push({
       pathname: '/(tabs)/nutrition/food-search',
-      params: { mealSlot: slot }
+      params: { mealSlot: slot, date: today, source: 'today_meals' }
     });
   };
 
   // Quick Actions with ring icons
   const quickActions = [
+    { label: 'Search', icon: 'search', onPress: () => router.push('/(tabs)/nutrition/food-search') },
     { label: 'Photo', icon: 'camera', onPress: () => router.push('/(tabs)/nutrition/food-camera') },
     { label: 'Barcode', icon: 'barcode', onPress: () => router.push('/(tabs)/nutrition/barcode-scanner') },
-    { label: 'Yesterday', icon: 'copy-outline', onPress: handleCopyYesterday },
     { label: 'My Plan', icon: 'calendar', onPress: () => router.push('/(tabs)/nutrition/my-plan') },
   ];
+
+  const aiTools = [
+    { label: 'Yesterday', icon: 'copy-outline', onPress: handleCopyYesterday },
+    { label: 'Import', icon: 'link-outline', onPress: () => router.push('/(tabs)/nutrition/recipe-import') },
+    { label: 'Menu AI', icon: 'restaurant-outline', onPress: () => router.push('/(tabs)/nutrition/menu-scan') },
+    { label: 'Grocery', icon: 'basket-outline', onPress: () => router.push('/(tabs)/nutrition/grocery-planner') },
+    { label: 'Pantry', icon: 'archive-outline', onPress: () => router.push('/(tabs)/nutrition/pantry') },
+  ];
+
+  const slotTimeMap = React.useMemo(
+    () => ({
+      breakfast: mealTimes.raw.breakfast,
+      lunch: mealTimes.raw.lunch,
+      dinner: mealTimes.raw.dinner,
+      snack: mealTimes.raw.snack,
+    }),
+    [mealTimes.raw.breakfast, mealTimes.raw.lunch, mealTimes.raw.dinner, mealTimes.raw.snack],
+  );
+
+  const todayMeals = React.useMemo(() => {
+    const previewBySlot = new Map(mealPreviewItems.map((item) => [item.slot, item]));
+
+    return MEAL_SLOT_ORDER.map((slot) => {
+      const preview = previewBySlot.get(slot);
+      const rawTime = slotTimeMap[slot];
+      const timeLabel = rawTime === 'anytime'
+        ? 'Anytime'
+        : mealTimes[slot];
+
+      return {
+        slot,
+        label: getMealSlotLabel(slot),
+        plannedName: preview?.plannedName || `No planned ${getMealSlotLabel(slot).toLowerCase()}`,
+        timeLabel,
+        targetCalories: preview?.targetCalories || 0,
+        targetProtein: preview?.targetProtein || 0,
+        targetCarbs: preview?.targetCarbs || 0,
+        targetFat: preview?.targetFat || 0,
+        loggedCalories: preview?.loggedCalories || 0,
+        loggedItemCount: preview?.loggedItemCount || 0,
+        isLogged: preview?.isLogged || false,
+        planMealId: preview?.planMealId,
+        hasPlannedMeal: !!preview?.planMealId,
+        foods: preview?.foods || [],
+      };
+    });
+  }, [mealPreviewItems, mealTimes, slotTimeMap]);
+
+  const handleOpenMeal = (slot: MealSlot, planMealId?: string) => {
+    router.push({
+      pathname: '/nutrition/today-plan' as any,
+      params: {
+        date: today,
+        focusSlot: slot,
+        ...(planMealId ? { planMealId } : {}),
+      },
+    });
+  };
+
+  const handleLogMeal = (planMealId?: string) => {
+    if (!planMealId) return;
+
+    logPlannedMealMutation.mutate(
+      { planMealId, date: today },
+      {
+        onSuccess: (result) => {
+          Alert.alert(
+            'Meal logged',
+            `${result.plannedMealName} was added to ${getMealSlotLabel(result.mealSlot).toLowerCase()}.`,
+          );
+        },
+        onError: (error) => {
+          Alert.alert('Unable to log meal', error.message || 'Try adding food manually.');
+        },
+      },
+    );
+  };
+
+  const prepNextCheckIn = React.useMemo(() => {
+    if (!prepState?.nextCheckInDate) return 'After next check-in';
+    const parsed = new Date(prepState.nextCheckInDate);
+    if (Number.isNaN(parsed.getTime())) return 'After next check-in';
+    return parsed.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+  }, [prepState?.nextCheckInDate]);
 
   return (
     <ScrollView
       style={{ flex: 1, backgroundColor: c.bg }}
-      contentContainerStyle={{ paddingTop: insets.top + s.sm, paddingBottom: 100 }}
+      contentContainerStyle={{ 
+        paddingTop: insets.top + s.sm, 
+        paddingBottom: insets.bottom + 180,
+      }}
     >
-      {/* Header with ring-style Log button */}
+      {/* Header with ring-style Search button */}
       <MotiView
         from={{ opacity: 0, translateY: -10 }}
         animate={{ opacity: 1, translateY: 0 }}
         transition={{ type: 'timing', duration: animation.duration.normal }}
-        style={[styles.header, { paddingHorizontal: s.xl }]}
+        style={[styles.header, { paddingHorizontal: s.lg }]}
       >
         <View>
           <Text
@@ -244,12 +235,36 @@ export default function NutritionHomeScreen() {
           >
             Nutrition
           </Text>
+
+          <View
+            style={{
+              marginTop: 6,
+              flexDirection: 'row',
+              alignItems: 'center',
+              alignSelf: 'flex-start',
+              borderWidth: 1,
+              borderColor: `${c.primary}45`,
+              borderRadius: r.pill,
+              paddingHorizontal: 10,
+              paddingVertical: 4,
+            }}
+          >
+            <TabBarIcon name="flame" color={c.primary} size={12} />
+            <Text
+              style={{
+                marginLeft: 4,
+                color: c.primary,
+                fontFamily: ty.body.familySemibold,
+                fontSize: 11,
+              }}
+            >
+              {streak || 0}-day streak
+            </Text>
+          </View>
         </View>
 
         <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12 }}>
-          <VoiceInput onTranscription={handleTranscription} />
-
-          {/* Ring-style Log button */}
+          {/* Ring-style Search button */}
           <Pressable
             style={({ pressed }) => [
               styles.logButton,
@@ -271,7 +286,7 @@ export default function NutritionHomeScreen() {
             ]}
             onPress={() => router.push('/(tabs)/nutrition/food-search')}
           >
-            <TabBarIcon name="add" color={c.primary} size={18} />
+            <TabBarIcon name="search" color={c.primary} size={18} />
             <Text
               style={{
                 color: c.primary,
@@ -280,34 +295,11 @@ export default function NutritionHomeScreen() {
                 marginLeft: 4,
               }}
             >
-              Log
+              Search
             </Text>
           </Pressable>
         </View>
       </MotiView>
-
-      {/* Nutrition Summary Card - Pass real data */}
-      <View style={{ paddingHorizontal: s.lg, marginTop: s.lg }}>
-        <NutritionSummaryCard
-          calories={consumed?.calories || 0}
-          calorieGoal={targets?.calories || 2400}
-          protein={Math.round(consumed?.protein || 0)}
-          proteinGoal={targets?.protein_g || 180}
-          carbs={Math.round(consumed?.carbs || 0)}
-          carbsGoal={targets?.carbs_g || 250}
-          fat={Math.round(consumed?.fat || 0)}
-          fatGoal={targets?.fat_g || 70}
-        />
-      </View>
-
-      {/* Hydration Card */}
-      <View style={{ paddingHorizontal: s.lg, marginTop: s.xl }}>
-        <HydrationCard
-          onAdd={handleAddWater}
-          current={waterSummary?.totalMl || 0}
-          goal={waterSummary?.targetMl || 2500}
-        />
-      </View>
 
       {/* Quick Actions - Ring Icons */}
       <MotiView
@@ -344,13 +336,134 @@ export default function NutritionHomeScreen() {
         </View>
       </MotiView>
 
-      {/* Meal Timeline */}
-      <View style={{ paddingHorizontal: s.lg, marginTop: s.xl }}>
-        <MealTimeline
-          onAddFood={handleAddFood}
-          meals={planMeals}
+      <View style={{ width: '100%', paddingHorizontal: s.lg, marginTop: s.lg }}>
+        <NutritionSummaryCard
+          calories={consumed?.calories || 0}
+          calorieGoal={targets?.calories || 2400}
+          protein={Math.round(consumed?.protein || 0)}
+          proteinGoal={targets?.protein_g || 180}
+          carbs={Math.round(consumed?.carbs || 0)}
+          carbsGoal={targets?.carbs_g || 250}
+          fat={Math.round(consumed?.fat || 0)}
+          fatGoal={targets?.fat_g || 70}
         />
       </View>
+
+      <View style={{ width: '100%', paddingHorizontal: s.lg, marginTop: s.lg }}>
+        <TodayMealPlanList
+          meals={todayMeals}
+          pendingPlanMealId={logPlannedMealMutation.isPending ? logPlannedMealMutation.variables?.planMealId || null : null}
+          onOpenMeal={(item) => {
+            if (!item.hasPlannedMeal && !item.isLogged) {
+              handleAddFood(item.slot);
+              return;
+            }
+            handleOpenMeal(item.slot, item.planMealId);
+          }}
+          onLogMeal={(item) => handleLogMeal(item.planMealId)}
+          onAddFood={(item) => handleAddFood(item.slot)}
+        />
+      </View>
+
+      <View style={{ width: '100%', paddingHorizontal: s.lg, marginTop: s.lg }}>
+        <HydrationCard
+          onAdd={handleAddWater}
+          current={waterSummary?.totalMl || 0}
+          goal={waterSummary?.targetMl || 2500}
+        />
+      </View>
+
+      {prepState?.enabled && (
+        <View style={{ width: '100%', paddingHorizontal: s.lg, marginTop: s.lg }}>
+          <View
+            style={{
+              backgroundColor: c.surface,
+              borderRadius: r.lg,
+              padding: s.lg,
+              borderWidth: 1,
+              borderColor: c.border,
+              gap: 8,
+            }}
+          >
+            <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
+              <Text style={{ color: c.primary, fontFamily: ty.body.familySemibold, fontSize: ty.sizes.sm }}>
+                Prep Coach
+              </Text>
+              <Text style={{ color: c.textMuted, fontFamily: ty.body.family, fontSize: ty.sizes.xs }}>
+                {prepState.discipline || 'prep'} • {prepState.phase || 'phase'}
+              </Text>
+            </View>
+            <Text style={{ color: c.text, fontFamily: ty.body.familyMedium }}>
+              Next check-in: {prepNextCheckIn}
+            </Text>
+            {prepState.lastAdjustment?.coach_summary ? (
+              <>
+                <Text style={{ color: c.textMuted, fontFamily: ty.body.familySemibold, fontSize: ty.sizes.xs, letterSpacing: 1 }}>
+                  WHY CHANGED
+                </Text>
+                <Text style={{ color: c.textMuted, fontFamily: ty.body.family, lineHeight: 18 }}>
+                  {prepState.lastAdjustment.coach_summary}
+                </Text>
+              </>
+            ) : (
+              <Text style={{ color: c.textMuted, fontFamily: ty.body.family }}>
+                No prep adjustments applied yet. Your next weekly check-in will generate one.
+              </Text>
+            )}
+            <Pressable
+              style={{
+                alignSelf: 'flex-start',
+                borderWidth: 1,
+                borderColor: `${c.primary}50`,
+                borderRadius: r.pill,
+                paddingHorizontal: 12,
+                paddingVertical: 6,
+              }}
+              onPress={() => router.push('/check-in')}
+            >
+              <Text style={{ color: c.primary, fontFamily: ty.body.familySemibold, fontSize: ty.sizes.xs }}>
+                Run Check-In
+              </Text>
+            </Pressable>
+          </View>
+        </View>
+      )}
+
+      {/* AI Tools */}
+      <MotiView
+        from={{ opacity: 0, translateY: 20 }}
+        animate={{ opacity: 1, translateY: 0 }}
+        transition={{ type: 'timing', duration: animation.duration.normal, delay: 260 }}
+        style={[styles.section, { marginTop: s.lg, paddingHorizontal: s.lg }]}
+      >
+        <Text
+          style={[
+            styles.sectionTitle,
+            {
+              color: c.textMuted,
+              fontFamily: ty.body.familySemibold,
+              fontSize: ty.sizes.sm,
+              letterSpacing: 1.5,
+              marginBottom: s.lg,
+            },
+          ]}
+        >
+          AI TOOLS
+        </Text>
+        <View style={styles.aiToolsGrid}>
+          {aiTools.map((action, index) => (
+            <RingIconButton
+              key={action.label}
+              icon={action.icon}
+              label={action.label}
+              onPress={action.onPress}
+              size={56}
+              delay={340 + index * 60}
+            />
+          ))}
+        </View>
+      </MotiView>
+
     </ScrollView>
   );
 }
@@ -383,5 +496,12 @@ const styles = StyleSheet.create({
   quickActions: {
     flexDirection: 'row',
     justifyContent: 'space-around',
+  },
+  aiToolsGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    justifyContent: 'space-around',
+    rowGap: 18,
+    columnGap: 10,
   },
 });

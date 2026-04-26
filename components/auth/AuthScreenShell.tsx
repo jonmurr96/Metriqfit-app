@@ -1,0 +1,208 @@
+import React from 'react';
+import {
+  KeyboardAvoidingView,
+  Platform,
+  ScrollView,
+  StyleSheet,
+  Text,
+  View,
+} from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
+import { MotiView } from 'moti';
+
+import { useTokens } from '../../lib/theme';
+import { BrandMark } from '../branding/BrandMark';
+import { AuthBackground } from './AuthBackground';
+
+interface AuthScreenShellProps {
+  title: string;
+  subtitle: string;
+  children: React.ReactNode;
+  footer?: React.ReactNode;
+  titleMode?: 'default' | 'brandAnimated';
+}
+
+export function AuthScreenShell({
+  title,
+  subtitle,
+  children,
+  footer,
+  titleMode = 'default',
+}: AuthScreenShellProps) {
+  const { c, ty, s } = useTokens();
+
+  return (
+    <SafeAreaView style={styles.container}>
+      {/* Animated background layer */}
+      <AuthBackground />
+
+      <KeyboardAvoidingView
+        style={styles.keyboardView}
+        behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+        keyboardVerticalOffset={Platform.OS === 'ios' ? 24 : 0}
+      >
+        <ScrollView
+          contentContainerStyle={styles.scrollContent}
+          keyboardShouldPersistTaps="handled"
+          showsVerticalScrollIndicator={false}
+          contentInset={{ bottom: 40 }}
+          scrollIndicatorInsets={{ bottom: 40 }}
+        >
+          {/* Hero Section */}
+          <View style={styles.hero}>
+            {/* Pulsing logo */}
+            <MotiView
+              from={{ scale: 1 }}
+              animate={{ scale: [1, 1.03, 1] }}
+              transition={{
+                type: 'timing',
+                duration: 4000,
+                loop: true,
+                repeatReverse: false,
+              }}
+            >
+              <BrandMark size="xl" glow="hero" />
+            </MotiView>
+
+            {/* Logo glow backdrop */}
+            <View
+              style={[
+                styles.logoGlow,
+                { backgroundColor: `${c.primary}15` },
+              ]}
+              pointerEvents="none"
+            />
+
+            {/* Title */}
+            {titleMode === 'brandAnimated' ? (
+              <MotiView
+                from={{ opacity: 0, translateY: 8 }}
+                animate={{ opacity: 1, translateY: 0 }}
+                transition={{ type: 'timing', duration: 600, delay: 200 }}
+              >
+                <Text
+                  style={[
+                    styles.title,
+                    {
+                      color: c.primary,
+                      fontFamily: ty.heading.family,
+                      textShadowColor: `${c.primary}40`,
+                      textShadowRadius: 20,
+                      textShadowOffset: { width: 0, height: 0 },
+                    },
+                  ]}
+                >
+                  {title}
+                </Text>
+              </MotiView>
+            ) : (
+              <MotiView
+                from={{ opacity: 0, translateY: 8 }}
+                animate={{ opacity: 1, translateY: 0 }}
+                transition={{ type: 'timing', duration: 600, delay: 200 }}
+              >
+                <Text
+                  style={[
+                    styles.title,
+                    { color: c.text, fontFamily: ty.heading.family },
+                  ]}
+                >
+                  {title}
+                </Text>
+              </MotiView>
+            )}
+
+            {/* Subtitle */}
+            <MotiView
+              from={{ opacity: 0, translateY: 6 }}
+              animate={{ opacity: 1, translateY: 0 }}
+              transition={{ type: 'timing', duration: 600, delay: 350 }}
+            >
+              <Text
+                style={[
+                  styles.subtitle,
+                  { color: c.textMuted, fontFamily: ty.body.family },
+                ]}
+              >
+                {subtitle}
+              </Text>
+            </MotiView>
+          </View>
+
+          {/* Form Content */}
+          <MotiView
+            from={{ opacity: 0, translateY: 20 }}
+            animate={{ opacity: 1, translateY: 0 }}
+            transition={{ type: 'timing', duration: 600, delay: 450 }}
+            style={styles.formContainer}
+          >
+            <View style={{ gap: s.md }}>{children}</View>
+          </MotiView>
+
+          {/* Footer */}
+          {footer ? (
+            <MotiView
+              from={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              transition={{ type: 'timing', duration: 500, delay: 700 }}
+              style={styles.footer}
+            >
+              {footer}
+            </MotiView>
+          ) : null}
+        </ScrollView>
+      </KeyboardAvoidingView>
+    </SafeAreaView>
+  );
+}
+
+const styles = StyleSheet.create({
+  container: {
+    flex: 1,
+  },
+  keyboardView: {
+    flex: 1,
+  },
+  scrollContent: {
+    flexGrow: 1,
+    justifyContent: 'center',
+    paddingHorizontal: 24,
+    paddingTop: 28,
+    paddingBottom: 60,
+  },
+  hero: {
+    alignItems: 'center',
+    marginBottom: 32,
+    gap: 10,
+    position: 'relative',
+  },
+  logoGlow: {
+    position: 'absolute',
+    width: 200,
+    height: 200,
+    borderRadius: 100,
+    top: -20,
+    zIndex: -1,
+  },
+  title: {
+    fontSize: 32,
+    textAlign: 'center',
+    letterSpacing: -0.5,
+    marginTop: 4,
+  },
+  subtitle: {
+    fontSize: 14,
+    textAlign: 'center',
+    lineHeight: 22,
+    letterSpacing: 0.2,
+  },
+  formContainer: {
+    width: '100%',
+    maxWidth: 420,
+    alignSelf: 'center',
+  },
+  footer: {
+    marginTop: 24,
+    alignItems: 'center',
+  },
+});

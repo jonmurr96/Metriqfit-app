@@ -1,0 +1,99 @@
+export const DEFAULT_SESSION_SETS_TARGET = 3;
+
+export interface SessionSnapshotSourceExercise {
+  id: string;
+  exercise_id: string;
+  order_index: number;
+  sets_target?: number | null;
+  reps_min?: number | null;
+  reps_max?: number | null;
+  rest_seconds?: number | null;
+  notes?: string | null;
+  user_notes?: string | null;
+}
+
+export interface SessionExerciseSnapshotInsert {
+  session_id: string;
+  exercise_id: string;
+  order_index: number;
+  notes: string | null;
+  sets_target: number;
+  reps_min: number | null;
+  reps_max: number | null;
+  rest_seconds: number | null;
+  plan_exercise_id: string | null;
+}
+
+export function buildSessionExerciseSnapshots(input: {
+  sessionId: string;
+  source: 'plan' | 'template';
+  exercises: SessionSnapshotSourceExercise[];
+  /**
+   * Deload volume multiplier (0 < x ≤ 1). When provided (e.g. 0.80 for a
+   * 20% deload), sets_target is scaled down and rounded to a minimum of 1.
+   * Does not permanently mutate plan data — only affects this session's copy.
+   */
+  volumeMultiplier?: number;
+}): SessionExerciseSnapshotInsert[] {
+  const multiplier =
+    typeof input.volumeMultiplier === 'number' &&
+    input.volumeMultiplier > 0 &&
+    input.volumeMultiplier < 1
+      ? input.volumeMultiplier
+      : 1;
+
+  return input.exercises.map((exercise) => {
+    const rawSets = exercise.sets_target ?? DEFAULT_SESSION_SETS_TARGET;
+    const sets_target = multiplier < 1
+      ? Math.max(1, Math.round(rawSets * multiplier))
+      : rawSets;
+
+    return {
+      session_id: input.sessionId,
+      exercise_id: exercise.exercise_id,
+      order_index: exercise.order_index,
+      notes:
+        input.source === 'plan'
+          ? exercise.user_notes ?? exercise.notes ?? null
+          : exercise.notes ?? null,
+      sets_target,
+      reps_min: exercise.reps_min ?? null,
+      reps_max: exercise.reps_max ?? null,
+      rest_seconds: exercise.rest_seconds ?? null,
+      plan_exercise_id: input.source === 'plan' ? exercise.id : null,
+    };
+  });
+}
+
+export function buildSessionExerciseSnapshotInsertAttempts(
+  rows: SessionExerciseSnapshotInsert[],
+): Record<string, string | number | null>[][] {
+  const attempts: Record<string, string | number | null>[][] = [];
+  const seen = new Set<string>();
+
+  const pushAttempt = (nextRows: Record<string, string | number | null>[]) => {
+    const signature = JSON.stringify(nextRows);
+    if (!seen.has(signature)) {
+      seen.add(signature);
+      attempts.push(nextRows);
+    }
+  };
+
+  pushAttempt(rows.map((row) => ({ ...row })));
+  pushAttempt(
+    rows.map(({ reps_min, reps_max, rest_seconds, ...row }) => ({ ...row })),
+  );
+  pushAttempt(
+    rows.map(({ plan_exercise_id, ...row }) => ({ ...row })),
+  );
+  pushAttempt(
+    rows.map(({ reps_min, reps_max, rest_seconds, plan_exercise_id, ...row }) => ({ ...row })),
+  );
+  pushAttempt(
+    rows.map(({ sets_target, reps_min, reps_max, rest_seconds, plan_exercise_id, ...row }) => ({
+      ...row,
+    })),
+  );
+
+  return attempts;
+}

@@ -1,136 +1,233 @@
-import React from 'react';
-import { StyleSheet, View, Text, Pressable, ScrollView } from 'react-native';
-import { useRouter } from 'expo-router';
-import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { MotiView } from 'moti';
+import React, { useEffect, useMemo, useState } from 'react';
+import { ActivityIndicator, ScrollView, StyleSheet, Text, View } from 'react-native';
+
+import {
+  ProgressSectionShell,
+  ProgressRangeSelector,
+  RecordSummaryStrip,
+  WeeklyTrendChart,
+} from '../../../components/progress';
+import { GlassCard } from '../../../components/premium/GlassCard';
+import { SubscriptionFeatureGate } from '../../../components/premium/SubscriptionFeatureGate';
+import {
+  trackEvent,
+  trackProgressCardRendered,
+  trackProgressTrendsRangeChanged,
+  trackProgressViewed,
+} from '../../../lib/analytics';
+import { useFeatureAccess } from '../../../hooks/useSubscription';
 import { useTokens } from '../../../lib/theme';
-import { TabBarIcon } from '../../../components/navigation/TabBarIcon';
-import { WeeklyTrendChart } from '../../../components/progress/WeeklyTrendChart';
-import { useNutritionStats } from '../../../hooks/useNutrition';
-import { useWorkoutStats } from '../../../hooks/useWorkout';
-import { useUserDashboard } from '../../../hooks/useUser';
+import { useProgressTrends } from '../../../hooks/useProgressMetrics';
+import type { ProgressRangeOption } from '../../../services/progressMetricsService';
+
+const RANGE_OPTIONS: ProgressRangeOption[] = ['7D', '14D', '1M', '3M', '6M', '12M'];
+
+function formatDirection(value: number | null) {
+  if (value == null) return 'No change';
+  if (Math.abs(value) < 0.1) return 'Flat';
+  return `${value > 0 ? '+' : ''}${value}%`;
+}
 
 export default function TrendsScreen() {
-  const { c, s, ty, r } = useTokens();
-  const router = useRouter();
-  const insets = useSafeAreaInsets();
+  const { c, s, ty } = useTokens();
+  const [range, setRange] = useState<ProgressRangeOption>('1M');
+  const analyticsAccess = useFeatureAccess('advanced_analytics');
 
-  // Fetch real data
-  const { data: nutritionStats } = useNutritionStats(7);
-  const { data: workoutStats } = useWorkoutStats(7);
-  const { calorieTarget } = useUserDashboard();
+  const { data: snapshot, isLoading } = useProgressTrends(range);
 
-  // Transform data for charts
-  const today = new Date();
-  const last7Days = Array.from({ length: 7 }, (_, i) => {
-    const d = new Date(today);
-    d.setDate(d.getDate() - (6 - i));
-    return d.toISOString().split('T')[0];
-  });
+  useEffect(() => {
+    trackProgressViewed({ source: 'progress_trends', range });
+  }, [range]);
 
-  const calendarDays = ['S', 'M', 'T', 'W', 'T', 'F', 'S'];
+  useEffect(() => {
+    if (!snapshot) return;
+    ['training_trends', 'adherence_trends', 'body_trends'].forEach((cardId) => {
+      trackProgressCardRendered({ card_id: cardId, range });
+    });
+  }, [range, snapshot]);
 
-  // Nutrition Data
-  const calorieData = last7Days.map(date => {
-    const dayDate = new Date(date);
-    const dayLabel = calendarDays[dayDate.getDay()];
-    const value = nutritionStats?.[date]?.calories || 0;
-    const isToday = date === today.toISOString().split('T')[0];
-    const target = calorieTarget || 2000;
+  useEffect(() => {
+    if (!analyticsAccess.isLoading && !analyticsAccess.hasAccess) {
+      trackEvent('feature_gate_viewed', {
+        feature: 'advanced_analytics',
+        source: 'progress_trends',
+        required_tier: analyticsAccess.upgradeTier,
+      });
+    }
+  }, [analyticsAccess.hasAccess, analyticsAccess.isLoading, analyticsAccess.upgradeTier]);
 
-    return {
-      day: dayLabel,
-      value,
-      isOverTarget: value > target,
-      isToday
-    };
-  });
+  const handleRangeChange = (next: ProgressRangeOption) => {
+    setRange(next);
+    trackProgressTrendsRangeChanged({ range: next });
+  };
 
-  // Workout Data (Volume)
-  const volumeData = last7Days.map(date => {
-    const dayDate = new Date(date);
-    const dayLabel = calendarDays[dayDate.getDay()];
-    // workoutStats is array of sessions, we need to aggregate volume per day
-    // This is a simplification; ideally useWorkoutStats returns daily aggregated data
-    // Assuming useWorkoutStats returns { totalVolume: number, sessions: [] } or similar
-    // Let's assume for now workoutStats returns similar map or we check the sessions array
-    // Since useWorkoutStats currently returns { totalWorkouts, totalVolume, etc } for the whole period, 
-    // we strictly need a daily breakdown.
-    // For this MVP step, we will use a mock transformation if the hook doesn't support daily breakdown yet,
-    // or checks strictly if the hook returns daily data.
-    // Checking useWorkoutStats implementation: it calls getWorkoutStats which returns { totalWorkouts, totalVolume, totalTime, prsCount }
-    // It does NOT return a daily breakdown. 
-    // CRITICAL: We need daily workout stats. 
-    // FOR NOW: We will assume 0 for previous days to avoid breaking, or mock "random" variance for demo if real data is missing?
-    // No, "Remove all placeholder data".
-    // Since getWorkoutStats doesn't provide daily breakdown, we should probably fetch history and aggregate.
+  const prEventItems = useMemo(() => (
+    (snapshot?.prEvents || []).map((event) => ({
+      id: event.id,
+      label: event.exercise,
+      value: `${event.estimated1Rm} lb`,
+      meta: new Date(event.date).toLocaleDateString('en-US', { month: 'short', day: 'numeric' }),
+    }))
+  ), [snapshot?.prEvents]);
 
-    // We'll leave Volume chart as 0 until we improve the service or just show the Calories chart which we have data for.
-    // Actually, let's fetch workout history for last 7 days to get precise daily volume.
+  if ((isLoading || analyticsAccess.isLoading) && !snapshot) {
+    return (
+      <View style={[styles.loadingContainer, { backgroundColor: c.bg }]}>
+        <ActivityIndicator size="large" color={c.primary} />
+      </View>
+    );
+  }
 
-    return {
-      day: dayLabel,
-      value: 0, // Placeholder until service upgrade
-      isToday: false
-    };
-  });
+  if (!analyticsAccess.hasAccess) {
+    return (
+      <ProgressSectionShell
+        title="Trends"
+        primarySection="performance"
+        secondarySection="performance"
+        secondaryItem="trends"
+      >
+        <View style={{ paddingHorizontal: s.lg, paddingTop: s.lg }}>
+          <SubscriptionFeatureGate
+            requiredTier={analyticsAccess.upgradeTier}
+            title="Trend analysis is on Premium"
+            subtitle="Upgrade to unlock longer-range performance, adherence, and body trend views."
+          />
+        </View>
+      </ProgressSectionShell>
+    );
+  }
 
   return (
-    <View style={[styles.container, { backgroundColor: c.bg, paddingTop: insets.top }]}>
-      {/* Header */}
-      <View style={[styles.header, { paddingHorizontal: s.lg }]}>
-        <Pressable
-          onPress={() => router.back()}
-          style={[styles.backButton, { backgroundColor: c.surface }]}
-          accessibilityLabel="Go back"
-          accessibilityRole="button"
-        >
-          <TabBarIcon name="chevron-back" color={c.text} size={24} />
-        </Pressable>
-        <Text
-          style={[
-            styles.title,
-            {
-              color: c.text,
-              fontFamily: ty.heading.familySemibold,
-              fontSize: ty.sizes.xl,
-            },
-          ]}
-        >
-          Trends
-        </Text>
-        <View style={styles.placeholder} />
-      </View>
+    <ProgressSectionShell
+      title="Trends"
+      primarySection="performance"
+      secondarySection="performance"
+      secondaryItem="trends"
+    >
+      <ScrollView
+        contentContainerStyle={{ paddingHorizontal: s.lg, paddingBottom: 80 }}
+        showsVerticalScrollIndicator={false}
+      >
+        <ProgressRangeSelector
+          options={RANGE_OPTIONS}
+          selected={range}
+          onChange={handleRangeChange}
+        />
 
-      {/* Content */}
-      <ScrollView contentContainerStyle={[styles.content, { padding: s.lg }]}>
+        {snapshot ? (
+          <>
+            <View style={{ marginTop: s.xl }}>
+              <Text style={[styles.sectionTitle, { color: c.text, fontFamily: ty.heading.familySemibold }]}>
+                Training Trends
+              </Text>
+              <View style={{ marginTop: s.md }}>
+                <WeeklyTrendChart
+                  title="Workout Volume"
+                  data={snapshot.volumeSeries}
+                  targetValue={Math.max(1, Math.round(snapshot.volumeSeries.reduce((sum, point) => sum + point.value, 0) / Math.max(1, snapshot.volumeSeries.length)))}
+                  changePercent={Math.abs(snapshot.trainingSummary.volumeChangePercent || 0)}
+                  changeDirection={(snapshot.trainingSummary.volumeChangePercent || 0) >= 0 ? 'up' : 'down'}
+                  emptyBehavior="min-bar"
+                />
+              </View>
+              <GlassCard style={{ padding: 16, marginTop: s.md }}>
+                <Text style={{ color: c.text, fontFamily: ty.body.familySemibold, fontSize: ty.sizes.sm }}>
+                  Sessions
+                </Text>
+                <Text style={{ color: c.textMuted, fontFamily: ty.body.family, fontSize: ty.sizes.sm, marginTop: s.xs }}>
+                  {snapshot.trainingSummary.sessionsThisRange} sessions in {range} · {snapshot.trainingSummary.sessionsPerWeek.toFixed(1)} per week · Avg {snapshot.trainingSummary.avgDurationMinutes} min
+                </Text>
+              </GlassCard>
+              <View style={{ marginTop: s.md }}>
+                <RecordSummaryStrip title="Recent PR Events" items={prEventItems} />
+              </View>
+            </View>
 
-        {/* Calorie Trend */}
-        <MotiView
-          from={{ opacity: 0, translateY: 20 }}
-          animate={{ opacity: 1, translateY: 0 }}
-          transition={{ type: 'timing', duration: 500 }}
-          style={{ marginBottom: s.xl }}
-        >
-          <WeeklyTrendChart
-            title="Daily Calories"
-            data={calorieData}
-            targetValue={calorieTarget || 2000}
-            changePercent={12} // TODO: Calculate real change
-            changeDirection="down"
-          />
-        </MotiView>
+            <View style={{ marginTop: s.xl }}>
+              <Text style={[styles.sectionTitle, { color: c.text, fontFamily: ty.heading.familySemibold }]}>
+                Adherence Trends
+              </Text>
+              <View style={{ marginTop: s.md }}>
+                <WeeklyTrendChart
+                  title="Consistency"
+                  data={snapshot.consistencySeries}
+                  targetValue={80}
+                  changePercent={Math.round(Math.abs(snapshot.adherenceSummary.consistencyAverage - 80))}
+                  changeDirection={snapshot.adherenceSummary.consistencyAverage >= 80 ? 'up' : 'down'}
+                  emptyBehavior="zero"
+                />
+              </View>
+              <View style={{ marginTop: s.md }}>
+                <WeeklyTrendChart
+                  title="Calories"
+                  data={snapshot.calorieSeries}
+                  targetValue={snapshot.adherenceSummary.calorieTarget}
+                  changePercent={Math.round(Math.abs(snapshot.adherenceSummary.nutritionHitRate - 100))}
+                  changeDirection={snapshot.adherenceSummary.nutritionHitRate >= 70 ? 'up' : 'down'}
+                  emptyBehavior="zero"
+                />
+              </View>
+              <GlassCard style={{ padding: 16, marginTop: s.md }}>
+                <Text style={{ color: c.textMuted, fontFamily: ty.body.family, fontSize: ty.sizes.sm, textAlign: 'center' }}>
+                  Nutrition hit rate {snapshot.adherenceSummary.nutritionHitRate}% · Consistency average {snapshot.adherenceSummary.consistencyAverage}%
+                </Text>
+              </GlassCard>
+            </View>
 
-        {/* Workout Volume (Future Implementation) */}
-        {/* Hiding Volume Chart until service provides daily breakdown to avoid showing 0s */}
-        <View style={[styles.infoCard, { backgroundColor: c.surface2, borderRadius: r.md, padding: s.md }]}>
-          <Text style={{ color: c.textMuted, fontFamily: ty.body.family, textAlign: 'center' }}>
-            Workout Volume Trends coming in next update.
-          </Text>
-        </View>
+            <View style={{ marginTop: s.xl }}>
+              <Text style={[styles.sectionTitle, { color: c.text, fontFamily: ty.heading.familySemibold }]}>
+                Body Trends
+              </Text>
+              <View style={{ marginTop: s.md }}>
+                <WeeklyTrendChart
+                  title="Body Weight"
+                  data={snapshot.weightSeries}
+                  targetValue={Math.max(1, Math.round(snapshot.weightSeries.reduce((sum, point) => sum + point.value, 0) / Math.max(1, snapshot.weightSeries.length)))}
+                  changePercent={Math.abs(snapshot.bodySummary.weightChangePercent)}
+                  changeDirection={snapshot.bodySummary.weightChangePercent >= 0 ? 'up' : 'down'}
+                  emptyBehavior="zero"
+                />
+              </View>
+              <GlassCard style={{ padding: 16, marginTop: s.md }}>
+                <Text style={{ color: c.text, fontFamily: ty.body.familySemibold, fontSize: ty.sizes.sm }}>
+                  Body summary
+                </Text>
+                <Text style={{ color: c.textMuted, fontFamily: ty.body.family, fontSize: ty.sizes.sm, marginTop: s.xs }}>
+                  Weight {snapshot.bodySummary.weightDeltaKg > 0 ? '+' : ''}{snapshot.bodySummary.weightDeltaKg} kg · Body-fat {snapshot.bodySummary.bodyFatChange == null ? 'not enough data' : formatDirection(snapshot.bodySummary.bodyFatChange)}
+                </Text>
+                <Text style={{ color: c.textMuted, fontFamily: ty.body.family, fontSize: ty.sizes.sm, marginTop: s.xs }}>
+                  Waist {snapshot.bodySummary.circumferenceDelta.waistCm == null ? '—' : `${snapshot.bodySummary.circumferenceDelta.waistCm > 0 ? '+' : ''}${snapshot.bodySummary.circumferenceDelta.waistCm} cm`} · Hips {snapshot.bodySummary.circumferenceDelta.hipsCm == null ? '—' : `${snapshot.bodySummary.circumferenceDelta.hipsCm > 0 ? '+' : ''}${snapshot.bodySummary.circumferenceDelta.hipsCm} cm`}
+                </Text>
+              </GlassCard>
+            </View>
 
+            <View style={{ marginTop: s.xl }}>
+              <Text style={[styles.sectionTitle, { color: c.text, fontFamily: ty.heading.familySemibold }]}>
+                Freshness & confidence
+              </Text>
+              <GlassCard style={{ padding: 16, marginTop: s.md }}>
+                {snapshot.qualityFlags.map((flag) => (
+                  <View key={flag.key} style={[styles.qualityRow, { borderBottomColor: c.border }]}>
+                    <Text style={{ color: c.text, fontFamily: ty.body.familySemibold, fontSize: ty.sizes.sm }}>
+                      {flag.key.replace('_', ' ')}
+                    </Text>
+                    <Text
+                      style={{
+                        color: flag.status === 'good' ? c.success : flag.status === 'warn' ? c.warning : c.danger,
+                        fontFamily: ty.body.familySemibold,
+                        fontSize: ty.sizes.xs,
+                      }}
+                    >
+                      {flag.status.toUpperCase()}
+                    </Text>
+                  </View>
+                ))}
+              </GlassCard>
+            </View>
+          </>
+        ) : null}
       </ScrollView>
-    </View>
+    </ProgressSectionShell>
   );
 }
 
@@ -138,29 +235,20 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
   },
-  header: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    paddingVertical: 16,
-  },
-  backButton: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
+  loadingContainer: {
+    flex: 1,
     alignItems: 'center',
     justifyContent: 'center',
   },
-  title: {
+  sectionTitle: {
+    fontSize: 18,
     letterSpacing: -0.3,
   },
-  placeholder: {
-    width: 40,
+  qualityRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingVertical: 10,
+    borderBottomWidth: StyleSheet.hairlineWidth,
   },
-  content: {
-    paddingBottom: 40,
-  },
-  infoCard: {
-    marginTop: 20
-  }
 });

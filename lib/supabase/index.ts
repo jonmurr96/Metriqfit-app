@@ -1,5 +1,7 @@
 import { createClient } from '@supabase/supabase-js';
 import Constants from 'expo-constants';
+import { Platform } from 'react-native';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 
 // Get Supabase URL and anon key from environment variables
 const supabaseUrl = Constants.expoConfig?.extra?.supabaseUrl || process.env.EXPO_PUBLIC_SUPABASE_URL || '';
@@ -18,6 +20,8 @@ if (!hasValidConfig) {
     'Please set EXPO_PUBLIC_SUPABASE_URL and EXPO_PUBLIC_SUPABASE_ANON_KEY in your .env file.\n' +
     'Authentication and data features will not work until configured.\n'
   );
+} else {
+  console.log('✅ SUPABASE CONFIGURED WITH URL:', supabaseUrl);
 }
 
 // Create Supabase client (use placeholders if not configured)
@@ -28,7 +32,8 @@ export const supabase = createClient(
     auth: {
       autoRefreshToken: true,
       persistSession: true,
-      detectSessionInUrl: false,
+      detectSessionInUrl: Platform.OS === 'web',
+      storage: Platform.OS === 'web' ? undefined : AsyncStorage,
     },
   }
 );

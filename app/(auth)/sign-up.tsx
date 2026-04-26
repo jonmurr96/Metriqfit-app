@@ -1,236 +1,301 @@
-import { useState } from 'react';
-import {
-  View,
-  Text,
-  TextInput,
-  TouchableOpacity,
-  StyleSheet,
-  KeyboardAvoidingView,
-  Platform,
-  ActivityIndicator,
-  ScrollView,
-} from 'react-native';
-import { Link, router } from 'expo-router';
+import { useMemo, useRef, useState } from 'react';
+import { Alert, Linking, Pressable, StyleSheet, Text, View } from 'react-native';
+import { router } from 'expo-router';
+import { MotiView } from 'moti';
+
 import { useAuth } from '../../lib/auth';
-import { metriqfitTheme } from '../../lib/theme';
+import { useTokens } from '../../lib/theme';
+import { AuthScreenShell } from '../../components/auth/AuthScreenShell';
+import { FloatingLabelInput } from '../../components/auth/FloatingLabelInput';
+import { ShimmerButton } from '../../components/auth/ShimmerButton';
+import { AuthProviderButton } from '../../components/auth/AuthProviderButton';
+import { AuthFooterLinks } from '../../components/auth/AuthFooterLinks';
+
+const normalizeError = (message?: string): string => {
+  if (!message) return 'Something went wrong. Please try again.';
+  const lowered = message.toLowerCase();
+  if (lowered.includes('already registered') || lowered.includes('user already exists')) {
+    return 'An account with this email already exists. Please sign in instead.';
+  }
+  if (lowered.includes('password')) {
+    return 'Password does not meet requirements. Use at least 6 characters.';
+  }
+  if (lowered.includes('network')) {
+    return 'Network issue detected. Check your connection and retry.';
+  }
+  if (lowered.includes('database error saving new user') || lowered.includes('temporarily unavailable')) {
+    return 'We hit an account setup issue. Please try again.';
+  }
+  return message;
+};
+
+const openLegalLink = async (url: string) => {
+  const canOpen = await Linking.canOpenURL(url);
+  if (!canOpen) {
+    Alert.alert('Unavailable', 'Unable to open this link right now.');
+    return;
+  }
+  await Linking.openURL(url);
+};
 
 export default function SignUpScreen() {
+  const { c, ty, s, theme } = useTokens();
+  const { signUp, signInWithOAuth, oauthAvailability } = useAuth();
+
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
+  const [successMessage, setSuccessMessage] = useState('');
 
-  const { signUp } = useAuth();
+  const passwordRef = useRef<any>(null);
+  const confirmRef = useRef<any>(null);
+
+  const passwordHint = useMemo(() => {
+    if (!password) return 'Use at least 6 characters.';
+    if (password.length < 6) return 'Password is too short.';
+    return 'Looks good.';
+  }, [password]);
+
+  const confirmError = confirmPassword && password !== confirmPassword ? 'Passwords do not match.' : '';
 
   const handleSignUp = async () => {
     if (!email || !password || !confirmPassword) {
-      setError('Please fill in all fields');
+      setError('Please fill in all required fields.');
+      setSuccessMessage('');
       return;
     }
-
     if (password !== confirmPassword) {
-      setError('Passwords do not match');
+      setError('Passwords do not match.');
+      setSuccessMessage('');
       return;
     }
-
     if (password.length < 6) {
-      setError('Password must be at least 6 characters');
+      setError('Password must be at least 6 characters.');
+      setSuccessMessage('');
       return;
     }
 
     setLoading(true);
     setError('');
+    setSuccessMessage('');
 
     try {
-      const { data, error } = await signUp(email, password);
-
-      if (error) {
-        setError(error.message || 'Failed to sign up');
-      } else if (data?.user) {
-        // Redirect to onboarding after successful signup
+      const { data, error: signUpError } = await signUp(email.trim(), password);
+      if (signUpError) {
+        setError(normalizeError(signUpError.message));
+        return;
+      }
+      if (data?.user) {
+        setSuccessMessage('Account created. Redirecting to onboarding...');
         router.replace('/(onboarding)/identity');
       }
     } catch (err: any) {
-      setError(err.message || 'An unexpected error occurred');
+      setError(normalizeError(err?.message));
     } finally {
       setLoading(false);
     }
   };
 
+  const handleOAuthSignUp = async (provider: 'google' | 'apple') => {
+    setLoading(true);
+    setError('');
+    setSuccessMessage('');
+
+    const { error: oauthError } = await signInWithOAuth(provider);
+    if (oauthError) {
+      setError(normalizeError(oauthError.message));
+      setLoading(false);
+      return;
+    }
+
+    if (provider === 'google') {
+      setSuccessMessage('Redirecting to Google...');
+    }
+    setLoading(false);
+  };
+
   return (
-    <KeyboardAvoidingView
-      behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-      style={styles.container}
+    <AuthScreenShell
+      title="Create your account"
+      titleMode="brandAnimated"
+      subtitle="Build your personalized training and nutrition system."
+      footer={
+        <AuthFooterLinks
+          prompt="Already have an account?"
+          actionLabel="Sign in"
+          href="/(auth)/sign-in"
+          disabled={loading}
+        />
+      }
     >
-      <ScrollView
-        contentContainerStyle={styles.scrollContent}
-        keyboardShouldPersistTaps="handled"
-      >
-        <View style={styles.content}>
-          <View style={styles.header}>
-            <Text style={styles.title}>Create Account</Text>
-            <Text style={styles.subtitle}>Start your fitness journey</Text>
-          </View>
+      {/* OAuth Buttons */}
+      <View style={{ gap: s.sm }}>
+        <AuthProviderButton
+          provider="google"
+          onPress={() => handleOAuthSignUp('google')}
+          disabled={loading || !oauthAvailability.google}
+          helperText={!oauthAvailability.google ? 'Google sign up is disabled in this environment.' : undefined}
+        />
+        <AuthProviderButton provider="apple" disabled />
+      </View>
 
-          <View style={styles.form}>
-            <View style={styles.inputGroup}>
-              <Text style={styles.label}>Email</Text>
-              <TextInput
-                style={styles.input}
-                placeholder="your@email.com"
-                placeholderTextColor={metriqfitTheme.colors.textMuted}
-                value={email}
-                onChangeText={setEmail}
-                autoCapitalize="none"
-                autoCorrect={false}
-                keyboardType="email-address"
-                editable={!loading}
-              />
-            </View>
+      {/* Divider */}
+      <View style={styles.dividerRow}>
+        <View style={[styles.dividerLine, { backgroundColor: `${c.primary}${theme.auth.dividerOpacity}` }]} />
+        <Text style={[styles.dividerText, { color: c.textMuted, fontFamily: ty.body.family }]}>
+          or continue with email
+        </Text>
+        <View style={[styles.dividerLine, { backgroundColor: `${c.primary}${theme.auth.dividerOpacity}` }]} />
+      </View>
 
-            <View style={styles.inputGroup}>
-              <Text style={styles.label}>Password</Text>
-              <TextInput
-                style={styles.input}
-                placeholder="At least 6 characters"
-                placeholderTextColor={metriqfitTheme.colors.textMuted}
-                value={password}
-                onChangeText={setPassword}
-                secureTextEntry
-                autoCapitalize="none"
-                autoCorrect={false}
-                editable={!loading}
-              />
-            </View>
+      {/* Email */}
+      <FloatingLabelInput
+        label="Email"
+        placeholder="you@example.com"
+        value={email}
+        onChangeText={setEmail}
+        autoCapitalize="none"
+        autoCorrect={false}
+        keyboardType="email-address"
+        autoComplete="email"
+        returnKeyType="next"
+        onSubmitEditing={() => passwordRef.current?.focus()}
+        editable={!loading}
+        accessibilityLabel="Email"
+        accessibilityHint="Enter the email for your new account"
+      />
 
-            <View style={styles.inputGroup}>
-              <Text style={styles.label}>Confirm Password</Text>
-              <TextInput
-                style={styles.input}
-                placeholder="Re-enter your password"
-                placeholderTextColor={metriqfitTheme.colors.textMuted}
-                value={confirmPassword}
-                onChangeText={setConfirmPassword}
-                secureTextEntry
-                autoCapitalize="none"
-                autoCorrect={false}
-                editable={!loading}
-              />
-            </View>
+      {/* Password */}
+      <FloatingLabelInput
+        ref={passwordRef}
+        label="Password"
+        placeholder="Create a strong password"
+        value={password}
+        onChangeText={setPassword}
+        isPassword
+        hint={passwordHint}
+        autoCapitalize="none"
+        autoCorrect={false}
+        autoComplete="off"
+        textContentType="nickname"
+        returnKeyType="next"
+        onSubmitEditing={() => confirmRef.current?.focus()}
+        editable={!loading}
+        accessibilityLabel="Password"
+        accessibilityHint="Create a password with at least six characters"
+      />
 
-            {error ? <Text style={styles.error}>{error}</Text> : null}
+      {/* Confirm Password */}
+      <FloatingLabelInput
+        ref={confirmRef}
+        label="Confirm password"
+        placeholder="Re-enter your password"
+        value={confirmPassword}
+        onChangeText={setConfirmPassword}
+        isPassword
+        error={confirmError}
+        autoCapitalize="none"
+        autoCorrect={false}
+        autoComplete="off"
+        textContentType="nickname"
+        returnKeyType="done"
+        onSubmitEditing={handleSignUp}
+        editable={!loading}
+        accessibilityLabel="Confirm password"
+        accessibilityHint="Re-enter your password to confirm"
+      />
 
-            <TouchableOpacity
-              style={[styles.button, loading && styles.buttonDisabled]}
-              onPress={handleSignUp}
-              disabled={loading}
-            >
-              {loading ? (
-                <ActivityIndicator color={metriqfitTheme.colors.bg} />
-              ) : (
-                <Text style={styles.buttonText}>Create Account</Text>
-              )}
-            </TouchableOpacity>
+      {/* Error / Success Messages */}
+      {error ? (
+        <MotiView
+          from={{ opacity: 0, translateX: -8 }}
+          animate={{ opacity: 1, translateX: 0 }}
+          transition={{ type: 'spring', damping: 14 }}
+          style={[styles.messageBox, { borderLeftColor: c.danger, backgroundColor: `${c.danger}12` }]}
+        >
+          <Text style={[styles.messageText, { color: c.danger, fontFamily: ty.body.family }]}>{error}</Text>
+        </MotiView>
+      ) : null}
 
-            <View style={styles.footer}>
-              <Text style={styles.footerText}>Already have an account? </Text>
-              <Link href="/(auth)/sign-in" asChild>
-                <TouchableOpacity disabled={loading}>
-                  <Text style={styles.link}>Sign In</Text>
-                </TouchableOpacity>
-              </Link>
-            </View>
-          </View>
-        </View>
-      </ScrollView>
-    </KeyboardAvoidingView>
+      {!error && successMessage ? (
+        <MotiView
+          from={{ opacity: 0 }}
+          animate={{ opacity: 1 }}
+          style={[styles.messageBox, { borderLeftColor: c.success, backgroundColor: `${c.success}12` }]}
+        >
+          <Text style={[styles.messageText, { color: c.success, fontFamily: ty.body.family }]}>{successMessage}</Text>
+        </MotiView>
+      ) : null}
+
+      {/* Primary CTA */}
+      <ShimmerButton
+        label="Create Account"
+        onPress={handleSignUp}
+        loading={loading}
+        accessibilityHint="Creates your account and starts onboarding"
+      />
+
+      {/* Legal */}
+      <View style={styles.legalRow}>
+        <Text style={[styles.legalText, { color: c.textMuted, fontFamily: ty.body.family }]}>
+          By continuing you agree to our{' '}
+        </Text>
+        <Pressable onPress={() => openLegalLink('https://metriqfit.com/terms')}>
+          <Text style={[styles.legalLink, { color: c.primary, fontFamily: ty.body.familySemibold }]}>Terms</Text>
+        </Pressable>
+        <Text style={[styles.legalText, { color: c.textMuted, fontFamily: ty.body.family }]}> and </Text>
+        <Pressable onPress={() => openLegalLink('https://metriqfit.com/privacy')}>
+          <Text style={[styles.legalLink, { color: c.primary, fontFamily: ty.body.familySemibold }]}>Privacy Policy</Text>
+        </Pressable>
+        <Text style={[styles.legalText, { color: c.textMuted, fontFamily: ty.body.family }]}>.</Text>
+      </View>
+    </AuthScreenShell>
   );
 }
 
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: metriqfitTheme.colors.bg,
-  },
-  scrollContent: {
-    flexGrow: 1,
-  },
-  content: {
-    flex: 1,
-    justifyContent: 'center',
-    padding: 24,
-  },
-  header: {
-    marginBottom: 40,
-  },
-  title: {
-    fontSize: 32,
-    fontFamily: 'Unbounded_700Bold',
-    color: metriqfitTheme.colors.text,
-    marginBottom: 8,
-  },
-  subtitle: {
-    fontSize: 16,
-    fontFamily: 'Sora_400Regular',
-    color: metriqfitTheme.colors.textMuted,
-  },
-  form: {
-    gap: 20,
-  },
-  inputGroup: {
-    gap: 8,
-  },
-  label: {
-    fontSize: 14,
-    fontFamily: 'Sora_500Medium',
-    color: metriqfitTheme.colors.text,
-  },
-  input: {
-    backgroundColor: metriqfitTheme.colors.surface,
-    borderRadius: 12,
-    padding: 16,
-    fontSize: 16,
-    fontFamily: 'Sora_400Regular',
-    color: metriqfitTheme.colors.text,
-    borderWidth: 1,
-    borderColor: metriqfitTheme.colors.border,
-  },
-  button: {
-    backgroundColor: metriqfitTheme.colors.accent,
-    borderRadius: 12,
-    padding: 16,
-    alignItems: 'center',
-    marginTop: 8,
-  },
-  buttonDisabled: {
-    opacity: 0.5,
-  },
-  buttonText: {
-    fontSize: 16,
-    fontFamily: 'Sora_600SemiBold',
-    color: metriqfitTheme.colors.bg,
-  },
-  error: {
-    fontSize: 14,
-    fontFamily: 'Sora_400Regular',
-    color: '#EF4444',
-    textAlign: 'center',
-  },
-  footer: {
+  dividerRow: {
     flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+    marginVertical: 4,
+  },
+  dividerLine: {
+    flex: 1,
+    height: StyleSheet.hairlineWidth,
+  },
+  dividerText: {
+    fontSize: 11,
+    textAlign: 'center',
+    letterSpacing: 0.5,
+    textTransform: 'uppercase',
+  },
+  messageBox: {
+    borderLeftWidth: 3,
+    borderRadius: 8,
+    paddingVertical: 10,
+    paddingHorizontal: 14,
+  },
+  messageText: {
+    fontSize: 13,
+    lineHeight: 18,
+  },
+  legalRow: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
     justifyContent: 'center',
     alignItems: 'center',
-    marginTop: 16,
+    marginTop: 4,
   },
-  footerText: {
-    fontSize: 14,
-    fontFamily: 'Sora_400Regular',
-    color: metriqfitTheme.colors.textMuted,
+  legalText: {
+    fontSize: 11,
+    lineHeight: 18,
+    opacity: 0.7,
   },
-  link: {
-    fontSize: 14,
-    fontFamily: 'Sora_600SemiBold',
-    color: metriqfitTheme.colors.accent,
+  legalLink: {
+    fontSize: 11,
+    lineHeight: 18,
   },
 });

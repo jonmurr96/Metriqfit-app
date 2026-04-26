@@ -12,6 +12,93 @@
 
 import { supabase } from '../lib/supabase';
 import type { Database } from '../lib/supabase/types';
+import {
+  buildMappingRowsFromV1Day,
+  buildMappingRowsFromV2Day,
+  remediateDayExerciseMappings,
+} from '../lib/workout/programMappingEngine';
+import {
+  buildSessionExerciseSnapshotInsertAttempts,
+  buildSessionExerciseSnapshots,
+} from '../lib/workout/session-snapshot';
+import type { ProgramExercise } from '../lib/workout/programMappingRules';
+import {
+  normalizeWorkoutDayType,
+  type WorkoutProgramCatalogItem,
+  type WorkoutProgramDayBlueprint,
+  type UserWorkoutPlanProgramMeta,
+  type WeeklyLayoutAssignment,
+} from '../lib/workout/program-catalog';
+import {
+  getSessionStartLocalDateKey,
+  isWorkoutSessionExpiredForLocalDay,
+} from '../lib/workout/session-lifecycle';
+import { awardXP, updateStreak } from './gamificationService';
+const db = supabase as any;
+
+async function insertSessionExercisesWithFallback(
+  rows: ReturnType<typeof buildSessionExerciseSnapshots>,
+) {
+  let lastError: unknown = null;
+
+  for (const attempt of buildSessionExerciseSnapshotInsertAttempts(rows)) {
+    const { error } = await supabase
+      .from('session_exercises')
+      .insert(attempt);
+
+    if (!error) {
+      return;
+    }
+
+    lastError = error;
+  }
+
+  throw lastError;
+}
+
+async function loadSessionExerciseSnapshotRows(input: {
+  sessionId: string;
+  planDayId?: string | null;
+  templateDayId?: string | null;
+}) {
+  if (input.planDayId) {
+    const { data: planExercises, error: planError } = await supabase
+      .from('user_workout_plan_exercises')
+      .select('*')
+      .eq('plan_day_id', input.planDayId)
+      .order('order_index');
+
+    if (planError) {
+      throw planError;
+    }
+
+    return buildSessionExerciseSnapshots({
+      sessionId: input.sessionId,
+      source: 'plan',
+      exercises: planExercises || [],
+    });
+  }
+
+  if (input.templateDayId) {
+    const { data: templateExercises, error: templateError } = await supabase
+      .from('workout_template_exercises')
+      .select('*')
+      .eq('template_day_id', input.templateDayId)
+      .order('order_index');
+
+    if (templateError) {
+      throw templateError;
+    }
+
+    return buildSessionExerciseSnapshots({
+      sessionId: input.sessionId,
+      source: 'template',
+      exercises: templateExercises || [],
+    });
+  }
+
+  return [];
+}
 
 // ============================================================================
 // Types
@@ -25,33 +112,60 @@ export type SessionExercise = Database['public']['Tables']['session_exercises'][
 export type WorkoutSet = Database['public']['Tables']['workout_sets']['Row'];
 export type UserPR = Database['public']['Tables']['user_prs']['Row'];
 
+export interface ExerciseFilters {
+  category?: string;
+  equipment?: string[];
+  difficulty?: 'beginner' | 'intermediate' | 'advanced';
+  search?: string;
+  referenceOnly?: boolean;
+  sourceProvider?: string;
+  hasMedia?: boolean;
+  sortBy?: 'name' | 'has_media';
+  sortAscending?: boolean;
+}
+
+export type { WorkoutProgramCatalogItem, WeeklyLayoutAssignment, UserWorkoutPlanProgramMeta };
+
 // Extended types with joins
-export interface WorkoutTemplateWithDays extends WorkoutTemplate {
-  days: Array<
-    WorkoutTemplateDay & {
-      exercises: Array<{
-        id: string;
-        exercise_id: string;
-        order_index: number;
-        sets_target: number;
-        reps_min: number;
-        reps_max: number;
-        rest_seconds: number | null;
-        tempo: string | null;
-        notes: string | null;
-        exercise: Exercise;
-      }>;
-    }
-  >;
+export interface WorkoutTemplateWithDays extends WorkoutProgramCatalogItem {
+  external_id: string | null;
+  split_type: string;
+  is_public: boolean;
+  created_at: string;
+  updated_at: string;
+  days: (WorkoutTemplateDay & {
+    day_type: string | null;
+    estimated_duration_min: number | null;
+    exercises: {
+      id: string;
+      exercise_id: string;
+      order_index: number;
+      sets_target: number;
+      reps_min: number;
+      reps_max: number;
+      rest_seconds: number | null;
+      tempo: string | null;
+      notes: string | null;
+      exercise: Exercise;
+    }[];
+  })[];
 }
 
 export interface WorkoutSessionWithDetails extends WorkoutSession {
-  exercises: Array<
-    SessionExercise & {
-      exercise: Exercise;
-      sets: WorkoutSet[];
-    }
-  >;
+  plan_day?: {
+    id: string;
+    name: string;
+    focus: string | null;
+  } | null;
+  exercises: (SessionExercise & {
+    exercise: Exercise;
+    sets: WorkoutSet[];
+    plan_exercise?: {
+      tempo: string | null;
+    } | null;
+    tempo: string | null;
+    reps_target: string | null;
+  })[];
 }
 
 export interface WorkoutStats {
@@ -61,11 +175,331 @@ export interface WorkoutStats {
   totalReps: number;
   avgDurationMinutes: number;
   sessionsPerWeek: number;
-  mostFrequentExercises: Array<{
+  mostFrequentExercises: {
     exerciseId: string;
     exerciseName: string;
     timesPerformed: number;
-  }>;
+  }[];
+}
+
+export interface WorkoutNoteItem {
+  id: string;
+  type: 'session' | 'exercise';
+  sessionId: string;
+  sessionName: string;
+  note: string;
+  logDate: string;
+  exerciseId?: string;
+  exerciseName?: string;
+}
+
+async function expireAbandonedSessionAtDayBoundary(
+  session: Pick<WorkoutSession, 'id' | 'plan_day_id' | 'started_at'>,
+): Promise<void> {
+  const scheduledDate = getSessionStartLocalDateKey(session.started_at);
+
+  const { data: sessionExerciseRows, error: sessionExerciseError } = await supabase
+    .from('session_exercises')
+    .select('id')
+    .eq('session_id', session.id);
+
+  if (sessionExerciseError) {
+    throw sessionExerciseError;
+  }
+
+  const sessionExerciseIds = (sessionExerciseRows || []).map((row) => row.id);
+
+  if (sessionExerciseIds.length > 0) {
+    const { error: deleteSetsError } = await supabase
+      .from('workout_sets')
+      .delete()
+      .in('session_exercise_id', sessionExerciseIds);
+
+    if (deleteSetsError) {
+      throw deleteSetsError;
+    }
+  }
+
+  const { error: deleteExercisesError } = await supabase
+    .from('session_exercises')
+    .delete()
+    .eq('session_id', session.id);
+
+  if (deleteExercisesError) {
+    throw deleteExercisesError;
+  }
+
+  const { error: deleteSessionError } = await supabase
+    .from('workout_sessions')
+    .delete()
+    .eq('id', session.id);
+
+  if (deleteSessionError) {
+    throw deleteSessionError;
+  }
+
+  if (session.plan_day_id && scheduledDate) {
+    const { error: scheduleUpdateError } = await db
+      .from('user_workout_plan_schedule')
+      .update({
+        status: 'missed',
+        completed_session_id: null,
+      })
+      .eq('plan_day_id', session.plan_day_id)
+      .eq('scheduled_date', scheduledDate)
+      .eq('session_type', 'workout')
+      .neq('status', 'completed')
+      .neq('status', 'rescheduled');
+
+    if (scheduleUpdateError) {
+      throw scheduleUpdateError;
+    }
+  }
+}
+
+function toBlueprintDay(input: any, sequenceIndex: number, exerciseCount: number): WorkoutProgramDayBlueprint {
+  return {
+    id: input.id,
+    sequenceIndex,
+    dayType: normalizeWorkoutDayType(input.day_type),
+    name: input.name || `Day ${sequenceIndex}`,
+    focus: input.focus || null,
+    estimatedDurationMin: input.estimated_duration_min ?? null,
+    exerciseCount,
+  };
+}
+
+function mapV2CatalogItem(template: any): WorkoutProgramCatalogItem {
+  const blueprint = (template.days || [])
+    .sort((a: any, b: any) => (a.sequence_index || 0) - (b.sequence_index || 0))
+    .map((day: any) =>
+      toBlueprintDay(
+        day,
+        Number(day.sequence_index || 0),
+        Number(day.exercise_count || day.blocks?.reduce((sum: number, block: any) => sum + ((block.exercises || []).length), 0) || 0),
+      ),
+    );
+
+  return {
+    id: template.id,
+    name: template.name,
+    description: template.description || null,
+    difficulty: template.difficulty || null,
+    daysPerWeek: template.days_per_week || 0,
+    durationWeeks: template.duration_weeks || null,
+    familyKey: template.family?.external_key || null,
+    familyDisplayName: template.family?.display_name || null,
+    progressionModel: template.progression_model || null,
+    goalTags: template.goal_tags || [],
+    trainingStyleTags: template.training_style_tags || [],
+    equipmentRequired: template.equipment_required || [],
+    targetAudience: template.target_audience || null,
+    sourceModel: 'v2_template',
+    dayBlueprint: blueprint,
+  };
+}
+
+function mapLegacyCatalogItem(template: any): WorkoutProgramCatalogItem {
+  const blueprint = (template.days || [])
+    .sort((a: any, b: any) => (a.day_number || 0) - (b.day_number || 0))
+    .map((day: any) =>
+      toBlueprintDay(
+        {
+          ...day,
+          day_type: day.is_rest_day ? 'rest' : 'workout',
+        },
+        Number(day.day_number || 0),
+        Number(day.exercise_count || day.exercises?.length || 0),
+      ),
+    );
+
+  return {
+    id: template.id,
+    name: template.name,
+    description: template.description || null,
+    difficulty: template.difficulty || null,
+    daysPerWeek: template.days_per_week || 0,
+    durationWeeks: template.duration_weeks || null,
+    familyKey: template.split_type || null,
+    familyDisplayName: template.split_type ? String(template.split_type).replaceAll('_', ' ') : 'Legacy Program',
+    progressionModel: null,
+    goalTags: template.goal_tags || [],
+    trainingStyleTags: [],
+    equipmentRequired: template.equipment_required || [],
+    targetAudience: template.target_audience || null,
+    sourceModel: 'legacy_template',
+    dayBlueprint: blueprint,
+  };
+}
+
+async function loadMappingExercisePool(): Promise<ProgramExercise[]> {
+  const { data, error } = await db
+    .from('exercises')
+    .select('id, external_id, name, category, equipment_required, primary_muscle, pattern, difficulty')
+    .limit(5000);
+
+  if (error) throw error;
+  return (data || []) as ProgramExercise[];
+}
+
+function remapV2TemplateDaysAtRuntime(input: {
+  templateId: string;
+  templateName: string;
+  daysPerWeek: number;
+  familyKey: string | null;
+  templateEquipment: string[];
+  days: any[];
+  exercisePool: ProgramExercise[];
+}) {
+  const exerciseById = new Map<string, ProgramExercise>(
+    input.exercisePool.filter((item) => !!item?.id).map((item) => [item.id, item]),
+  );
+
+  let changedRows = 0;
+
+  const days = (input.days || []).map((day) => {
+    if (day.day_type && day.day_type !== 'workout') return day;
+
+    const rows = buildMappingRowsFromV2Day(day);
+    if (!rows.length) return day;
+
+    const remediation = remediateDayExerciseMappings({
+      dayId: day.id,
+      dayName: day.name,
+      dayFocus: day.focus,
+      dayIndex: Number(day.sequence_index || day.day_number || 1),
+      daysPerWeek: Number(input.daysPerWeek || 0),
+      familyKey: input.familyKey,
+      goalTags: [],
+      templateEquipment: input.templateEquipment || [],
+      rows,
+      exercisePool: input.exercisePool,
+    });
+
+    if (remediation.unresolvedRows.length > 0) {
+      throw new Error(
+        `Template ${input.templateId} (${input.templateName}) day "${day.name}" has invalid mappings and no runtime replacement candidates.`,
+      );
+    }
+
+    if (!remediation.changedRows.length) return day;
+
+    changedRows += remediation.changedRows.length;
+    const replacementByRowId = remediation.replacementByRowId;
+
+    return {
+      ...day,
+      blocks: (day.blocks || []).map((block: any) => ({
+        ...block,
+        exercises: (block.exercises || []).map((exerciseRow: any) => {
+          const nextExerciseId = replacementByRowId[exerciseRow.id] || exerciseRow.exercise_id;
+          if (nextExerciseId === exerciseRow.exercise_id) return exerciseRow;
+
+          const nextExercise = exerciseById.get(nextExerciseId);
+          if (!nextExercise) {
+            throw new Error(
+              `Template ${input.templateId} (${input.templateName}) produced replacement ${nextExerciseId} not found in exercise pool.`,
+            );
+          }
+
+          return {
+            ...exerciseRow,
+            exercise_id: nextExerciseId,
+            exercise: {
+              ...(exerciseRow.exercise || {}),
+              id: nextExercise.id,
+              external_id: nextExercise.external_id || null,
+              name: nextExercise.name || exerciseRow.exercise?.name || 'Unknown exercise',
+              category: nextExercise.category || exerciseRow.exercise?.category || 'other',
+              equipment_required: nextExercise.equipment_required || [],
+              primary_muscle: nextExercise.primary_muscle || null,
+              pattern: nextExercise.pattern || null,
+              difficulty: nextExercise.difficulty || null,
+            },
+          };
+        }),
+      })),
+    };
+  });
+
+  return { days, changedRows };
+}
+
+function remapV1TemplateDaysAtRuntime(input: {
+  templateId: string;
+  templateName: string;
+  daysPerWeek: number;
+  templateEquipment: string[];
+  days: any[];
+  exercisePool: ProgramExercise[];
+}) {
+  const exerciseById = new Map<string, ProgramExercise>(
+    input.exercisePool.filter((item) => !!item?.id).map((item) => [item.id, item]),
+  );
+
+  let changedRows = 0;
+
+  const days = (input.days || []).map((day) => {
+    const rows = buildMappingRowsFromV1Day(day);
+    if (!rows.length) return day;
+
+    const remediation = remediateDayExerciseMappings({
+      dayId: day.id,
+      dayName: day.name,
+      dayFocus: day.focus,
+      dayIndex: Number(day.day_number || day.sequence_index || 1),
+      daysPerWeek: Number(input.daysPerWeek || 0),
+      familyKey: null,
+      goalTags: [],
+      templateEquipment: input.templateEquipment || [],
+      rows,
+      exercisePool: input.exercisePool,
+    });
+
+    if (remediation.unresolvedRows.length > 0) {
+      throw new Error(
+        `Template ${input.templateId} (${input.templateName}) day "${day.name}" has invalid mappings and no runtime replacement candidates.`,
+      );
+    }
+
+    if (!remediation.changedRows.length) return day;
+
+    changedRows += remediation.changedRows.length;
+    const replacementByRowId = remediation.replacementByRowId;
+
+    return {
+      ...day,
+      exercises: (day.exercises || []).map((exerciseRow: any) => {
+        const nextExerciseId = replacementByRowId[exerciseRow.id] || exerciseRow.exercise_id;
+        if (nextExerciseId === exerciseRow.exercise_id) return exerciseRow;
+
+        const nextExercise = exerciseById.get(nextExerciseId);
+        if (!nextExercise) {
+          throw new Error(
+            `Template ${input.templateId} (${input.templateName}) produced replacement ${nextExerciseId} not found in exercise pool.`,
+          );
+        }
+
+        return {
+          ...exerciseRow,
+          exercise_id: nextExerciseId,
+          exercise: {
+            ...(exerciseRow.exercise || {}),
+            id: nextExercise.id,
+            external_id: nextExercise.external_id || null,
+            name: nextExercise.name || exerciseRow.exercise?.name || 'Unknown exercise',
+            category: nextExercise.category || exerciseRow.exercise?.category || 'other',
+            equipment_required: nextExercise.equipment_required || [],
+            primary_muscle: nextExercise.primary_muscle || null,
+            pattern: nextExercise.pattern || null,
+            difficulty: nextExercise.difficulty || null,
+          },
+        };
+      }),
+    };
+  });
+
+  return { days, changedRows };
 }
 
 // ============================================================================
@@ -75,21 +509,154 @@ export interface WorkoutStats {
 /**
  * Get all public workout programs/templates
  */
-export async function getPrograms(): Promise<WorkoutTemplate[]> {
+export async function getPrograms(): Promise<WorkoutProgramCatalogItem[]> {
+  const { data: v2Templates, error: v2Error } = await db
+    .from('workout_program_templates_v2')
+    .select(
+      `
+      *,
+      family:workout_program_families(external_key,display_name),
+      days:workout_program_days_v2(
+        id,
+        sequence_index,
+        day_type,
+        name,
+        focus,
+        estimated_duration_min,
+        blocks:workout_program_day_blocks_v2(
+          id,
+          exercises:workout_program_block_exercises_v2(id)
+        )
+      )
+    `,
+    )
+    .eq('is_public', true)
+    .order('name', { ascending: true });
+
+  if (!v2Error && (v2Templates || []).length > 0) {
+    return (v2Templates || []).map(mapV2CatalogItem);
+  }
+
   const { data, error } = await supabase
     .from('workout_templates')
-    .select('*')
+    .select(
+      `
+      *,
+      days:workout_template_days(
+        id,
+        day_number,
+        name,
+        focus,
+        is_rest_day,
+        exercises:workout_template_exercises(id)
+      )
+    `,
+    )
     .eq('is_public', true)
     .order('name');
-
   if (error) throw error;
-  return data || [];
+  return (data || []).map(mapLegacyCatalogItem);
 }
 
 /**
  * Get a specific program with its days and exercises
  */
 export async function getProgramWithDays(programId: string): Promise<WorkoutTemplateWithDays> {
+  const { data: v2Program, error: v2Error } = await db
+    .from('workout_program_templates_v2')
+    .select(
+      `
+      *,
+      family:workout_program_families(external_key,display_name),
+      days:workout_program_days_v2(
+        *,
+        blocks:workout_program_day_blocks_v2(
+          *,
+          exercises:workout_program_block_exercises_v2(
+            *,
+            exercise:exercises(*)
+          )
+        )
+      )
+    `,
+    )
+    .eq('id', programId)
+    .maybeSingle();
+
+  if (!v2Error && v2Program) {
+    const exercisePool = await loadMappingExercisePool();
+    const remappedV2 = remapV2TemplateDaysAtRuntime({
+      templateId: v2Program.id,
+      templateName: v2Program.name,
+      daysPerWeek: Number(v2Program.days_per_week || 0),
+      familyKey: v2Program.family?.external_key || null,
+      templateEquipment: v2Program.equipment_required || [],
+      days: v2Program.days || [],
+      exercisePool,
+    });
+
+    if (remappedV2.changedRows > 0) {
+      console.warn(
+        `[workoutService] Auto-remapped ${remappedV2.changedRows} template exercises while loading v2 template ${v2Program.id}.`,
+      );
+    }
+
+    const baseProgram = mapV2CatalogItem({
+      ...v2Program,
+      days: remappedV2.days,
+    });
+
+    const mappedProgram: WorkoutTemplateWithDays = {
+      ...baseProgram,
+      external_id: v2Program.external_id || `v2_${v2Program.id}`,
+      split_type: v2Program.family?.external_key || 'custom',
+      is_public: v2Program.is_public,
+      created_at: v2Program.created_at || new Date().toISOString(),
+      updated_at: v2Program.updated_at || new Date().toISOString(),
+      days: (remappedV2.days || [])
+        .sort((a: any, b: any) => a.sequence_index - b.sequence_index)
+        .map((day: any) => {
+          const flattened = (day.blocks || [])
+            .sort((a: any, b: any) => a.order_index - b.order_index)
+            .flatMap((block: any, blockIdx: number) =>
+              (block.exercises || [])
+                .sort((a: any, b: any) => a.order_index - b.order_index)
+                .map((exercise: any, exIdx: number) => ({
+                  id: exercise.id,
+                  exercise_id: exercise.exercise_id,
+                  order_index: blockIdx * 100 + exIdx + 1,
+                  sets_target: exercise.sets_target,
+                  reps_min: exercise.reps_min,
+                  reps_max: exercise.reps_max,
+                  rest_seconds: exercise.rest_seconds,
+                  tempo: exercise.tempo,
+                  notes: exercise.notes,
+                  technique_type: exercise.technique_type,
+                  technique_config_json: exercise.technique_config_json || {},
+                  set_style: exercise.set_style,
+                  pause_seconds: exercise.pause_seconds,
+                  exercise: exercise.exercise,
+                })),
+            );
+
+          return {
+            id: day.id,
+            template_id: v2Program.id,
+            day_number: day.sequence_index,
+            name: day.name,
+            focus: day.focus,
+            day_type: day.day_type || 'workout',
+            estimated_duration_min: day.estimated_duration_min || null,
+            is_rest_day: day.day_type !== 'workout',
+            created_at: day.created_at || new Date().toISOString(),
+            exercises: flattened,
+          };
+        }),
+    } as unknown as WorkoutTemplateWithDays;
+
+    return mappedProgram;
+  }
+
   const { data, error } = await supabase
     .from('workout_templates')
     .select(
@@ -118,13 +685,41 @@ export async function getProgramWithDays(programId: string): Promise<WorkoutTemp
   if (error) throw error;
   if (!data) throw new Error('Program not found');
 
+  const exercisePool = await loadMappingExercisePool();
+  const remappedV1 = remapV1TemplateDaysAtRuntime({
+    templateId: data.id,
+    templateName: data.name,
+    daysPerWeek: Number(data.days_per_week || 0),
+    templateEquipment: data.equipment_required || [],
+    days: data.days || [],
+    exercisePool,
+  });
+
+  if (remappedV1.changedRows > 0) {
+    console.warn(
+      `[workoutService] Auto-remapped ${remappedV1.changedRows} template exercises while loading v1 template ${data.id}.`,
+    );
+  }
+
+  const baseProgram = mapLegacyCatalogItem({
+    ...data,
+    days: remappedV1.days,
+  });
+
   // Sort days by day_number and exercises by order_index
   const sortedData = {
-    ...data,
-    days: data.days
+    ...baseProgram,
+    external_id: data.external_id || null,
+    split_type: data.split_type || 'custom',
+    is_public: data.is_public,
+    created_at: data.created_at,
+    updated_at: data.updated_at,
+    days: remappedV1.days
       .sort((a: any, b: any) => a.day_number - b.day_number)
       .map((day: any) => ({
         ...day,
+        day_type: day.is_rest_day ? 'rest' : 'workout',
+        estimated_duration_min: day.estimated_duration_min || null,
         exercises: day.exercises.sort((a: any, b: any) => a.order_index - b.order_index),
       })),
   };
@@ -136,6 +731,80 @@ export async function getProgramWithDays(programId: string): Promise<WorkoutTemp
  * Get a specific template day with exercises
  */
 export async function getTemplateDay(dayId: string): Promise<WorkoutTemplateDay & { exercises: any[] }> {
+  const { data: v2Day, error: v2Error } = await db
+    .from('workout_program_days_v2')
+    .select(
+      `
+      *,
+      blocks:workout_program_day_blocks_v2(
+        *,
+        exercises:workout_program_block_exercises_v2(
+          *,
+          exercise:exercises(*)
+        )
+      )
+      ,
+      template:workout_program_templates_v2(
+        id,
+        name,
+        days_per_week,
+        equipment_required,
+        family:workout_program_families(external_key)
+      )
+    `,
+    )
+    .eq('id', dayId)
+    .maybeSingle();
+
+  if (!v2Error && v2Day) {
+    const exercisePool = await loadMappingExercisePool();
+    const remappedDay = remapV2TemplateDaysAtRuntime({
+      templateId: v2Day.template?.id || v2Day.template_id || 'unknown',
+      templateName: v2Day.template?.name || v2Day.name || 'Unknown template',
+      daysPerWeek: Number(v2Day.template?.days_per_week || 0),
+      familyKey: v2Day.template?.family?.external_key || null,
+      templateEquipment: v2Day.template?.equipment_required || [],
+      days: [v2Day],
+      exercisePool,
+    }).days[0] || v2Day;
+
+    const exercises = (remappedDay.blocks || [])
+      .sort((a: any, b: any) => a.order_index - b.order_index)
+      .flatMap((block: any, blockIdx: number) =>
+        (block.exercises || [])
+          .sort((a: any, b: any) => a.order_index - b.order_index)
+          .map((exercise: any, exIdx: number) => ({
+            id: exercise.id,
+            template_day_id: v2Day.id,
+            exercise_id: exercise.exercise_id,
+            order_index: blockIdx * 100 + exIdx + 1,
+            sets_target: exercise.sets_target,
+            reps_min: exercise.reps_min,
+            reps_max: exercise.reps_max,
+            rest_seconds: exercise.rest_seconds,
+            tempo: exercise.tempo,
+            notes: exercise.notes,
+            technique_type: exercise.technique_type,
+            technique_config_json: exercise.technique_config_json || {},
+            set_style: exercise.set_style,
+            pause_seconds: exercise.pause_seconds,
+            exercise: exercise.exercise,
+          })),
+      );
+
+    return {
+      id: v2Day.id,
+      template_id: v2Day.template_id,
+      day_number: v2Day.sequence_index,
+      name: v2Day.name,
+      focus: v2Day.focus,
+      is_rest_day: v2Day.day_type !== 'workout',
+      estimated_duration_min: v2Day.estimated_duration_min || null,
+      created_at: v2Day.created_at || new Date().toISOString(),
+      exercises,
+    } as unknown as WorkoutTemplateDay & { exercises: any[] };
+  }
+
   const { data, error } = await supabase
     .from('workout_template_days')
     .select(
@@ -153,6 +822,13 @@ export async function getTemplateDay(dayId: string): Promise<WorkoutTemplateDay 
         notes,
         exercise:exercises(*)
       )
+      ,
+      template:workout_templates(
+        id,
+        name,
+        days_per_week,
+        equipment_required
+      )
     `
     )
     .eq('id', dayId)
@@ -161,9 +837,19 @@ export async function getTemplateDay(dayId: string): Promise<WorkoutTemplateDay 
   if (error) throw error;
   if (!data) throw new Error('Template day not found');
 
+  const exercisePool = await loadMappingExercisePool();
+  const remappedV1Day = remapV1TemplateDaysAtRuntime({
+    templateId: data.template?.id || data.template_id || 'unknown',
+    templateName: data.template?.name || data.name || 'Unknown template',
+    daysPerWeek: Number(data.template?.days_per_week || 0),
+    templateEquipment: data.template?.equipment_required || [],
+    days: [data],
+    exercisePool,
+  }).days[0] || data;
+
   return {
     ...data,
-    exercises: data.exercises?.sort((a: any, b: any) => a.order_index - b.order_index) || []
+    exercises: remappedV1Day.exercises?.sort((a: any, b: any) => a.order_index - b.order_index) || [],
   };
 }
 
@@ -174,12 +860,7 @@ export async function getTemplateDay(dayId: string): Promise<WorkoutTemplateDay 
 /**
  * Get exercises with optional filters
  */
-export async function getExercises(filters?: {
-  category?: string;
-  equipment?: string[];
-  difficulty?: 'beginner' | 'intermediate' | 'advanced';
-  search?: string;
-}): Promise<Exercise[]> {
+export async function getExercises(filters?: ExerciseFilters): Promise<Exercise[]> {
   let query = supabase.from('exercises').select('*');
 
   // Filter by category
@@ -202,7 +883,27 @@ export async function getExercises(filters?: {
     query = query.ilike('name', `%${filters.search}%`);
   }
 
-  query = query.order('name');
+  // Filter to program/reference subsets
+  if (typeof filters?.referenceOnly === 'boolean') {
+    query = query.eq('is_reference_only', filters.referenceOnly);
+  }
+
+  // Filter by source provider
+  if (filters?.sourceProvider) {
+    query = query.eq('source_provider', filters.sourceProvider);
+  }
+
+  // Filter by media availability
+  if (typeof filters?.hasMedia === 'boolean') {
+    query = query.eq('has_media', filters.hasMedia);
+  }
+
+  // Default sort boosts rows with media, unless caller specifies explicit sort.
+  if (filters?.sortBy) {
+    query = query.order(filters.sortBy, { ascending: filters.sortAscending ?? true });
+  } else {
+    query = query.order('has_media', { ascending: false }).order('name', { ascending: true });
+  }
 
   const { data, error } = await query;
 
@@ -243,18 +944,46 @@ export async function startSession(
   templateDayId?: string,
   name?: string
 ): Promise<WorkoutSessionWithDetails> {
+  await getActiveSessionInternal(userId, true);
+
   // Auto-generate name if not provided
   const sessionName = name || `Workout ${new Date().toLocaleDateString()}`;
 
-  // 1. Create the session
+  // 1. Check if today's schedule entry is a deload week
+  let scheduleEntryId: string | null = null;
+  let volumeMultiplier: number | undefined;
+  let isDeloadSession = false;
+
+  if (planDayId) {
+    const today = new Date().toISOString().split('T')[0];
+    const { data: scheduleEntry } = await supabase
+      .from('user_workout_plan_schedule')
+      .select('id, is_deload_week, volume_multiplier')
+      .eq('plan_day_id', planDayId)
+      .eq('scheduled_date', today)
+      .eq('status', 'planned')
+      .maybeSingle();
+
+    if (scheduleEntry) {
+      scheduleEntryId = scheduleEntry.id;
+      isDeloadSession = scheduleEntry.is_deload_week === true;
+      if (isDeloadSession && scheduleEntry.volume_multiplier) {
+        volumeMultiplier = Number(scheduleEntry.volume_multiplier);
+      }
+    }
+  }
+
+  // 2. Create the session
   const { data: session, error: sessionError } = await supabase
     .from('workout_sessions')
     .insert({
       user_id: userId,
       plan_day_id: planDayId || null,
       template_day_id: templateDayId || null,
+      schedule_id: scheduleEntryId,
       name: sessionName,
       started_at: new Date().toISOString(),
+      ...(isDeloadSession ? { notes: '🔄 Deload week — volume reduced for recovery.' } : {}),
     })
     .select()
     .single();
@@ -262,97 +991,139 @@ export async function startSession(
   if (sessionError) throw sessionError;
   if (!session) throw new Error('Failed to create session');
 
-  // 2. Fetch exercises to copy
-  let exercisesToCopy: any[] = [];
+  // 3. Fetch exercises to copy
+  const rawRows = await loadSessionExerciseSnapshotRows({
+    sessionId: session.id,
+    planDayId,
+    templateDayId,
+  });
 
-  if (planDayId) {
-    // Fetch from plan day
-    const { data: planExercises, error: planError } = await supabase
-      .from('workout_plan_exercises')
+  // 4. Re-snapshot with deload multiplier if applicable
+  //    loadSessionExerciseSnapshotRows returns pre-built snapshots; we need to
+  //    rebuild them with the multiplier applied using the raw plan exercises.
+  let exercisesToCopy = rawRows;
+  if (planDayId && isDeloadSession && volumeMultiplier && volumeMultiplier < 1) {
+    const { data: planExercises } = await supabase
+      .from('user_workout_plan_exercises')
       .select('*')
       .eq('plan_day_id', planDayId)
       .order('order_index');
 
-    if (!planError && planExercises) {
-      exercisesToCopy = planExercises.map(ex => ({
-        session_id: session.id,
-        exercise_id: ex.exercise_id,
-        order_index: ex.order_index,
-        notes: ex.notes,
-      }));
-    }
-  } else if (templateDayId) {
-    // Fetch from template day
-    const { data: templateExercises, error: templateError } = await supabase
-      .from('workout_template_exercises')
-      .select('*')
-      .eq('template_day_id', templateDayId)
-      .order('order_index');
-
-    if (!templateError && templateExercises) {
-      exercisesToCopy = templateExercises.map(ex => ({
-        session_id: session.id,
-        exercise_id: ex.exercise_id,
-        order_index: ex.order_index,
-        notes: ex.notes,
-      }));
+    if (planExercises && planExercises.length > 0) {
+      exercisesToCopy = buildSessionExerciseSnapshots({
+        sessionId: session.id,
+        source: 'plan',
+        exercises: planExercises,
+        volumeMultiplier,
+      });
     }
   }
 
-  // 3. Insert session exercises
+  // 5. Insert session exercises
   if (exercisesToCopy.length > 0) {
-    const { error: copyError } = await supabase
-      .from('session_exercises')
-      .insert(exercisesToCopy);
-
-    if (copyError) {
+    try {
+      await insertSessionExercisesWithFallback(exercisesToCopy);
+    } catch (copyError) {
       console.error('Failed to copy exercises:', copyError);
-      // We don't throw here to at least return the session, but it's bad.
+      // We don't throw here so the session can still exist, but callers should treat it as degraded.
     }
   }
 
-  // 4. Return complete session with exercises
+  // 6. Return complete session with exercises
   return getActiveSession(userId) as Promise<WorkoutSessionWithDetails>;
 }
 
 /**
  * Get active workout session (if any)
  */
-export async function getActiveSession(userId: string): Promise<WorkoutSessionWithDetails | null> {
-  const { data, error } = await supabase
-    .from('workout_sessions')
-    .select(
-      `
-      *,
-      exercises:session_exercises(
+async function getActiveSessionInternal(userId: string, allowRepair: boolean): Promise<WorkoutSessionWithDetails | null> {
+  let expiredSessionsCleaned = 0;
+
+  while (expiredSessionsCleaned < 10) {
+    const { data, error } = await supabase
+      .from('workout_sessions')
+      .select(
+        `
         *,
-        exercise:exercises(*),
-        sets:workout_sets(*)
+        plan_day:user_workout_plan_days(
+          id,
+          name,
+          focus
+        ),
+        exercises:session_exercises(
+          *,
+          plan_exercise:user_workout_plan_exercises(
+            tempo
+          ),
+          exercise:exercises(*),
+          sets:workout_sets(*)
+        )
+      `
       )
-    `
-    )
-    .eq('user_id', userId)
-    .is('finished_at', null)
-    .order('started_at', { ascending: false })
-    .limit(1)
-    .maybeSingle();
+      .eq('user_id', userId)
+      .is('finished_at', null)
+      .order('started_at', { ascending: false })
+      .limit(1)
+      .maybeSingle();
 
-  if (error) throw error;
+    if (error) throw error;
 
-  if (!data) return null;
+    if (!data) return null;
 
-  // Sort exercises by order_index and sets by set_number
-  const sortedData = {
-    ...data,
-    exercises: data.exercises
-      .sort((a: any, b: any) => a.order_index - b.order_index)
-      .map((ex: any) => ({
-        ...ex,
-        sets: ex.sets.sort((a: any, b: any) => a.set_number - b.set_number),
-      })),
-  };
+    if (isWorkoutSessionExpiredForLocalDay(data.started_at)) {
+      await expireAbandonedSessionAtDayBoundary(data as WorkoutSession);
+      expiredSessionsCleaned += 1;
+      continue;
+    }
 
-  return sortedData as WorkoutSessionWithDetails;
+    if (allowRepair && (data.exercises || []).length === 0 && (data.plan_day_id || data.template_day_id)) {
+      try {
+        const snapshotRows = await loadSessionExerciseSnapshotRows({
+          sessionId: data.id,
+          planDayId: data.plan_day_id,
+          templateDayId: data.template_day_id,
+        });
+
+        if (snapshotRows.length > 0) {
+          await insertSessionExercisesWithFallback(snapshotRows);
+
+          const repairedSession = await getActiveSessionInternal(userId, false);
+          if (repairedSession) {
+            return repairedSession;
+          }
+        }
+      } catch (repairError) {
+        console.warn('Failed to repair empty active session', repairError);
+      }
+    }
+
+    const sortedData = {
+      ...data,
+      exercises: data.exercises
+        .sort((a: any, b: any) => a.order_index - b.order_index)
+        .map((ex: any) => ({
+          ...ex,
+          tempo: ex.plan_exercise?.tempo ?? null,
+          reps_target:
+            ex.reps_min != null && ex.reps_max != null
+              ? `${ex.reps_min}-${ex.reps_max}`
+              : ex.reps_min != null
+                ? String(ex.reps_min)
+                : ex.reps_max != null
+                  ? String(ex.reps_max)
+                  : null,
+          sets: ex.sets.sort((a: any, b: any) => a.set_number - b.set_number),
+        })),
+    };
+
+    return sortedData as WorkoutSessionWithDetails;
+  }
+
+  return null;
+}
+
+export async function getActiveSession(userId: string): Promise<WorkoutSessionWithDetails | null> {
+  return getActiveSessionInternal(userId, true);
 }
 
 /**
@@ -364,8 +1135,16 @@ export async function getSessionDetails(sessionId: string): Promise<WorkoutSessi
     .select(
       `
       *,
+      plan_day:user_workout_plan_days(
+        id,
+        name,
+        focus
+      ),
       exercises:session_exercises(
         *,
+        plan_exercise:user_workout_plan_exercises(
+          tempo
+        ),
         exercise:exercises(*),
         sets:workout_sets(*)
       )
@@ -384,6 +1163,15 @@ export async function getSessionDetails(sessionId: string): Promise<WorkoutSessi
       .sort((a: any, b: any) => a.order_index - b.order_index)
       .map((ex: any) => ({
         ...ex,
+        tempo: ex.plan_exercise?.tempo ?? null,
+        reps_target:
+          ex.reps_min != null && ex.reps_max != null
+            ? `${ex.reps_min}-${ex.reps_max}`
+            : ex.reps_min != null
+              ? String(ex.reps_min)
+              : ex.reps_max != null
+                ? String(ex.reps_max)
+                : null,
         sets: ex.sets.sort((a: any, b: any) => a.set_number - b.set_number),
       })),
   };
@@ -431,8 +1219,8 @@ export async function logSet(
       session_exercise_id: sessionExerciseId,
       set_number: setNumber,
       reps,
-      weight_lb: weightLb || null,
-      rpe: rpe || null,
+      weight_lb: weightLb === undefined ? null : weightLb,
+      rpe: rpe === undefined ? null : rpe,
       is_warmup: isWarmup,
       logged_at: new Date().toISOString(),
     })
@@ -496,10 +1284,9 @@ export async function deleteSet(setId: string): Promise<void> {
  * Let's try adding `updateSetTarget` that updates `sets_target`. If it fails, we know why.
  */
 export async function updateSetTarget(sessionExerciseId: string, target: number): Promise<void> {
-  // Try to update sets_target column
   const { error } = await supabase
     .from('session_exercises')
-    .update({ sets_target: target } as any) // Cast to any in case types are loose, but ideally strict
+    .update({ sets_target: target })
     .eq('id', sessionExerciseId);
 
   if (error) throw error;
@@ -513,12 +1300,17 @@ export async function finishSession(sessionId: string, notes?: string): Promise<
   // Get session start time
   const { data: session, error: fetchError } = await supabase
     .from('workout_sessions')
-    .select('started_at')
+    .select('id, user_id, plan_day_id, started_at, finished_at')
     .eq('id', sessionId)
     .single();
 
   if (fetchError) throw fetchError;
   if (!session) throw new Error('Session not found');
+
+  if (!session.finished_at && isWorkoutSessionExpiredForLocalDay(session.started_at)) {
+    await expireAbandonedSessionAtDayBoundary(session as WorkoutSession);
+    throw new Error('This workout expired when the day rolled over and can no longer be finished.');
+  }
 
   const now = new Date();
   const startedAt = new Date(session.started_at);
@@ -537,6 +1329,28 @@ export async function finishSession(sessionId: string, notes?: string): Promise<
 
   if (error) throw error;
   if (!data) throw new Error('Failed to finish session');
+
+  // Award XP and update streaks (non-blocking, fail gracefully)
+  try {
+    const userId = session.user_id;
+    const activityDate = new Date().toISOString().split('T')[0];
+
+    // Award XP for workout completion
+    await awardXP(userId, 'workout_completed', {
+      sessionId,
+      duration: durationSeconds,
+    });
+
+    // Update workout streak
+    await updateStreak(userId, 'workout', activityDate);
+
+    // Update fitness master streak
+    await updateStreak(userId, 'fitness', activityDate);
+  } catch (gamificationError) {
+    // Log error but don't fail the workout
+    console.error('[WorkoutService] Gamification error:', gamificationError);
+  }
+
   return data;
 }
 
@@ -652,13 +1466,7 @@ export async function checkAndUpdatePR(
 /**
  * Get all PRs for a user
  */
-export async function getUserPRs(userId: string): Promise<
-  Array<
-    UserPR & {
-      exercise: Exercise;
-    }
-  >
-> {
+export async function getUserPRs(userId: string): Promise<(UserPR & { exercise: Exercise })[]> {
   const { data, error } = await supabase
     .from('user_prs')
     .select(
@@ -671,7 +1479,7 @@ export async function getUserPRs(userId: string): Promise<
     .order('achieved_at', { ascending: false });
 
   if (error) throw error;
-  return (data || []) as Array<UserPR & { exercise: Exercise }>;
+  return (data || []) as (UserPR & { exercise: Exercise })[];
 }
 
 // ============================================================================
@@ -841,12 +1649,121 @@ export async function getExerciseHistory(
 /**
  * Swap an exercise in an active session
  */
-export async function swapExercise(sessionExerciseId: string, newExerciseId: string): Promise<void> {
+export async function swapExercise(
+  sessionExerciseId: string, 
+  newExerciseId: string,
+  reason?: string,
+  continuity?: string
+): Promise<void> {
   const { error } = await supabase
     .from('session_exercises')
-    .update({ exercise_id: newExerciseId })
+    .update({ 
+        exercise_id: newExerciseId,
+        swap_reason: reason,
+        continuity_method: continuity
+    })
     .eq('id', sessionExerciseId);
 
   if (error) throw error;
 }
 
+export async function updateSessionExerciseNote(
+  sessionExerciseId: string,
+  notes: string | null,
+): Promise<void> {
+  const { error } = await supabase
+    .from('session_exercises')
+    .update({ notes })
+    .eq('id', sessionExerciseId);
+
+  if (error) throw error;
+}
+
+export async function updateSessionNotes(sessionId: string, notes: string | null): Promise<void> {
+  const { error } = await supabase
+    .from('workout_sessions')
+    .update({ notes })
+    .eq('id', sessionId);
+
+  if (error) throw error;
+}
+
+export async function getWorkoutNotesFeed(
+  userId: string,
+  options?: { limit?: number; search?: string; from?: string; to?: string },
+): Promise<WorkoutNoteItem[]> {
+  const limit = options?.limit ?? 80;
+  const search = options?.search?.trim().toLowerCase();
+
+  let sessionsQuery = supabase
+    .from('workout_sessions')
+    .select('id, name, started_at, finished_at, notes')
+    .eq('user_id', userId)
+    .order('started_at', { ascending: false })
+    .limit(Math.max(limit, 40));
+
+  if (options?.from) {
+    sessionsQuery = sessionsQuery.gte('started_at', options.from);
+  }
+  if (options?.to) {
+    sessionsQuery = sessionsQuery.lte('started_at', options.to);
+  }
+
+  const { data: sessions, error: sessionsError } = await sessionsQuery;
+  if (sessionsError) throw sessionsError;
+
+  const sessionRows = sessions || [];
+  const sessionMap = new Map(sessionRows.map((s: any) => [s.id, s]));
+  const sessionIds = sessionRows.map((s: any) => s.id);
+
+  const sessionItems: WorkoutNoteItem[] = sessionRows
+    .filter((session: any) => !!session.notes && String(session.notes).trim().length > 0)
+    .map((session: any) => ({
+      id: `session:${session.id}`,
+      type: 'session',
+      sessionId: session.id,
+      sessionName: session.name || 'Workout Session',
+      note: String(session.notes),
+      logDate: session.finished_at || session.started_at || new Date().toISOString(),
+    }));
+
+  let exerciseItems: WorkoutNoteItem[] = [];
+  if (sessionIds.length > 0) {
+    const { data: exerciseNotes, error: exerciseError } = await supabase
+      .from('session_exercises')
+      .select('id, session_id, exercise_id, notes, created_at, exercise:exercises(name)')
+      .in('session_id', sessionIds)
+      .not('notes', 'is', null)
+      .order('created_at', { ascending: false });
+
+    if (exerciseError) throw exerciseError;
+
+    exerciseItems = (exerciseNotes || [])
+      .filter((row: any) => String(row.notes || '').trim().length > 0)
+      .map((row: any) => {
+        const session = sessionMap.get(row.session_id);
+        return {
+          id: `exercise:${row.id}`,
+          type: 'exercise',
+          sessionId: row.session_id,
+          sessionName: session?.name || 'Workout Session',
+          exerciseId: row.exercise_id,
+          exerciseName: row.exercise?.name || 'Exercise',
+          note: String(row.notes),
+          logDate: session?.started_at || row.created_at || new Date().toISOString(),
+        } satisfies WorkoutNoteItem;
+      });
+  }
+
+  let combined = [...sessionItems, ...exerciseItems];
+
+  if (search) {
+    combined = combined.filter((item) => {
+      const haystack = `${item.note} ${item.sessionName} ${item.exerciseName || ''}`.toLowerCase();
+      return haystack.includes(search);
+    });
+  }
+
+  combined.sort((a, b) => new Date(b.logDate).getTime() - new Date(a.logDate).getTime());
+  return combined.slice(0, limit);
+}

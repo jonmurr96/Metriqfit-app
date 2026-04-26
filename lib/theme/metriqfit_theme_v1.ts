@@ -49,11 +49,19 @@ export const metriqfitTheme = {
 
     // For charts / rings
     chart: {
-      c1: "#2DD4BF" as Hex, // Teal
+      c1: "#22D3EE" as Hex, // Teal
       c2: "#22D3EE" as Hex, // Cyan
       c3: "#22D3EE" as Hex, // Cyan
       c4: "#EC4899" as Hex, // Pink
       c5: "#F97316" as Hex, // Orange
+    },
+
+    // Meal timeline colors
+    meals: {
+      breakfast: "#F97316" as Hex, // Orange
+      lunch: "#22D3EE" as Hex,     // Cyan (matching primary)
+      dinner: "#A855F7" as Hex,    // Purple
+      snack: "#71717A" as Hex,     // Zinc-500 (subtle)
     },
 
     // Macro nutrient colors (Neon/Vibrant)
@@ -68,8 +76,8 @@ export const metriqfitTheme = {
 
     // Opacity variants for badges and backgrounds
     opacity: {
-      primaryLight: "rgba(45, 212, 191, 0.15)",
-      primaryMedium: "rgba(45, 212, 191, 0.25)",
+      primaryLight: "rgba(34, 211, 238, 0.15)",
+      primaryMedium: "rgba(34, 211, 238, 0.25)",
       successLight: "rgba(46, 229, 157, 0.15)",
       successMedium: "rgba(46, 229, 157, 0.25)",
       warningLight: "rgba(234, 179, 8, 0.15)",
@@ -83,7 +91,7 @@ export const metriqfitTheme = {
   // --- Gradient presets ---
   gradients: {
     // Primary CTA / progress ring (Cyan -> Cyan Dark -> Teal)
-    brand: ["#22D3EE", "#06B6D4", "#2DD4BF"] as Hex[],
+    brand: ["#22D3EE", "#06B6D4", "#22D3EE"] as Hex[],
 
     // Subtle panel glow (Deep)
     glowOverlayCSS:
@@ -92,12 +100,12 @@ export const metriqfitTheme = {
       "linear-gradient(180deg, #050505, #0A0A0A)",
 
     // Premium shimmer
-    shimmer: ["#2DD4BF", "#22D3EE", "#0891B2", "#22D3EE", "#2DD4BF"] as Hex[],
+    shimmer: ["#22D3EE", "#22D3EE", "#0891B2", "#22D3EE", "#22D3EE"] as Hex[],
 
     // Animated background (Deep Void)
     animatedBg: ["#050505", "#0F172A", "#1e293b", "#0F172A", "#050505"] as Hex[],
 
-    onboardingTitle: ["#22d3ee", "#2dd4bf"] as Hex[],
+    onboardingTitle: ["#22d3ee", "#22d3ee"] as Hex[],
     purpleBlue: ["#22d3ee", "#8b5cf6"] as Hex[],
   },
 
@@ -113,12 +121,12 @@ export const metriqfitTheme = {
     borderLight: "rgba(255, 255, 255, 0.05)",
     borderMedium: "rgba(255, 255, 255, 0.10)",
     borderStrong: "rgba(255, 255, 255, 0.20)",
-    progressGlow: "0 0 12px rgba(45, 212, 191, 0.6)",
+    progressGlow: "0 0 12px rgba(34, 211, 238, 0.6)",
     primaryGlow: "0 0 20px rgba(6, 182, 212, 0.4)",
-    buttonGlow: "0 0 25px rgba(45, 212, 191, 0.4)",
+    buttonGlow: "0 0 25px rgba(34, 211, 238, 0.4)",
     iconColors: {
       cyan: "#06b6d4" as Hex,
-      teal: "#2dd4bf" as Hex,
+      teal: "#22d3ee" as Hex,
       green: "#22c55e" as Hex,
       yellow: "#eab308" as Hex,
       orange: "#f97316" as Hex,
@@ -127,9 +135,9 @@ export const metriqfitTheme = {
       blue: "#3b82f6" as Hex,
       pink: "#ec4899" as Hex,
     },
-    cardSelected: { bg: "rgba(6, 182, 212, 0.05)", border: "#2dd4bf" as Hex },
-    buttonPrimary: "#2dd4bf" as Hex,
-    buttonPrimaryGlow: "0 0 20px rgba(45, 212, 191, 0.3)",
+    cardSelected: { bg: "rgba(6, 182, 212, 0.05)", border: "#22d3ee" as Hex },
+    buttonPrimary: "#22d3ee" as Hex,
+    buttonPrimaryGlow: "0 0 20px rgba(34, 211, 238, 0.3)",
     buttonText: "#000000" as Hex,
     text: "#ffffff" as Hex,
     textMuted: "#a1a1aa" as Hex,
@@ -153,7 +161,7 @@ export const metriqfitTheme = {
 
     // Border for glass cards (Subtle White/Zinc)
     border: "rgba(255, 255, 255, 0.08)",
-    borderGlow: "rgba(45, 212, 191, 0.3)", // Teal glow on active
+    borderGlow: "rgba(34, 211, 238, 0.3)", // Teal glow on active
 
     // Inner shadow for depth
     innerShadow: "inset 0 1px 1px rgba(255,255,255,0.05)",
@@ -239,6 +247,14 @@ export const metriqfitTheme = {
     xxl: 32,
   },
 
+  auth: {
+    maxWidth: 460,
+    panelOpacity: "D6",
+    panelBorderOpacity: "33",
+    inputBorderOpacity: "44",
+    dividerOpacity: "33",
+  },
+
   // --- Shadows (Unified Premium Glows) ---
   shadow: {
     soft: {
@@ -250,7 +266,7 @@ export const metriqfitTheme = {
     },
     // The Standard "Metriq Glow" (Teal)
     glow: {
-      shadowColor: "#2DD4BF", // Teal-400
+      shadowColor: "#22D3EE", // Teal-400
       shadowOpacity: 0.25,
       shadowRadius: 22,
       shadowOffset: { width: 0, height: 0 }, // Center glow
@@ -258,7 +274,7 @@ export const metriqfitTheme = {
     },
     // Stronger Premium Glow (for Primary Buttons/Cards)
     premium: {
-      shadowColor: "#2DD4BF",
+      shadowColor: "#22D3EE",
       shadowOpacity: 0.40,
       shadowRadius: 35,
       shadowOffset: { width: 0, height: 0 },
@@ -300,9 +316,45 @@ export const metriqfitTheme = {
     pressed: "rgba(136,230,234,0.12)",
     focusRing: "rgba(136,230,234,0.28)",
   },
-} as const;
+};
 
 export type MetriqfitTheme = typeof metriqfitTheme;
+
+export function createMetriqfitTheme(options?: {
+  highContrast?: boolean;
+  reduceMotion?: boolean;
+}): MetriqfitTheme {
+  const highContrast = Boolean(options?.highContrast);
+  const reduceMotion = Boolean(options?.reduceMotion);
+
+  return {
+    ...metriqfitTheme,
+    colors: {
+      ...metriqfitTheme.colors,
+      textMuted: highContrast ? "#D4D4D8" : metriqfitTheme.colors.textMuted,
+      textSubtle: highContrast ? "#A1A1AA" : metriqfitTheme.colors.textSubtle,
+      border: highContrast ? "#52525B" : metriqfitTheme.colors.border,
+      borderStrong: highContrast ? "rgba(255, 255, 255, 0.35)" : metriqfitTheme.colors.borderStrong,
+      opacity: {
+        ...metriqfitTheme.colors.opacity,
+        primaryMedium: highContrast
+          ? "rgba(34, 211, 238, 0.4)"
+          : metriqfitTheme.colors.opacity.primaryMedium,
+      },
+    },
+    animation: reduceMotion
+      ? {
+          ...metriqfitTheme.animation,
+          duration: {
+            fast: 0,
+            normal: 0,
+            slow: 0,
+            verySlow: 0,
+          },
+        }
+      : metriqfitTheme.animation,
+  };
+}
 
 /**
  * Utility: convert a hex color to rgba string.

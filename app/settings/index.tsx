@@ -1,22 +1,49 @@
 import React from 'react';
-import { StyleSheet, View, Text, ScrollView, Pressable, Switch, Alert } from 'react-native';
+import { StyleSheet, View, Text, ScrollView, Pressable, Alert } from 'react-native';
 import { useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { LinearGradient } from 'expo-linear-gradient';
 
 import { useTokens } from '../../lib/theme';
+import { useAuth } from '../../lib/auth';
+import { useProfile } from '../../hooks/useUser';
+import { useEntitlementStatus } from '../../hooks/useSubscription';
 import { TabBarIcon } from '../../components/navigation/TabBarIcon';
 import { GlassCard } from '../../components/premium/GlassCard';
+import { BrandMark } from '../../components/branding/BrandMark';
+import { getAppVersionInfo } from '../../lib/appConfig';
+import { formatTime12h } from '../../hooks/useMealTimes';
+import { getPreferredAppearanceLabel } from '../../lib/preferences';
+import { getTierIconName, getTierLabel } from '../../lib/subscription/plans';
 
 export default function SettingsScreen() {
-    const { c, s, ty, r } = useTokens();
+    const { c, s, ty } = useTokens();
     const router = useRouter();
     const insets = useSafeAreaInsets();
+    const { signOut } = useAuth();
+    const { data: profile } = useProfile();
+    const { data: entitlement } = useEntitlementStatus();
 
-    // Mock User Data
-    const isElite = true;
-    const userName = "Jonathon Murray";
-    const memberSince = "Dec 2025";
+    // Derive display data from real profile (with safe fallbacks)
+    const tier = entitlement?.tier ?? 'free';
+    const planLabel = entitlement?.planLabel ?? getTierLabel(tier);
+    const tierIcon = getTierIconName(tier);
+    const userName = profile
+        ? `${profile.first_name || ''} ${profile.last_name || ''}`.trim() || profile.email || 'User'
+        : 'Loading...';
+    const memberSince = profile?.created_at
+        ? new Date(profile.created_at).toLocaleDateString('en-US', { month: 'short', year: 'numeric' })
+        : '...';
+    const versionInfo = getAppVersionInfo();
+    const notificationValue = profile?.notification_preferences
+        ? Object.values(profile.notification_preferences).some(Boolean) ? 'Enabled' : 'Off'
+        : 'Off';
+    const mealScheduleValue = profile?.meal_times?.breakfast
+        ? `${formatTime12h(profile.meal_times.breakfast)} start`
+        : 'Edit Times';
+    const displayValue = profile?.display_preferences
+        ? getPreferredAppearanceLabel(profile.display_preferences)
+        : 'Standard';
 
     const renderSectionHeader = (title: string) => (
         <Text style={[styles.sectionHeader, { color: c.textMuted, fontFamily: ty.body.familySemibold }]}>
@@ -25,13 +52,7 @@ export default function SettingsScreen() {
     );
 
     const SettingsItem = ({ icon, label, value, onPress, isDestructive = false }: any) => (
-        <Pressable
-            style={({ pressed }) => [
-                styles.item,
-                { backgroundColor: pressed ? c.surface2 : 'transparent' }
-            ]}
-            onPress={onPress}
-        >
+        <Pressable style={styles.item} onPress={onPress}>
             <View style={styles.itemLeft}>
                 <View style={[styles.iconContainer, { backgroundColor: isDestructive ? `${c.danger}15` : c.surface2 }]}>
                     <TabBarIcon
@@ -61,7 +82,14 @@ export default function SettingsScreen() {
             "Are you sure you want to log out?",
             [
                 { text: "Cancel", style: "cancel" },
-                { text: "Log Out", style: "destructive", onPress: () => router.replace('/') }
+                {
+                    text: "Log Out",
+                    style: "destructive",
+                    onPress: async () => {
+                        await signOut();
+                        router.replace('/');
+                    }
+                }
             ]
         );
     };
@@ -79,24 +107,31 @@ export default function SettingsScreen() {
                     <Pressable onPress={() => router.back()} style={styles.backButton}>
                         <TabBarIcon name="close" color={c.text} size={24} />
                     </Pressable>
-                    <Text style={[styles.headerTitle, { color: c.text, fontFamily: ty.heading.familySemibold }]}>
-                        Settings
-                    </Text>
+                    <View style={styles.headerTitleWrap}>
+                        <BrandMark size="xs" glow="none" />
+                        <Text style={[styles.headerTitle, { color: c.text, fontFamily: ty.heading.familySemibold }]}>
+                            Settings
+                        </Text>
+                    </View>
                     <View style={{ width: 40 }} />
                 </View>
 
                 <View style={styles.profileCard}>
-                    <View style={[styles.avatar, { borderColor: c.primary, shadowColor: c.primary }]}>
-                        <Text style={{ fontSize: 32 }}>🧔🏻‍♂️</Text>
+                    <View style={[styles.avatar, { borderColor: c.primary, shadowColor: c.primary, backgroundColor: c.surface2 }]}>
+                        <Text style={{ fontSize: 22, color: c.primary, fontFamily: ty.heading.familySemibold }}>
+                            {profile?.first_name && profile?.last_name
+                                ? `${profile.first_name[0]}${profile.last_name[0]}`.toUpperCase()
+                                : '👤'}
+                        </Text>
                     </View>
                     <View style={styles.profileInfo}>
                         <Text style={[styles.userName, { color: c.text, fontFamily: ty.heading.familySemibold }]}>
                             {userName}
                         </Text>
                         <View style={styles.memberBadge}>
-                            <TabBarIcon name={isElite ? "diamond" : "leaf"} color={isElite ? c.primary : c.textMuted} size={12} />
+                            <TabBarIcon name={tierIcon} color={tier === 'free' ? c.textMuted : c.primary} size={12} />
                             <Text style={[styles.memberText, { color: c.textMuted, fontFamily: ty.body.family }]}>
-                                {isElite ? 'MetriqFit Elite' : 'Starter Plan'} • Since {memberSince}
+                                {planLabel} • Since {memberSince}
                             </Text>
                         </View>
                     </View>
@@ -111,7 +146,7 @@ export default function SettingsScreen() {
                     <SettingsItem
                         icon="card-outline"
                         label="Manage Subscription"
-                        value={isElite ? "Active" : "Upgrade"}
+                        value={tier === 'free' ? 'Upgrade' : planLabel}
                         onPress={() => router.push('/settings/subscription')}
                     />
                 </GlassCard>
@@ -127,15 +162,15 @@ export default function SettingsScreen() {
                     <View style={{ height: 1, backgroundColor: c.surface }} />
                     <SettingsItem
                         icon="lock-closed-outline"
-                        label="Security & Privacy"
-                        onPress={() => { }}
+                        label="Account & Security"
+                        onPress={() => router.push('/settings/security' as any)}
                     />
                     <View style={{ height: 1, backgroundColor: c.surface }} />
                     <SettingsItem
                         icon="notifications-outline"
                         label="Notifications"
-                        value="On"
-                        onPress={() => { }}
+                        value={notificationValue}
+                        onPress={() => router.push('/settings/notifications' as any)}
                     />
                 </GlassCard>
 
@@ -143,17 +178,24 @@ export default function SettingsScreen() {
                 {renderSectionHeader('PREFERENCES')}
                 <GlassCard intensity="light" style={{ padding: 0, marginBottom: s.xl, overflow: 'hidden' }}>
                     <SettingsItem
+                        icon="time-outline"
+                        label="Meal Schedule"
+                        value={mealScheduleValue}
+                        onPress={() => router.push('/settings/meal-times')}
+                    />
+                    <View style={{ height: 1, backgroundColor: c.surface }} />
+                    <SettingsItem
                         icon="barbell-outline"
                         label="Units"
-                        value="Imperial (lbs)"
-                        onPress={() => { }}
+                        value={profile?.unit_system === 'metric' ? 'Metric (kg)' : 'Imperial (lbs)'}
+                        onPress={() => router.push('/settings/units' as any)}
                     />
                     <View style={{ height: 1, backgroundColor: c.surface }} />
                     <SettingsItem
                         icon="moon-outline"
-                        label="Theme"
-                        value="Neon Void"
-                        onPress={() => { }}
+                        label="Accessibility & Display"
+                        value={displayValue}
+                        onPress={() => router.push('/settings/theme' as any)}
                     />
                 </GlassCard>
 
@@ -162,8 +204,8 @@ export default function SettingsScreen() {
                 <GlassCard intensity="light" style={{ padding: 0, marginBottom: s.xl, overflow: 'hidden' }}>
                     <SettingsItem
                         icon="help-circle-outline"
-                        label="Help Center"
-                        onPress={() => { }}
+                        label="Help & Legal"
+                        onPress={() => router.push('/settings/help' as any)}
                     />
                     <View style={{ height: 1, backgroundColor: c.surface }} />
                     <SettingsItem
@@ -175,7 +217,7 @@ export default function SettingsScreen() {
                 </GlassCard>
 
                 <Text style={[styles.versionText, { color: c.textSubtle, fontFamily: ty.mono.family }]}>
-                    v3.0.0 (Build 2025.12)
+                    {versionInfo.display}
                 </Text>
 
             </ScrollView>
@@ -200,6 +242,11 @@ const styles = StyleSheet.create({
     headerTitle: {
         fontSize: 18,
     },
+    headerTitleWrap: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        gap: 8,
+    },
     backButton: {
         padding: 8,
         marginLeft: -8,
@@ -213,7 +260,7 @@ const styles = StyleSheet.create({
         width: 64,
         height: 64,
         borderRadius: 32,
-        backgroundColor: '#1E1E2E', // fallback
+        backgroundColor: 'transparent', // Set dynamically via inline style
         alignItems: 'center',
         justifyContent: 'center',
         borderWidth: 2,

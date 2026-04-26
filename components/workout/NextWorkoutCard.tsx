@@ -29,7 +29,7 @@ export function NextWorkoutCard({
     const { c, ty, s, r, glass } = useTokens();
     const router = useRouter();
 
-    const handlePress = onPress || (() => router.push('/(tabs)/workout/day-preview'));
+    const handlePress = onPress || (() => router.navigate('/(tabs)/workout/day-preview'));
 
     const hasWorkout = workoutName !== 'No Workout Planned';
 

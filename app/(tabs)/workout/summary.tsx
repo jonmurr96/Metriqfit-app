@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect } from 'react';
 import { StyleSheet, View, Text, ScrollView, Pressable, Dimensions } from 'react-native';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -13,11 +13,12 @@ import { useSessionDetails } from '../../../hooks/useWorkout';
 const { width } = Dimensions.get('window');
 
 export default function WorkoutSummaryScreen() {
-  const { c, s, ty, r, glass, animation } = useTokens();
+  const { c, s, ty, r } = useTokens();
   const router = useRouter();
   const insets = useSafeAreaInsets();
   const params = useLocalSearchParams();
   const sessionId = params.sessionId as string;
+  const hasSessionId = typeof sessionId === 'string' && sessionId.length > 0;
 
   const { data: session, isLoading } = useSessionDetails(sessionId);
 
@@ -43,10 +44,48 @@ export default function WorkoutSummaryScreen() {
     Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
   }, []);
 
-  if (isLoading || !session) {
+  if (!hasSessionId) {
+    return (
+      <View style={[styles.container, { backgroundColor: c.bg, justifyContent: 'center', alignItems: 'center', paddingHorizontal: s.xl }]}>
+        <Text style={{ color: c.text, fontFamily: ty.heading.familySemibold, fontSize: ty.sizes.lg, textAlign: 'center' }}>
+          No workout summary available
+        </Text>
+        <Text style={{ color: c.textMuted, marginTop: s.sm, textAlign: 'center' }}>
+          Finish a workout session to view your summary.
+        </Text>
+        <Pressable
+          onPress={() => router.replace('/(tabs)/workout')}
+          style={{ marginTop: s.lg, paddingHorizontal: s.lg, paddingVertical: s.sm, borderRadius: r.md, backgroundColor: c.surface }}
+        >
+          <Text style={{ color: c.primary, fontFamily: ty.body.familySemibold }}>Go to Workout</Text>
+        </Pressable>
+      </View>
+    );
+  }
+
+  if (isLoading) {
     return (
       <View style={[styles.container, { backgroundColor: c.bg, justifyContent: 'center', alignItems: 'center' }]}>
         <Text style={{ color: c.textMuted }}>Loading summary...</Text>
+      </View>
+    );
+  }
+
+  if (!session) {
+    return (
+      <View style={[styles.container, { backgroundColor: c.bg, justifyContent: 'center', alignItems: 'center', paddingHorizontal: s.xl }]}>
+        <Text style={{ color: c.text, fontFamily: ty.heading.familySemibold, fontSize: ty.sizes.lg, textAlign: 'center' }}>
+          Summary not found
+        </Text>
+        <Text style={{ color: c.textMuted, marginTop: s.sm, textAlign: 'center' }}>
+          This workout session may have been removed or is still processing.
+        </Text>
+        <Pressable
+          onPress={() => router.replace('/(tabs)/workout')}
+          style={{ marginTop: s.lg, paddingHorizontal: s.lg, paddingVertical: s.sm, borderRadius: r.md, backgroundColor: c.surface }}
+        >
+          <Text style={{ color: c.primary, fontFamily: ty.body.familySemibold }}>Back to Workout</Text>
+        </Pressable>
       </View>
     );
   }
@@ -58,7 +97,7 @@ export default function WorkoutSummaryScreen() {
             style={StyleSheet.absoluteFill}
         />
         
-        <ScrollView contentContainerStyle={{ paddingBottom: 100 }}>
+        <ScrollView style={{ flex: 1 }} contentContainerStyle={{ paddingBottom: s.xl }}>
             {/* Header / Success Animation Area */}
             <View style={{ height: 300, justifyContent: 'center', alignItems: 'center' }}>
                  <MotiView
@@ -193,13 +232,11 @@ export default function WorkoutSummaryScreen() {
 
         </ScrollView>
 
-        {/* Done Button */}
         <View style={{ 
-            position: 'absolute', 
-            bottom: 0, left: 0, right: 0, 
-            padding: s.lg, 
+            paddingHorizontal: s.lg, 
+            paddingTop: s.md,
             paddingBottom: insets.bottom + s.md,
-            backgroundColor: c.bg // or transparent with gradient
+            backgroundColor: c.bg
         }}>
             <Pressable
                 onPress={() => router.replace('/(tabs)/workout/workout-history')}

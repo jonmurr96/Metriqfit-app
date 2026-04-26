@@ -84,7 +84,7 @@ export const QUICK_ADD_ACTIONS = [
     description: 'AI-powered food recognition',
     icon: 'camera-outline',
     route: `/(tabs)/nutrition/food-camera`,
-    isElite: true,
+    requiredTier: 'free',
   },
   {
     id: 'scan_barcode',
@@ -92,15 +92,7 @@ export const QUICK_ADD_ACTIONS = [
     description: 'Look up packaged foods',
     icon: 'barcode-outline',
     route: `/(tabs)/nutrition/barcode-scanner`,
-    isElite: true,
-  },
-  {
-    id: 'quick_add_food',
-    label: 'Search Food',
-    description: 'Search and log food',
-    icon: 'search-outline',
-    route: `/(tabs)/nutrition/food-search`,
-    isElite: false,
+    requiredTier: 'premium',
   },
   {
     id: 'start_workout',
@@ -108,7 +100,7 @@ export const QUICK_ADD_ACTIONS = [
     description: 'Begin or resume workout',
     icon: 'barbell',
     route: `/(tabs)/workout`,
-    isElite: false,
+    requiredTier: 'free',
   },
   {
     id: 'log_weight',
@@ -117,7 +109,7 @@ export const QUICK_ADD_ACTIONS = [
     icon: 'body-outline',
     route: '/log-weight-sheet',
     isModal: true,
-    isElite: false,
+    requiredTier: 'free',
   },
   {
     id: 'log_water',
@@ -126,19 +118,9 @@ export const QUICK_ADD_ACTIONS = [
     icon: 'water-outline',
     route: '/log-water-sheet',
     isModal: true,
-    isElite: false,
-  },
-  {
-    id: 'log_steps',
-    label: 'Log Steps',
-    description: 'Enter daily steps',
-    icon: 'walk-outline',
-    route: '/log-steps-sheet',
-    isModal: true,
-    isElite: false,
+    requiredTier: 'free',
   },
 ] as const;
 
 export type QuickAddAction = typeof QUICK_ADD_ACTIONS[number];
 export type QuickAddActionId = QuickAddAction['id'];
-
