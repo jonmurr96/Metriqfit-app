@@ -8,6 +8,7 @@ import {
   TextInput,
   KeyboardAvoidingView,
   Platform,
+  useWindowDimensions,
 } from 'react-native';
 import { router } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -33,6 +34,11 @@ import { PremiumHeader, PremiumFooter } from '../../components/onboarding/premiu
 import { useAuth } from '../../lib/auth';
 import { supabase } from '../../lib/supabase';
 import { calculateTargets } from '../../lib/targets/calculateTargets';
+import {
+  formatMealFrequencyLabel,
+  getMealFrequencyAdvisory,
+  recommendMealFrequency,
+} from '../../lib/nutrition/meal-frequency';
 import type { Database } from '../../lib/supabase/types';
 
 const { spacing: s } = metriqfitTheme;
@@ -109,7 +115,7 @@ const PROTEINS: { value: ProteinSource; label: string; icon: keyof typeof Ionico
 ];
 
 const CARBS: { value: CarbSource; label: string; icon: keyof typeof Ionicons.glyphMap; description: string }[] = [
-  { value: 'rice', label: 'Rice', icon: 'bowl-outline', description: 'Fast energy' },
+  { value: 'rice', label: 'Rice', icon: 'restaurant-outline', description: 'Fast energy' },
   { value: 'oats', label: 'Oats', icon: 'restaurant-outline', description: 'Slow release' },
   { value: 'sweet_potato', label: 'Sweet Potato', icon: 'nutrition-outline', description: 'Nutrient dense' },
   { value: 'potato', label: 'Potato', icon: 'nutrition-outline', description: 'Versatile' },
@@ -125,7 +131,7 @@ const FATS: { value: FatSource; label: string; icon: keyof typeof Ionicons.glyph
   { value: 'walnuts', label: 'Walnuts', icon: 'nutrition-outline', description: 'Omega-3' },
   { value: 'avocado', label: 'Avocado', icon: 'leaf-outline', description: 'Potassium' },
   { value: 'peanut_butter', label: 'Peanut Butter', icon: 'restaurant-outline', description: 'Protein+fat' },
-  { value: 'chia_seeds', label: 'Chia Seeds', icon: 'seed-outline', description: 'Fiber' },
+  { value: 'chia_seeds', label: 'Chia Seeds', icon: 'leaf-outline', description: 'Fiber' },
   { value: 'coconut_oil', label: 'Coconut Oil', icon: 'water-outline', description: 'MCTs' },
   { value: 'cheese', label: 'Cheese', icon: 'cafe-outline', description: 'Calcium' },
 ];
@@ -163,11 +169,59 @@ const TRAINING_TIMES: { value: TrainingTime; label: string }[] = [
 export default function NutritionScreen() {
   const { data, updateData, setCurrentStep } = useOnboarding();
   const { session } = useAuth();
+  const { width } = useWindowDimensions();
+  const isCompactWidth = width < 390;
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const normalizedAnswers = React.useMemo(() => normalizeOnboardingAnswers(data), [data]);
+  const targetPreview = React.useMemo(() => {
+    if (
+      !normalizedAnswers.goal_type
+      || !normalizedAnswers.sex
+      || !normalizedAnswers.dob
+      || normalizedAnswers.height_ft == null
+      || normalizedAnswers.height_in == null
+      || normalizedAnswers.current_weight_lb == null
+      || !normalizedAnswers.activity_level
+      || normalizedAnswers.training_days_per_week == null
+      || !normalizedAnswers.minutes_per_workout
+      || !normalizedAnswers.experience_level
+    ) {
+      return null;
+    }
 
+    try {
+      return calculateTargets({
+        sex: normalizedAnswers.sex,
+        dob: normalizedAnswers.dob,
+        height_ft: normalizedAnswers.height_ft,
+        height_in: normalizedAnswers.height_in,
+        current_weight_lb: normalizedAnswers.current_weight_lb,
+        goal_type: normalizedAnswers.goal_type,
+        activity_level: normalizedAnswers.activity_level,
+        training_days_per_week: normalizedAnswers.training_days_per_week,
+        minutes_per_workout: normalizedAnswers.minutes_per_workout,
+        experience_level: normalizedAnswers.experience_level,
+        avg_steps: normalizedAnswers.avg_steps,
+        target_weight_lb: normalizedAnswers.target_weight_lb,
+        target_date: normalizedAnswers.target_date,
+        dietary_preference: normalizedAnswers.dietary_preference,
+        carb_tolerance: normalizedAnswers.carb_tolerance,
+      });
+    } catch {
+      return null;
+    }
+  }, [normalizedAnswers]);
+  const mealRecommendation = React.useMemo(() => {
+    if (!targetPreview || !normalizedAnswers.goal_type) return null;
+    return recommendMealFrequency({
+      goalType: normalizedAnswers.goal_type,
+      calories: targetPreview.calories,
+      proteinGrams: targetPreview.protein_g,
+    });
+  }, [normalizedAnswers.goal_type, targetPreview]);
   // Debug validation
-  const validationChecks = {
+  const validationChecks = React.useMemo(() => ({
     dietary_preference: !!data.dietary_preference,
     allergies_exclusions: data.allergies_exclusions.length > 0,
     preferred_proteins: data.preferred_proteins.length > 0,
@@ -178,7 +232,18 @@ export default function NutritionScreen() {
     meals_per_day: !!data.meals_per_day,
     dietary_other_text: (data.dietary_preference !== 'other' || !!data.dietary_preference_other_text),
     allergies_other_text: (!data.allergies_exclusions.includes('other') || !!data.allergies_other_text),
-  };
+  }), [
+    data.allergies_exclusions,
+    data.allergies_other_text,
+    data.dietary_preference,
+    data.dietary_preference_other_text,
+    data.first_meal_delay,
+    data.last_meal_before_bed,
+    data.meals_per_day,
+    data.preferred_proteins,
+    data.training_time,
+    data.wake_time,
+  ]);
   
   const isValid = Object.values(validationChecks).every(Boolean);
   
@@ -200,7 +265,13 @@ export default function NutritionScreen() {
         meals: data.meals_per_day,
       });
     }
-  }, [isValid, data]);
+  }, [isValid, data, validationChecks]);
+
+  React.useEffect(() => {
+    if (!data.meals_per_day && mealRecommendation) {
+      updateData({ meals_per_day: mealRecommendation.recommendedMealsPerDay });
+    }
+  }, [data.meals_per_day, mealRecommendation, updateData]);
 
   const handleAllergySelect = (val: AllergyExclusion) => {
     if (val === 'none') {
@@ -308,6 +379,8 @@ export default function NutritionScreen() {
         avg_steps: normalizedAnswers.avg_steps,
         target_weight_lb: normalizedAnswers.target_weight_lb,
         target_date: normalizedAnswers.target_date,
+        dietary_preference: normalizedAnswers.dietary_preference,
+        carb_tolerance: normalizedAnswers.carb_tolerance,
       });
 
       if (!targets.calories || !targets.protein_g || !targets.carbs_g || !targets.fat_g || !targets.water_ml) {
@@ -323,8 +396,9 @@ export default function NutritionScreen() {
           protein_g: targets.protein_g,
           carbs_g: targets.carbs_g,
           fat_g: targets.fat_g,
+          fiber_g: targets.fiber_g,
           water_ml: targets.water_ml,
-          computation_method: targets.computation_method || 'mifflin_st_jeor',
+          computation_method: targets.computation_method || 'mifflin_st_jeor_training_load_v2',
         }, { onConflict: 'user_id' });
       if (targetsError) throw targetsError;
 
@@ -336,7 +410,14 @@ export default function NutritionScreen() {
 
       router.replace('/(onboarding)/plan-generation');
     } catch (err: any) {
-      setError(err.message || 'Failed to save. Please try again.');
+      const msg: string = err?.message ?? '';
+      if (msg.includes('age is outside supported bounds')) {
+        setError('Your date of birth appears to be invalid. Please go back and update it.');
+      } else if (msg.includes('outside supported bounds') || msg.includes('Invalid target input')) {
+        setError('Some of your profile data is out of range. Please go back and check your entries.');
+      } else {
+        setError(msg || 'Failed to save. Please try again.');
+      }
     } finally {
       setIsLoading(false);
     }
@@ -444,7 +525,7 @@ export default function NutritionScreen() {
             {/* Foods to avoid */}
             <View style={styles.section}>
               <Text style={styles.sectionLabel}>Foods to Avoid</Text>
-              <Text style={styles.sectionHint}>Optional · Things you just won't eat</Text>
+              <Text style={styles.sectionHint}>Optional · Things you just won&apos;t eat</Text>
               <View style={styles.chipRowWrap}>
                 {AVOID_FOODS.map((f) => {
                   const isNoneOpt = f.value === 'none';
@@ -465,7 +546,7 @@ export default function NutritionScreen() {
             {/* NEW: Preferred Proteins */}
             <View style={styles.section}>
               <Text style={styles.sectionLabel}>Top 3 Protein Sources</Text>
-              <Text style={styles.sectionHint}>Pick your favorites — we'll prioritize these</Text>
+              <Text style={styles.sectionHint}>Pick your favorites — we&apos;ll prioritize these</Text>
               <View style={styles.chipRowWrap}>
                 {PROTEINS.map((p) => {
                   const sel = data.preferred_proteins.includes(p.value);
@@ -547,7 +628,7 @@ export default function NutritionScreen() {
             <View style={styles.section}>
               <Text style={styles.sectionLabel}>Wake Up Time</Text>
               <Text style={styles.sectionHint}>When do you typically wake up?</Text>
-              <View style={styles.mealRow}>
+              <View style={[styles.mealRow, isCompactWidth && styles.mealRowCompact]}>
                 {WAKE_TIMES.map((w) => {
                   const sel = data.wake_time === w.value;
                   return (
@@ -567,7 +648,7 @@ export default function NutritionScreen() {
             <View style={styles.section}>
               <Text style={styles.sectionLabel}>First Meal</Text>
               <Text style={styles.sectionHint}>How long after waking do you eat?</Text>
-              <View style={styles.mealRow}>
+              <View style={[styles.mealRow, isCompactWidth && styles.mealRowCompact]}>
                 {FIRST_MEAL_DELAYS.map((d) => {
                   const sel = data.first_meal_delay === d.value;
                   return (
@@ -587,7 +668,7 @@ export default function NutritionScreen() {
             <View style={styles.section}>
               <Text style={styles.sectionLabel}>Last Meal Before Bed</Text>
               <Text style={styles.sectionHint}>How early do you stop eating before sleep?</Text>
-              <View style={styles.mealRow}>
+              <View style={[styles.mealRow, isCompactWidth && styles.mealRowCompact]}>
                 {LAST_MEAL_OPTIONS.map((l) => {
                   const sel = data.last_meal_before_bed === l.value;
                   return (
@@ -625,21 +706,58 @@ export default function NutritionScreen() {
 
             {/* Meals per day */}
             <View style={styles.section}>
-              <Text style={styles.sectionLabel}>Meals Per Day</Text>
-              <View style={styles.mealRow}>
+              <View style={styles.sectionHeaderRow}>
+                <Text style={styles.sectionLabel}>Meals Per Day</Text>
+                {mealRecommendation && (
+                  <View style={styles.recommendedPill}>
+                    <Text style={styles.recommendedPillText}>Recommended</Text>
+                  </View>
+                )}
+              </View>
+              {mealRecommendation && (
+                <View style={styles.recommendationCard}>
+                  <Text style={styles.recommendationTitle}>
+                    {formatMealFrequencyLabel(mealRecommendation.recommendedMealsPerDay, mealRecommendation)}
+                  </Text>
+                  <Text style={styles.recommendationBody}>{mealRecommendation.rationale}</Text>
+                  <Text style={styles.recommendationNote}>
+                    {getMealFrequencyAdvisory(data.meals_per_day, mealRecommendation)}
+                  </Text>
+                </View>
+              )}
+              <View style={[styles.mealRow, isCompactWidth && styles.mealRowCompact]}>
                 {MEALS.map((m) => {
                   const sel = data.meals_per_day === m.value;
+                  const recommended = mealRecommendation?.recommendedMealsPerDay === m.value;
                   return (
                     <Pressable
                       key={m.value}
-                      style={[styles.mealBtn, sel && styles.mealBtnSelected]}
+                      style={[
+                        styles.mealBtn,
+                        isCompactWidth && styles.mealBtnCompact,
+                        sel && styles.mealBtnSelected,
+                        recommended && !sel && styles.mealBtnRecommended,
+                      ]}
                       onPress={() => updateData({ meals_per_day: m.value })}
                     >
-                      <Text style={[styles.mealBtnText, sel && styles.mealBtnTextSelected]}>{m.label}</Text>
+                      <Text
+                        style={[
+                          styles.mealBtnText,
+                          sel && styles.mealBtnTextSelected,
+                          recommended && !sel && styles.mealBtnTextRecommended,
+                        ]}
+                      >
+                        {m.label}
+                      </Text>
                     </Pressable>
                   );
                 })}
               </View>
+              {mealRecommendation && data.meals_per_day && data.meals_per_day !== 'no_preference' && data.meals_per_day !== mealRecommendation.recommendedMealsPerDay && (
+                <Text style={styles.mealWarning}>
+                  {getMealFrequencyAdvisory(data.meals_per_day, mealRecommendation)}
+                </Text>
+              )}
             </View>
           </MotiView>
         </ScrollView>
@@ -682,8 +800,55 @@ const styles = StyleSheet.create({
     fontSize: 12, fontFamily: 'Sora_600SemiBold', color: `${CYAN}CC`,
     letterSpacing: 1, textTransform: 'uppercase', marginBottom: 4,
   },
+  sectionHeaderRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginBottom: 4,
+  },
   sectionHint: {
     fontSize: 12, fontFamily: 'Sora_400Regular', color: 'rgba(255,255,255,0.3)', marginBottom: 14,
+  },
+  recommendedPill: {
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+    borderRadius: 999,
+    backgroundColor: `${CYAN}18`,
+    borderWidth: 1,
+    borderColor: `${CYAN}40`,
+  },
+  recommendedPillText: {
+    fontSize: 10,
+    fontFamily: 'Sora_700Bold',
+    letterSpacing: 0.6,
+    textTransform: 'uppercase',
+    color: CYAN,
+  },
+  recommendationCard: {
+    marginBottom: 14,
+    padding: 14,
+    borderRadius: 14,
+    borderWidth: 1,
+    borderColor: `${CYAN}30`,
+    backgroundColor: `${CYAN}08`,
+    gap: 6,
+  },
+  recommendationTitle: {
+    fontSize: 13,
+    fontFamily: 'Sora_700Bold',
+    color: '#FFFFFF',
+  },
+  recommendationBody: {
+    fontSize: 12,
+    lineHeight: 18,
+    fontFamily: 'Sora_400Regular',
+    color: 'rgba(255,255,255,0.72)',
+  },
+  recommendationNote: {
+    fontSize: 12,
+    lineHeight: 18,
+    fontFamily: 'Sora_500Medium',
+    color: CYAN,
   },
 
   // Diet grid (2 cols)
@@ -732,16 +897,40 @@ const styles = StyleSheet.create({
 
   // Meals
   mealRow: { flexDirection: 'row', gap: 10 },
+  mealRowCompact: {
+    flexWrap: 'wrap',
+  },
   mealBtn: {
-    flex: 1, height: 50, alignItems: 'center', justifyContent: 'center',
+    flex: 1, minHeight: 54, alignItems: 'center', justifyContent: 'center',
     borderRadius: 12, borderWidth: 1,
     borderColor: 'rgba(255,255,255,0.08)', backgroundColor: SURFACE,
+    gap: 2,
+    paddingHorizontal: 10,
+    position: 'relative',
+  },
+  mealBtnCompact: {
+    minWidth: 94,
+    flexBasis: '30%',
+    flexGrow: 1,
   },
   mealBtnSelected: {
     backgroundColor: `${ORANGE}10`, borderColor: ORANGE,
   } as any,
-  mealBtnText: { fontSize: 16, fontFamily: 'Sora_700Bold', color: 'rgba(255,255,255,0.5)' },
+  mealBtnRecommended: {
+    backgroundColor: `${CYAN}10`,
+    borderColor: CYAN,
+    borderWidth: 1.5,
+  },
+  mealBtnText: { fontSize: 15, fontFamily: 'Sora_700Bold', color: 'rgba(255,255,255,0.5)', textAlign: 'center', lineHeight: 18 },
   mealBtnTextSelected: { color: ORANGE },
+  mealBtnTextRecommended: { color: CYAN },
+  mealWarning: {
+    marginTop: 10,
+    fontSize: 12,
+    lineHeight: 18,
+    fontFamily: 'Sora_400Regular',
+    color: 'rgba(255,255,255,0.65)',
+  },
 
   otherInput: {
     marginTop: 12, backgroundColor: SURFACE,

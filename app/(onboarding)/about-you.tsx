@@ -12,8 +12,6 @@ import { MotiView } from 'moti';
 import { Ionicons } from '@expo/vector-icons';
 import { metriqfitTheme } from '../../lib/theme';
 import { useOnboarding } from '../../lib/onboarding';
-import { useAuth } from '../../lib/auth';
-import { supabase } from '../../lib/supabase';
 import { PremiumHeader, PremiumFooter, PremiumDatePicker } from '../../components/onboarding/premium';
 
 const { spacing: s } = metriqfitTheme;
@@ -24,19 +22,21 @@ const SURFACE = '#0A1128';
 
 export default function AboutYouScreen() {
   const { data, updateData, setCurrentStep } = useOnboarding();
-  const { user } = useAuth();
 
-  const isValid = !!data.dob && !!data.sex;
+  const minAgeDate = new Date(
+    new Date().getFullYear() - 13,
+    new Date().getMonth(),
+    new Date().getDate()
+  );
+  const maxAgeDate = new Date(new Date().getFullYear() - 100, 0, 1);
+  const dobAge = data.dob
+    ? new Date().getFullYear() - new Date(data.dob).getFullYear()
+    : null;
+  const isValid = !!data.dob && !!data.sex && dobAge !== null && dobAge >= 13 && dobAge <= 100;
 
   const handleContinue = () => {
     if (isValid) {
       setCurrentStep(3);
-      if (user?.id) {
-        supabase
-          .from('onboarding_answers')
-          .upsert({ user_id: user.id, last_onboarding_step: 'height' }, { onConflict: 'user_id' })
-          .then(() => {});
-      }
       router.push('/(onboarding)/height');
     }
   };
@@ -78,9 +78,16 @@ export default function AboutYouScreen() {
               value={data.dob}
               onChange={(date) => updateData({ dob: date })}
               placeholder="Select your date of birth"
-              maximumDate={new Date()}
-              minimumDate={new Date(1920, 0, 1)}
+              maximumDate={minAgeDate}
+              minimumDate={maxAgeDate}
             />
+            {data.dob && (dobAge === null || dobAge < 13 || dobAge > 100) && (
+              <Text style={styles.dobError}>
+                {dobAge !== null && dobAge < 13
+                  ? 'You must be at least 13 years old to use MetriqFit.'
+                  : 'Please enter a valid date of birth.'}
+              </Text>
+            )}
           </View>
 
           {/* Sex */}
@@ -188,6 +195,12 @@ const styles = StyleSheet.create({
     fontFamily: 'Sora_400Regular',
     color: 'rgba(255,255,255,0.3)',
     marginBottom: 16,
+  },
+  dobError: {
+    marginTop: 8,
+    fontSize: 12,
+    fontFamily: 'Sora_400Regular',
+    color: '#EF4444',
   },
   sexRow: {
     flexDirection: 'row',
