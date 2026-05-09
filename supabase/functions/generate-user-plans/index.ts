@@ -4049,6 +4049,28 @@ async function generateScientificMealPlan(
 
     const slots = getSlotTemplate(hasWorkout, workoutTime, scheduleConfig);
 
+    // On-the-fly carb periodization: training days get +20% carbs/-12% fat/+8% calories;
+    // rest days get -18% carbs/+10% fat/-6% calories. Protein is always held constant.
+    const baseMacros = {
+      calories: context.targets.calories,
+      protein_g: context.targets.protein_g,
+      carbs_g: context.targets.carbs_g,
+      fat_g: context.targets.fat_g,
+    };
+    const dayMacros = hasWorkout
+      ? {
+          calories: Math.round(baseMacros.calories * 1.08),
+          protein_g: baseMacros.protein_g,
+          carbs_g: Math.round(baseMacros.carbs_g * 1.20),
+          fat_g: Math.round(baseMacros.fat_g * 0.88),
+        }
+      : {
+          calories: Math.round(baseMacros.calories * 0.94),
+          protein_g: baseMacros.protein_g,
+          carbs_g: Math.round(baseMacros.carbs_g * 0.82),
+          fat_g: Math.round(baseMacros.fat_g * 1.10),
+        };
+
     const mealGenOptions: GenerationOptions = {
       carbTolerance: context.onboarding.carb_tolerance || undefined,
       cookingLevel: context.onboarding.cooking_level || undefined,
@@ -4057,18 +4079,14 @@ async function generateScientificMealPlan(
       allergies: context.onboarding.allergies_exclusions,
       refusedFoods: context.onboarding.refused_foods,
       previousDaysMeals: allDayMeals.flat(),
+      mealsPerDay: slots.length,
     };
 
     const { meals: dailyMeals, warnings: dailyWarnings, logs: dailyLogs } = generateDailyMeals(
       scientificFoods,
       selections,
       slots,
-      {
-        calories: context.targets.calories,
-        protein_g: context.targets.protein_g,
-        carbs_g: context.targets.carbs_g,
-        fat_g: context.targets.fat_g,
-      },
+      dayMacros,
       goal,
       mealGenOptions,
     );
@@ -4103,16 +4121,18 @@ async function generateScientificMealPlan(
   const preCoherence = analyzeWeeklyCoherence(allDayMeals);
   console.log(`[generate-user-plans] Pre-coherence score: ${preCoherence.realismScore} (${preCoherence.realismLabel})`);
 
+  // Rebalance uses average macros (midpoint between training and rest day targets)
+  const avgMacros = {
+    calories: context.targets.calories,
+    protein_g: context.targets.protein_g,
+    carbs_g: context.targets.carbs_g,
+    fat_g: context.targets.fat_g,
+  };
   const { meals: rebalancedDays, warnings: rebalanceWarnings, logs: rebalanceLogs } = rebalanceWeeklyMeals(
     scientificFoods,
     selections,
     allSlots,
-    {
-      calories: context.targets.calories,
-      protein_g: context.targets.protein_g,
-      carbs_g: context.targets.carbs_g,
-      fat_g: context.targets.fat_g,
-    },
+    avgMacros,
     goal,
     baseOptions,
     allDayMeals

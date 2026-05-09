@@ -73,6 +73,7 @@ export interface GenerationOptions {
   refusedFoods?: string[];
   mealPrepMode?: boolean;
   previousDaysMeals?: GeneratedMeal[];
+  mealsPerDay?: number;
 }
 
 export interface MacroTargets {
@@ -92,6 +93,7 @@ export interface MealCandidate {
     mealContextFit: number;
     varietyFit: number;
     goalFormFit: number;
+    fatQualityFit: number;
   };
 }
 
@@ -195,21 +197,24 @@ function getTrainingDaySlots(workoutTime: string, schedule?: ScheduleConfig): Me
 
   // Add pre-workout slot (only if it's after lunch)
   if (preWorkoutMinutes > parseTimeToMinutes(slots[1].timing)) {
+    // Fast carbs only appropriate ≤75 min before training; at 2.5h use moderate
+    const minutesBeforeWorkout = workoutMinutes - preWorkoutMinutes;
+    const preWorkoutCarbSpeed = minutesBeforeWorkout < 75 ? "fast" : "moderate";
     slots.push({
       name: "Pre-Workout",
       slot: "pre-workout",
       timing: formatTimeMinutes(preWorkoutMinutes),
-      targetProfile: { proteinPreference: "lean", carbSpeed: "fast", fatAcceptable: false },
+      targetProfile: { proteinPreference: "lean", carbSpeed: preWorkoutCarbSpeed, fatAcceptable: true },
       workoutContext: "pre",
     });
   }
 
-  // Add post-workout slot
+  // Add post-workout slot — fat does not block MPS (Schoenfeld & Aragon 2013/2018)
   slots.push({
     name: "Post-Workout",
     slot: "post-workout",
     timing: formatTimeMinutes(postWorkoutMinutes),
-    targetProfile: { proteinPreference: "lean", carbSpeed: "fast", fatAcceptable: false },
+    targetProfile: { proteinPreference: "lean", carbSpeed: "fast", fatAcceptable: true },
     workoutContext: "post",
   });
 
@@ -287,11 +292,12 @@ function getRestDaySlots(schedule?: ScheduleConfig): MealSlot[] {
 // ============================================================================
 
 const WEIGHTS = {
-  workoutFit: 0.40,
-  mealContextFit: 0.25,
-  userPreferenceFit: 0.20,
-  varietyFit: 0.15,
+  workoutFit: 0.28,
+  mealContextFit: 0.15,
+  userPreferenceFit: 0.27,
+  varietyFit: 0.20,
   goalFormFit: 0.05,
+  fatQualityFit: 0.05,
 };
 
 export function scoreMealCandidate(
@@ -306,20 +312,22 @@ export function scoreMealCandidate(
   const mealContextFit = calculateMealContextFit(combo, slot, traditionalMeals);
   const varietyFit = calculateVarietyFit(combo, previousMeals, options, slot);
   const goalFormFit = calculateGoalFormFit(combo, goal);
-  
+  const fatQualityFit = calculateFatQualityBonus(combo.fat);
+
   // User preference is implicit (we only select from their chosen foods)
   const userPreferenceFit = 1.0;
-  
+
   const penalties = calculatePenalties(combo, slot, previousMeals, options);
-  
+
   const score =
     workoutFit * WEIGHTS.workoutFit +
     mealContextFit * WEIGHTS.mealContextFit +
     userPreferenceFit * WEIGHTS.userPreferenceFit +
     varietyFit * WEIGHTS.varietyFit +
-    goalFormFit * WEIGHTS.goalFormFit -
+    goalFormFit * WEIGHTS.goalFormFit +
+    fatQualityFit * WEIGHTS.fatQualityFit -
     penalties;
-  
+
   return {
     protein: combo.protein,
     carb: combo.carb,
@@ -330,6 +338,7 @@ export function scoreMealCandidate(
       mealContextFit,
       varietyFit,
       goalFormFit,
+      fatQualityFit,
     },
   };
 }
@@ -338,12 +347,12 @@ function calculateWorkoutFit(
   combo: { protein: FoodWithMetadata; carb: FoodWithMetadata; fat: FoodWithMetadata },
   slot: MealSlot
 ): number {
-  // HARD RULE: No high-fat pre/post workout
-  if (!slot.targetProfile.fatAcceptable && combo.fat.fat_load === "high") {
-    return 0;
-  }
-  
   let fit = 0.5; // Base score
+
+  // Soft penalty for high-fat at workout slots — fat slows gastric emptying but doesn't block MPS
+  if (slot.workoutContext && combo.fat.fat_load === "high") {
+    fit -= 0.30;
+  }
   
   // Carb speed match
   if (slot.targetProfile.carbSpeed !== "any") {
@@ -416,7 +425,21 @@ function calculateMealContextFit(
     // Pure breakfast protein at lunch/dinner
     fit -= 0.2;
   }
-  
+
+  // Evening slot: casein/slow-protein sources boost overnight MPS (Res et al. 2012)
+  if (slot.slot === "evening") {
+    const family = combo.protein.variety_family.toLowerCase();
+    const pName = combo.protein.name.toLowerCase();
+    const isCaseinSource =
+      family === "dairy" || family === "cottage_cheese" || family === "greek_yogurt" ||
+      pName.includes("casein") || pName.includes("cottage") || pName.includes("greek yogurt");
+    const isWheySource =
+      combo.protein.digestion_speed === "fast" &&
+      (family === "whey" || pName.includes("whey") || pName.includes("whey protein"));
+    if (isCaseinSource) fit += 0.25;
+    if (isWheySource) fit -= 0.20;
+  }
+
   return Math.max(0.1, fit);
 }
 
@@ -433,8 +456,9 @@ function calculateVarietyFit(
 
   let fit = 1.0;
 
-  // Look at last ~8 meals (covers roughly 48h of eating)
-  const lookbackWindow = previousMeals.slice(-8);
+  // Lookback scales with meals_per_day — covers ~2 full days of eating
+  const lookbackSize = Math.max(8, (options.mealsPerDay ?? 4) * 2);
+  const lookbackWindow = previousMeals.slice(-lookbackSize);
 
   for (const pastMeal of lookbackWindow) {
     const pastPair = `${pastMeal.items.protein.food.variety_family}+${pastMeal.items.carb.food.variety_family}`;
@@ -478,7 +502,7 @@ function calculateGoalFormFit(
   goal: "muscle_gain" | "fat_loss" | "maintenance"
 ): number {
   let fit = 0.5;
-  
+
   if (goal === "muscle_gain") {
     if (combo.protein.goal_form === "bulk_default") fit += 0.3;
     else if (combo.protein.goal_form === "both") fit += 0.15;
@@ -489,8 +513,18 @@ function calculateGoalFormFit(
     // Maintenance
     if (combo.protein.goal_form === "both") fit += 0.25;
   }
-  
+
   return Math.min(fit, 1.0);
+}
+
+function calculateFatQualityBonus(fat: FoodWithMetadata): number {
+  const family = fat.variety_family.toLowerCase();
+  const name = fat.name.toLowerCase();
+  const isOmega3Rich =
+    family === "walnuts" || family === "chia_seeds" || family === "flaxseeds" ||
+    name.includes("flax") || name.includes("chia") || name.includes("fish oil") ||
+    name.includes("walnut") || name.includes("salmon") || name.includes("sardine");
+  return isOmega3Rich ? 1.0 : 0.0;
 }
 
 function calculatePenalties(
@@ -781,6 +815,27 @@ export function generateDailyMeals(
     }
   }
 
+  // Check plant protein completeness for vegan/vegetarian diets
+  const COMPLETE_VEGAN_FAMILIES = new Set([
+    "tofu", "tofu_tempeh", "tempeh", "edamame", "quinoa", "buckwheat", "hemp_seeds",
+  ]);
+  const dietary = (options.dietaryPreference || "").toLowerCase();
+  if (dietary === "vegan" || dietary === "vegetarian") {
+    const hasCompleteProtein = availableProteins.some(
+      (p) => COMPLETE_VEGAN_FAMILIES.has(p.variety_family) || (p.tags || []).includes("complete_protein")
+    );
+    if (!hasCompleteProtein) {
+      warnings.push(
+        "No complete amino acid source detected for this vegan/vegetarian plan. " +
+        "Consider adding tofu, tempeh, edamame, or quinoa to ensure full essential amino acid coverage."
+      );
+      const fromFallback = proteinPools.fallback.filter((p) =>
+        COMPLETE_VEGAN_FAMILIES.has(p.variety_family)
+      );
+      if (fromFallback.length > 0) availableProteins = [...fromFallback, ...availableProteins];
+    }
+  }
+
   // Final safety fallback: if a category is still empty, pull from full restricted catalog by macro
   if (availableProteins.length === 0) {
     availableProteins = restrictedCatalog.filter((f) => f.protein_per_100g > 15).slice(0, 10);
@@ -865,14 +920,44 @@ function generateBestMeal(
   let bestCandidate: MealCandidate | null = null;
   let bestScore = -Infinity;
 
-  // Allocate a proportional share of remaining macros to this slot
-  const slotsTotal = remainingSlots.length + 1;
-  const slotTargets: MacroTargets = {
-    calories: remainingMacros.calories / slotsTotal,
-    protein_g: remainingMacros.protein_g / slotsTotal,
-    carbs_g: remainingMacros.carbs_g / slotsTotal,
-    fat_g: remainingMacros.fat_g / slotsTotal,
+  // Weighted calorie allocation — post-workout and breakfast get more, evening gets less
+  const SLOT_CALORIE_RATIO: Record<string, number> = {
+    "post-workout": 1.30,
+    "breakfast": 1.15,
+    "lunch": 1.05,
+    "dinner": 1.00,
+    "pre-workout": 0.85,
+    "snack": 0.90,
+    "evening": 0.75,
   };
+
+  const thisRatio = SLOT_CALORIE_RATIO[slot.slot] ?? 1.0;
+  let sumRemainingRatios = remainingSlots.reduce(
+    (sum, s) => sum + (SLOT_CALORIE_RATIO[s.slot] ?? 1.0),
+    thisRatio
+  );
+  if (sumRemainingRatios <= 0) sumRemainingRatios = remainingSlots.length + 1;
+
+  const share = thisRatio / sumRemainingRatios;
+  const slotTargets: MacroTargets = {
+    calories: remainingMacros.calories * share,
+    protein_g: remainingMacros.protein_g * share,
+    carbs_g: remainingMacros.carbs_g * share,
+    fat_g: remainingMacros.fat_g * share,
+  };
+
+  // Enforce protein floor per meal — triggers leucine MPS threshold
+  const PROTEIN_FLOOR: Record<string, number> = {
+    breakfast: 25, lunch: 25, dinner: 25,
+    "pre-workout": 25, "post-workout": 25,
+    snack: 20, evening: 20,
+  };
+  const floor = PROTEIN_FLOOR[slot.slot] ?? 20;
+  if (slotTargets.protein_g < floor) {
+    const proteinCalorieDelta = (floor - slotTargets.protein_g) * 4;
+    slotTargets.protein_g = floor;
+    slotTargets.carbs_g = Math.max(10, slotTargets.carbs_g - proteinCalorieDelta / 4);
+  }
 
   // Generate all combinations and score them
   for (const protein of proteins) {
