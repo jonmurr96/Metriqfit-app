@@ -27,6 +27,8 @@ import {
   FirstMealDelay,
   LastMealBeforeBed,
   TrainingTime,
+  CarbTolerance,
+  CookingLevel,
   normalizeOnboardingAnswers,
 } from '../../lib/onboarding';
 import { PremiumHeader, PremiumFooter } from '../../components/onboarding/premium';
@@ -156,6 +158,20 @@ const TRAINING_TIMES: { value: TrainingTime; label: string }[] = [
   { value: 'afternoon', label: 'Afternoon\n(3-6 PM)' },
   { value: 'evening', label: 'Evening\n(7-9 PM)' },
   { value: 'no_training', label: 'No Training' },
+];
+
+const CARB_RESPONSES: { value: CarbTolerance; label: string; description: string }[] = [
+  { value: 'energized_satiated', label: 'Energized & Full', description: 'Carbs fuel me well' },
+  { value: 'hungry_quickly', label: 'Hungry Quickly', description: 'I need more protein/fat' },
+  { value: 'tired_sleepy', label: 'Tired / Sluggish', description: 'Carbs make me crash' },
+  { value: 'bloated', label: 'Bloated', description: 'Digestive sensitivity' },
+];
+
+const COOKING_LEVELS: { value: CookingLevel; label: string; description: string }[] = [
+  { value: 'minimal', label: 'Minimal', description: 'Simple prep only' },
+  { value: 'basic', label: 'Basic', description: 'Standard recipes' },
+  { value: 'moderate', label: 'Moderate', description: 'Comfortable cooking' },
+  { value: 'full', label: 'Full', description: 'Love complex meals' },
 ];
 
 
@@ -302,12 +318,13 @@ export default function NutritionScreen() {
         current_weight_lb: normalizedAnswers.current_weight_lb!,
         goal_type: normalizedAnswers.goal_type!,
         activity_level: normalizedAnswers.activity_level!,
-        training_days_per_week: normalizedAnswers.training_days_per_week!,
+        training_days_per_week: normalizedAnswers.training_days_per_week ?? 3,
         minutes_per_workout: normalizedAnswers.minutes_per_workout!,
         experience_level: normalizedAnswers.experience_level!,
         avg_steps: normalizedAnswers.avg_steps,
-        target_weight_lb: normalizedAnswers.target_weight_lb,
+        target_weight_lb: normalizedAnswers.target_weight_lb ?? normalizedAnswers.current_weight_lb ?? 0,
         target_date: normalizedAnswers.target_date,
+        dietary_preference: normalizedAnswers.dietary_preference,
       });
 
       if (!targets.calories || !targets.protein_g || !targets.carbs_g || !targets.fat_g || !targets.water_ml) {
@@ -617,6 +634,48 @@ export default function NutritionScreen() {
                       onPress={() => updateData({ training_time: t.value })}
                     >
                       <Text style={[styles.trainingCardText, sel && styles.trainingCardTextSelected]}>{t.label}</Text>
+                    </Pressable>
+                  );
+                })}
+              </View>
+            </View>
+
+            {/* Carb Response */}
+            <View style={styles.section}>
+              <Text style={styles.sectionLabel}>After a Carb-Heavy Meal I Feel…</Text>
+              <Text style={styles.sectionHint}>Helps us calibrate your carb balance</Text>
+              <View style={styles.carbGrid}>
+                {CARB_RESPONSES.map((c) => {
+                  const sel = data.carb_tolerance === c.value;
+                  return (
+                    <Pressable
+                      key={c.value}
+                      style={[styles.carbCard, sel && styles.carbCardSelected]}
+                      onPress={() => updateData({ carb_tolerance: c.value })}
+                    >
+                      <Text style={[styles.carbCardLabel, sel && styles.carbCardLabelSelected]}>{c.label}</Text>
+                      <Text style={[styles.carbCardDesc, sel && styles.carbCardDescSelected]}>{c.description}</Text>
+                    </Pressable>
+                  );
+                })}
+              </View>
+            </View>
+
+            {/* Cooking Level */}
+            <View style={styles.section}>
+              <Text style={styles.sectionLabel}>Cooking Comfort Level</Text>
+              <Text style={styles.sectionHint}>We'll match meal complexity to your skill</Text>
+              <View style={styles.cookingGrid}>
+                {COOKING_LEVELS.map((c) => {
+                  const sel = data.cooking_level === c.value;
+                  return (
+                    <Pressable
+                      key={c.value}
+                      style={[styles.cookingCard, sel && styles.cookingCardSelected]}
+                      onPress={() => updateData({ cooking_level: c.value })}
+                    >
+                      <Text style={[styles.cookingCardLabel, sel && styles.cookingCardLabelSelected]}>{c.label}</Text>
+                      <Text style={[styles.cookingCardDesc, sel && styles.cookingCardDescSelected]}>{c.description}</Text>
                     </Pressable>
                   );
                 })}

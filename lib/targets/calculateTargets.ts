@@ -14,6 +14,7 @@ interface TargetInput {
   avg_steps?: number | null;
   target_weight_lb: number;
   target_date?: string | null;
+  dietary_preference?: string | null;
 }
 
 interface TargetOutput {
@@ -42,10 +43,10 @@ const CALORIE_ADJUSTMENTS: Record<GoalType, { mode: string; kcal?: number; min_k
   general_fitness: { mode: 'offset', kcal: 0 },
   increase_endurance: { mode: 'offset', kcal: 150 },
   lose_weight: { mode: 'range_deficit', min_kcal: 300, max_kcal: 700, default_kcal: 450 },
-  recomp: { mode: 'range_deficit', min_kcal: 150, max_kcal: 350, default_kcal: 250 },
+  recomp: { mode: 'offset', kcal: 0 },
   gain_weight: { mode: 'range_surplus', min_kcal: 200, max_kcal: 500, default_kcal: 300 },
   build_muscle: { mode: 'range_surplus', min_kcal: 250, max_kcal: 600, default_kcal: 350 },
-  get_fitter: { mode: 'offset', kcal: 0 },
+  get_fitter: { mode: 'range_deficit', min_kcal: 150, max_kcal: 300, default_kcal: 200 },
 };
 
 const PROTEIN_G_PER_LB: Record<GoalType, Record<ExperienceLevel, number>> = {
@@ -153,6 +154,8 @@ export function calculateTargets(input: TargetInput): TargetOutput {
   }
   let protein_g = current_weight_lb * proteinPerLb;
   protein_g = roundToNearest(protein_g, 5);
+  // Cap protein to avoid unreachable targets for users with high body fat
+  protein_g = Math.min(protein_g, 220);
 
   let fat_g = current_weight_lb * FAT_G_PER_LB_DEFAULT;
   fat_g = clamp(fat_g, current_weight_lb * FAT_G_PER_LB_MIN, current_weight_lb * FAT_G_PER_LB_MAX);
@@ -160,6 +163,17 @@ export function calculateTargets(input: TargetInput): TargetOutput {
 
   let carbs_g = (calories - (protein_g * 4 + fat_g * 9)) / 4;
   carbs_g = Math.max(0, roundToNearest(carbs_g, 5));
+
+  // Keto/very-low-carb override: dietary preference must drive the macro split, not just food selection.
+  // Keto: ≤50g net carbs (≈5% of calories), fat fills residual after protein.
+  const dietPref = (input.dietary_preference || '').toLowerCase();
+  if (dietPref === 'keto' || dietPref === 'ketogenic' || dietPref === 'very_low_carb') {
+    carbs_g = Math.min(carbs_g, 50);
+    carbs_g = roundToNearest(carbs_g, 5);
+    fat_g = Math.round((calories - protein_g * 4 - carbs_g * 4) / 9);
+    fat_g = Math.max(fat_g, roundToNearest(current_weight_lb * FAT_G_PER_LB_MIN, 5));
+    fat_g = roundToNearest(fat_g, 5);
+  }
 
   const baselineOz = 0.5 * current_weight_lb;
 

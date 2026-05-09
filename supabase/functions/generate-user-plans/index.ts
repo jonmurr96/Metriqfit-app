@@ -2469,6 +2469,7 @@ function applyNutritionRegenerationToContext(
 function resolveNutritionMealSlots(
   nutritionRegeneration: NutritionRegenerationRequest | null,
   currentPlanContext: CurrentNutritionPlanContext | null,
+  mealsPerDayFromOnboarding?: string | null,
 ) {
   if (nutritionRegeneration?.keep_meal_slots && !nutritionRegeneration.start_fresh && currentPlanContext?.mealSlots?.length) {
     return currentPlanContext.mealSlots;
@@ -2477,6 +2478,14 @@ function resolveNutritionMealSlots(
   const mealsPerDayOverride = Number(nutritionRegeneration?.meals_per_day_override || 0);
   if (Number.isFinite(mealsPerDayOverride) && mealsPerDayOverride > 0) {
     return normalizeNutritionSlots(SLOT_ORDER.slice(0, clamp(mealsPerDayOverride, 1, SLOT_ORDER.length)));
+  }
+
+  // Respect the user's onboarding meal frequency preference on first generation
+  if (mealsPerDayFromOnboarding) {
+    const parsed = mealsPerDayFromOnboarding === "5_plus" ? 5 : Number(mealsPerDayFromOnboarding);
+    if (Number.isFinite(parsed) && parsed > 0) {
+      return normalizeNutritionSlots(SLOT_ORDER.slice(0, clamp(parsed, 1, SLOT_ORDER.length)));
+    }
   }
 
   return [...SLOT_ORDER];
@@ -5658,6 +5667,7 @@ serve(async (req: Request) => {
             hasWorkout: i < (nutritionContext.onboarding.training_days_per_week || 3),
             time: nutritionContext.onboarding.training_time === "evening" ? "18:00" :
                   nutritionContext.onboarding.training_time === "afternoon" ? "15:00" :
+                  nutritionContext.onboarding.training_time === "mid_morning" ? "09:00" :
                   nutritionContext.onboarding.training_time === "midday" ? "12:00" :
                   nutritionContext.onboarding.training_time === "early_morning" ? "06:00" :
                   "07:00",
@@ -5679,7 +5689,7 @@ serve(async (req: Request) => {
             // so plan generation succeeds rather than producing a 500 for the user.
             console.error("[generate-user-plans] Scientific meal engine failed, falling back to legacy:", scientificErr.message);
             warnings.push(`Meal preferences could not be applied (${scientificErr.message}). A standard nutrition plan was generated instead.`);
-            const nutritionMealSlots = resolveNutritionMealSlots(nutritionRegeneration, currentNutritionPlanContext);
+            const nutritionMealSlots = resolveNutritionMealSlots(nutritionRegeneration, currentNutritionPlanContext, nutritionContext.onboarding.meals_per_day);
             nutritionResult = await storeNutritionPlan(
               supabase,
               userId,
