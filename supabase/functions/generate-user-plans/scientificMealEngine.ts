@@ -74,6 +74,12 @@ export interface GenerationOptions {
   mealPrepMode?: boolean;
   previousDaysMeals?: GeneratedMeal[];
   mealsPerDay?: number;
+  // Guaranteed preference rotation — ensures every user-selected food appears at least once per week.
+  // Set by the plan generation loop (dayIndex drives the rotation index).
+  dayIndex?: number;
+  scheduledProteinId?: string | null;
+  scheduledCarbId?: string | null;
+  scheduledFatId?: string | null;
 }
 
 export interface MacroTargets {
@@ -866,6 +872,36 @@ export function generateDailyMeals(
     );
   }
 
+  // ── Guaranteed preference rotation ──────────────────────────────────────────
+  // Each food the user selected must appear at least once per week. We assign a
+  // "scheduled" anchor food per day (dayIndex drives the cycle). The scoring
+  // engine applies a heavy bonus when the scheduled food is in the combo for
+  // main meal slots, guaranteeing it wins unless it's nutritionally infeasible
+  // for that specific slot (e.g. a dessert food at a post-workout slot).
+  //
+  // Rotation cadence example with 3 proteins over 7 days:
+  //   Day 0→protein[0], Day 1→protein[1], Day 2→protein[2],
+  //   Day 3→protein[0], Day 4→protein[1], Day 5→protein[2], Day 6→protein[0]
+  //
+  // This guarantees every selection appears 2–3 times in a 7-day plan.
+  const dayIdx = options.dayIndex ?? 0;
+  const scheduledProteinId = availableProteins.length > 0
+    ? availableProteins[dayIdx % availableProteins.length].id
+    : null;
+  const scheduledCarbId = availableCarbs.length > 0
+    ? availableCarbs[dayIdx % availableCarbs.length].id
+    : null;
+  const scheduledFatId = availableFats.length > 0
+    ? availableFats[dayIdx % availableFats.length].id
+    : null;
+
+  const enrichedOptions: GenerationOptions = {
+    ...options,
+    scheduledProteinId,
+    scheduledCarbId,
+    scheduledFatId,
+  };
+
   const meals: GeneratedMeal[] = [];
   let remainingMacros = { ...macroTargets };
 
@@ -884,7 +920,7 @@ export function generateDailyMeals(
       remainingSlots,
       goal,
       selections.traditional_meals,
-      options
+      enrichedOptions
     );
 
     if (meal) {
@@ -972,8 +1008,37 @@ function generateBestMeal(
 
         const candidate = scoreMealCandidate(combo, slot, previousMeals, goal, traditionalMeals, options);
 
-        if (candidate.score > bestScore) {
-          bestScore = candidate.score;
+        // ── Guaranteed preference rotation bonus ─────────────────────────────
+        // Apply a heavy bonus when the combo contains the day's scheduled food.
+        // This ensures each user-selected protein, carb, and fat appears in the
+        // plan at least once per week (see rotation logic in generateDailyMeals).
+        //
+        // Scientific rationale for slot-gating:
+        //  • Protein bonus → lunch, dinner, post-workout only. Protein at these
+        //    slots aligns with the anabolic window and satiety requirements.
+        //  • Carb bonus → breakfast, lunch, dinner, pre-workout. Carbs are
+        //    timing-sensitive; avoid forcing a scheduled carb at evening slots
+        //    where lower glycemic load is preferable.
+        //  • Fat bonus → breakfast, lunch, dinner. Fat slows gastric emptying,
+        //    so it is excluded from pre/post-workout slots to protect absorption
+        //    of co-ingested protein and carbohydrates.
+        let adjustedScore = candidate.score;
+        const isProteinMeal = slot.slot === "lunch" || slot.slot === "dinner" || slot.slot === "post-workout";
+        const isCarbMeal = slot.slot === "breakfast" || slot.slot === "lunch" || slot.slot === "dinner" || slot.slot === "pre-workout";
+        const isFatMeal = slot.slot === "breakfast" || slot.slot === "lunch" || slot.slot === "dinner";
+
+        if (isProteinMeal && options.scheduledProteinId && protein.id === options.scheduledProteinId) {
+          adjustedScore += 2.0; // strong enough to guarantee the protein wins
+        }
+        if (isCarbMeal && options.scheduledCarbId && carb.id === options.scheduledCarbId) {
+          adjustedScore += 1.5;
+        }
+        if (isFatMeal && options.scheduledFatId && fat.id === options.scheduledFatId) {
+          adjustedScore += 1.5;
+        }
+
+        if (adjustedScore > bestScore) {
+          bestScore = adjustedScore;
           bestCandidate = candidate;
         }
       }

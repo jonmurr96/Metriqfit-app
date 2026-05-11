@@ -4109,6 +4109,9 @@ async function generateScientificMealPlan(
       refusedFoods: context.onboarding.refused_foods,
       previousDaysMeals: allDayMeals.flat(),
       mealsPerDay: slots.length,
+      // Pass the day index so generateDailyMeals can compute the per-day
+      // scheduled protein/carb/fat anchor for the guaranteed rotation.
+      dayIndex: dayIndex,
     };
 
     const { meals: dailyMeals, warnings: dailyWarnings, logs: dailyLogs } = generateDailyMeals(

@@ -27,8 +27,6 @@ import {
   FirstMealDelay,
   LastMealBeforeBed,
   TrainingTime,
-  CarbTolerance,
-  CookingLevel,
   normalizeOnboardingAnswers,
 } from '../../lib/onboarding';
 import { PremiumHeader, PremiumFooter } from '../../components/onboarding/premium';
@@ -160,19 +158,6 @@ const TRAINING_TIMES: { value: TrainingTime; label: string }[] = [
   { value: 'no_training', label: 'No Training' },
 ];
 
-const CARB_RESPONSES: { value: CarbTolerance; label: string; description: string }[] = [
-  { value: 'energized_satiated', label: 'Energized & Full', description: 'Carbs fuel me well' },
-  { value: 'hungry_quickly', label: 'Hungry Quickly', description: 'I need more protein/fat' },
-  { value: 'tired_sleepy', label: 'Tired / Sluggish', description: 'Carbs make me crash' },
-  { value: 'bloated', label: 'Bloated', description: 'Digestive sensitivity' },
-];
-
-const COOKING_LEVELS: { value: CookingLevel; label: string; description: string }[] = [
-  { value: 'minimal', label: 'Minimal', description: 'Simple prep only' },
-  { value: 'basic', label: 'Basic', description: 'Standard recipes' },
-  { value: 'moderate', label: 'Moderate', description: 'Comfortable cooking' },
-  { value: 'full', label: 'Full', description: 'Love complex meals' },
-];
 
 
 
@@ -640,48 +625,6 @@ export default function NutritionScreen() {
               </View>
             </View>
 
-            {/* Carb Response */}
-            <View style={styles.section}>
-              <Text style={styles.sectionLabel}>After a Carb-Heavy Meal I Feel…</Text>
-              <Text style={styles.sectionHint}>Helps us calibrate your carb balance</Text>
-              <View style={styles.carbGrid}>
-                {CARB_RESPONSES.map((c) => {
-                  const sel = data.carb_tolerance === c.value;
-                  return (
-                    <Pressable
-                      key={c.value}
-                      style={[styles.carbCard, sel && styles.carbCardSelected]}
-                      onPress={() => updateData({ carb_tolerance: c.value })}
-                    >
-                      <Text style={[styles.carbCardLabel, sel && styles.carbCardLabelSelected]}>{c.label}</Text>
-                      <Text style={[styles.carbCardDesc, sel && styles.carbCardDescSelected]}>{c.description}</Text>
-                    </Pressable>
-                  );
-                })}
-              </View>
-            </View>
-
-            {/* Cooking Level */}
-            <View style={styles.section}>
-              <Text style={styles.sectionLabel}>Cooking Comfort Level</Text>
-              <Text style={styles.sectionHint}>We'll match meal complexity to your skill</Text>
-              <View style={styles.cookingGrid}>
-                {COOKING_LEVELS.map((c) => {
-                  const sel = data.cooking_level === c.value;
-                  return (
-                    <Pressable
-                      key={c.value}
-                      style={[styles.cookingCard, sel && styles.cookingCardSelected]}
-                      onPress={() => updateData({ cooking_level: c.value })}
-                    >
-                      <Text style={[styles.cookingCardLabel, sel && styles.cookingCardLabelSelected]}>{c.label}</Text>
-                      <Text style={[styles.cookingCardDesc, sel && styles.cookingCardDescSelected]}>{c.description}</Text>
-                    </Pressable>
-                  );
-                })}
-              </View>
-            </View>
-
             {/* Meals per day */}
             <View style={styles.section}>
               <Text style={styles.sectionLabel}>Meals Per Day</Text>
@@ -865,61 +808,4 @@ const styles = StyleSheet.create({
     fontFamily: 'Sora_600SemiBold',
   },
 
-  // NEW: Carb Response Grid
-  carbGrid: {
-    flexDirection: 'row', flexWrap: 'wrap', gap: 10,
-  },
-  carbCard: {
-    width: '47%',
-    padding: 14,
-    borderRadius: 12, borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.08)',
-    backgroundColor: SURFACE,
-  },
-  carbCardSelected: {
-    backgroundColor: '#22C55E',
-    borderColor: '#22C55E',
-  },
-  carbCardLabel: {
-    fontSize: 14, fontFamily: 'Sora_600SemiBold', color: 'rgba(255,255,255,0.8)',
-    marginBottom: 4,
-  },
-  carbCardLabelSelected: {
-    color: BG,
-  },
-  carbCardDesc: {
-    fontSize: 11, fontFamily: 'Sora_400Regular', color: 'rgba(255,255,255,0.4)',
-  },
-  carbCardDescSelected: {
-    color: 'rgba(0,0,0,0.6)',
-  },
-
-  // NEW: Cooking Level Grid
-  cookingGrid: {
-    flexDirection: 'row', flexWrap: 'wrap', gap: 10,
-  },
-  cookingCard: {
-    width: '47%',
-    padding: 14,
-    borderRadius: 12, borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.08)',
-    backgroundColor: SURFACE,
-  },
-  cookingCardSelected: {
-    backgroundColor: '#F59E0B',
-    borderColor: '#F59E0B',
-  },
-  cookingCardLabel: {
-    fontSize: 14, fontFamily: 'Sora_600SemiBold', color: 'rgba(255,255,255,0.8)',
-    marginBottom: 4,
-  },
-  cookingCardLabelSelected: {
-    color: BG,
-  },
-  cookingCardDesc: {
-    fontSize: 11, fontFamily: 'Sora_400Regular', color: 'rgba(255,255,255,0.4)',
-  },
-  cookingCardDescSelected: {
-    color: 'rgba(0,0,0,0.6)',
-  },
 });
