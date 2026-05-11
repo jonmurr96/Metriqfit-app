@@ -1855,10 +1855,11 @@ function buildMealVariant(
   },
 ): MealVariantPayload {
   const strictMacroMode = options?.strictMacroMode ?? false;
-  const excludedNames: string[] = [];
   const protein = options?.anchors?.protein || pickFoodForMacro(foods, "protein", daySeed + variantIndex * 3);
   const carb = options?.anchors?.carb || pickFoodForMacro(foods, "carb", daySeed + variantIndex * 5 + 11);
   const fat = options?.anchors?.fat || pickFoodForMacro(foods, "fat", daySeed + variantIndex * 7 + 23);
+  // Exclude already-selected macro anchors so the veggie slot never duplicates them.
+  const excludedNames: string[] = [protein.name, carb.name, fat.name];
   const veggie = options?.anchors?.veggie || getFoodByTag(foods, slot === "breakfast" ? "fruit" : "veggie", excludedNames, daySeed + variantIndex * 9 + 37);
 
   const proteinPerGram = {
@@ -4429,8 +4430,12 @@ async function storeNutritionPlan(
   const proteinPool = buildMacroRotationPool(workingFoods, "protein", varietyProfile, context.onboarding.preferred_proteins || []);
   const carbPool = buildMacroRotationPool(workingFoods, "carb", varietyProfile);
   const fatPool = buildMacroRotationPool(workingFoods, "fat", varietyProfile);
+  // Produce pool: only foods explicitly tagged as vegetables or fruits.
+  // Deliberately excludes the "breakfast" tag — fat/carb sources like avocado, chia seeds,
+  // and peanut butter carry "breakfast" meal-timing tags but must NOT enter the veggie
+  // anchor pool, as that would cause the same food to be selected twice in one meal.
   const producePool = workingFoods.filter((food) =>
-    food.tags.includes("veggie") || food.tags.includes("fruit") || food.tags.includes("breakfast")
+    food.tags.includes("veggie") || food.tags.includes("fruit")
   );
 
   if (!proteinPool.length || !carbPool.length || !fatPool.length || !producePool.length) {
@@ -4484,7 +4489,9 @@ async function storeNutritionPlan(
       const defaultVeggie = pickFromRotationPool(
         producePool.length ? producePool : workingFoods,
         slotSeed + 11,
-      ) || getFoodByTag(workingFoods, meal.slot === "breakfast" ? "fruit" : "veggie", [], slotSeed + 11);
+        // Exclude already-selected fat and protein anchors from the veggie slot.
+        [defaultFat.key, defaultProtein.key],
+      ) || getFoodByTag(workingFoods, meal.slot === "breakfast" ? "fruit" : "veggie", [defaultFat.name, defaultProtein.name], slotSeed + 11);
 
       const defaultAnchors: MealAnchorSelection = {
         protein: defaultProtein,
