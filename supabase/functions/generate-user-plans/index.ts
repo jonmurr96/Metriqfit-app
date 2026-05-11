@@ -3952,10 +3952,9 @@ async function generateScientificMealPlan(
     traditional_meals: context.onboarding.traditional_meals,
   };
 
-  // Validate selections
-  if (!selections.proteins.length || !selections.carbs.length || !selections.fats.length) {
-    throw new Error("User must select proteins, carbs, and fats for scientific meal generation");
-  }
+  // If a user hasn't expressed food preferences, the engine uses the full
+  // food catalog fallback — buildCandidatePools degrades gracefully when
+  // preferredFamilies is empty. No hard gate needed.
 
   // Convert foods to scientific format
   const scientificFoods = convertFoodsToScientificFormat(context.foods);
@@ -4057,7 +4056,27 @@ async function generateScientificMealPlan(
       workout_time: workoutTime,
     };
 
-    const slots = getSlotTemplate(hasWorkout, workoutTime, scheduleConfig);
+    let slots = getSlotTemplate(hasWorkout, workoutTime, scheduleConfig);
+
+    // Apply the user's meals_per_day preference as a hard cap.
+    // Priority order: breakfast, lunch, dinner, post-workout, pre-workout, snack, evening.
+    // After selecting the top-N by priority, slots are re-sorted chronologically by timing.
+    const rawMealsPerDay = context.onboarding.meals_per_day;
+    if (rawMealsPerDay && rawMealsPerDay !== "no_preference") {
+      const mealsPerDayCap = rawMealsPerDay === "5_plus" ? 5 : parseInt(rawMealsPerDay, 10);
+      if (!isNaN(mealsPerDayCap) && mealsPerDayCap > 0 && mealsPerDayCap < slots.length) {
+        const SLOT_PRIORITY = ["breakfast", "lunch", "dinner", "post-workout", "pre-workout", "snack", "evening"];
+        slots = slots
+          .slice()
+          .sort((a, b) => {
+            const pa = SLOT_PRIORITY.indexOf(a.slot);
+            const pb = SLOT_PRIORITY.indexOf(b.slot);
+            return (pa === -1 ? 999 : pa) - (pb === -1 ? 999 : pb);
+          })
+          .slice(0, mealsPerDayCap)
+          .sort((a, b) => a.timing.localeCompare(b.timing));
+      }
+    }
 
     // On-the-fly carb periodization: training days get +20% carbs/-12% fat/+8% calories;
     // rest days get -18% carbs/+10% fat/-6% calories. Protein is always held constant.
@@ -5224,7 +5243,7 @@ serve(async (req: Request) => {
         | Awaited<ReturnType<typeof storeWorkoutPlan>>
         | Awaited<ReturnType<typeof storeWorkoutPlanFromTemplateV2>>
         | null = null;
-      let nutritionResult: Awaited<ReturnType<typeof storeNutritionPlan>> | null = null;
+      let nutritionResult: Awaited<ReturnType<typeof generateScientificMealPlan>> | null = null;
 
       const generateWorkoutCandidate = async (attemptConfig: WorkoutGenerationConfig) => {
         const selectedTemplate = await chooseTemplateFromCatalog(
@@ -5661,77 +5680,31 @@ serve(async (req: Request) => {
       }
 
       if (planType === "nutrition" || planType === "both") {
-        // Check if user has scientific nutrition preferences (proteins, carbs, fats)
-        const hasScientificPreferences =
-          nutritionContext.onboarding.preferred_proteins?.length > 0 &&
-          nutritionContext.onboarding.preferred_carbs?.length > 0 &&
-          nutritionContext.onboarding.preferred_fats?.length > 0;
+        // The scientific meal engine is the sole nutrition plan generator.
+        // No legacy fallback — if the engine throws, surface the error so the
+        // caller can handle it explicitly rather than silently producing a
+        // degraded plan the user didn't ask for.
+        const workoutSchedule = Array.from({ length: 7 }, (_, i) => ({
+          day: i,
+          hasWorkout: i < (nutritionContext.onboarding.training_days_per_week || 3),
+          time: nutritionContext.onboarding.training_time === "evening" ? "18:00" :
+                nutritionContext.onboarding.training_time === "afternoon" ? "15:00" :
+                nutritionContext.onboarding.training_time === "mid_morning" ? "09:00" :
+                nutritionContext.onboarding.training_time === "midday" ? "12:00" :
+                nutritionContext.onboarding.training_time === "early_morning" ? "06:00" :
+                "07:00",
+        }));
 
-        if (hasScientificPreferences) {
-          // Build workout schedule for meal timing
-          const workoutSchedule = Array.from({ length: 7 }, (_, i) => ({
-            day: i,
-            hasWorkout: i < (nutritionContext.onboarding.training_days_per_week || 3),
-            time: nutritionContext.onboarding.training_time === "evening" ? "18:00" :
-                  nutritionContext.onboarding.training_time === "afternoon" ? "15:00" :
-                  nutritionContext.onboarding.training_time === "mid_morning" ? "09:00" :
-                  nutritionContext.onboarding.training_time === "midday" ? "12:00" :
-                  nutritionContext.onboarding.training_time === "early_morning" ? "06:00" :
-                  "07:00",
-          }));
-
-          try {
-            nutritionResult = await generateScientificMealPlan(
-              supabase,
-              userId,
-              runId,
-              nutritionContext,
-              activationMode,
-              nutritionHorizon,
-              currentNutritionPlanContext?.planId || null,
-              workoutSchedule,
-            );
-          } catch (scientificErr: any) {
-            // Scientific meal engine failed — fall back to the legacy plan generator
-            // so plan generation succeeds rather than producing a 500 for the user.
-            console.error("[generate-user-plans] Scientific meal engine failed, falling back to legacy:", scientificErr.message);
-            warnings.push(`Meal preferences could not be applied (${scientificErr.message}). A standard nutrition plan was generated instead.`);
-            const nutritionMealSlots = resolveNutritionMealSlots(nutritionRegeneration, currentNutritionPlanContext, nutritionContext.onboarding.meals_per_day);
-            nutritionResult = await storeNutritionPlan(
-              supabase,
-              userId,
-              runId,
-              nutritionContext,
-              macroTolerancePercent,
-              includeVariants,
-              nutritionHorizon,
-              strictMacroMode,
-              varietyProfile,
-              activationMode,
-              currentNutritionPlanContext?.planId || null,
-              nutritionMealSlots,
-              dryRun,
-            );
-          }
-        } else {
-          // Fallback to legacy meal generation
-          const nutritionMealSlots = resolveNutritionMealSlots(nutritionRegeneration, currentNutritionPlanContext);
-          nutritionResult = await storeNutritionPlan(
-            supabase,
-            userId,
-            runId,
-            nutritionContext,
-            macroTolerancePercent,
-            includeVariants,
-            nutritionHorizon,
-            strictMacroMode,
-            varietyProfile,
-            activationMode,
-            currentNutritionPlanContext?.planId || null,
-            nutritionMealSlots,
-            dryRun,
-          );
-        }
+        nutritionResult = await generateScientificMealPlan(
+          supabase,
+          userId,
+          runId,
+          nutritionContext,
+          activationMode,
+          nutritionHorizon,
+          currentNutritionPlanContext?.planId || null,
+          workoutSchedule,
+        );
 
         warnings.push(...nutritionResult.warnings);
       }
