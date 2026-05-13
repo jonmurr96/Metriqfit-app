@@ -12,17 +12,86 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { MotiView } from 'moti';
 import { Ionicons } from '@expo/vector-icons';
 import { metriqfitTheme } from '../../lib/theme';
-import { useOnboarding, EquipmentAccess, MinutesPerWorkout, Injury, Weekday } from '../../lib/onboarding';
-import { useAuth } from '../../lib/auth';
-import { supabase } from '../../lib/supabase';
+import { useOnboarding, EquipmentAccess, MinutesPerWorkout, Injury, Weekday, ExperienceLevel } from '../../lib/onboarding';
 import { PremiumHeader, PremiumFooter } from '../../components/onboarding/premium';
 
 const { spacing: s } = metriqfitTheme;
 const CYAN = '#22D3EE';
 const PURPLE = '#A855F7';
 const ORANGE = '#F97316';
+const GREEN = '#22C55E';
 const BG = '#050510';
 const SURFACE = '#0A1128';
+
+type SplitStyleKey = 'auto' | 'full_body' | 'upper_lower' | 'ppl' | 'bro_split';
+
+type SplitStyleOption = {
+  value: SplitStyleKey;
+  label: string;
+  subtitle: string;
+  icon: keyof typeof Ionicons.glyphMap;
+  color: string;
+  minDays: number;
+  maxDays?: number;
+  requiresLevel?: ExperienceLevel[];
+};
+
+const SPLIT_OPTIONS: SplitStyleOption[] = [
+  {
+    value: 'auto',
+    label: 'Auto (Recommended)',
+    subtitle: 'AI picks the best split for your goals',
+    icon: 'sparkles-outline',
+    color: CYAN,
+    minDays: 2,
+  },
+  {
+    value: 'full_body',
+    label: 'Full Body',
+    subtitle: 'Every session works the whole body',
+    icon: 'body-outline',
+    color: PURPLE,
+    minDays: 2,
+  },
+  {
+    value: 'upper_lower',
+    label: 'Upper / Lower',
+    subtitle: 'Alternate upper and lower body days',
+    icon: 'swap-vertical-outline',
+    color: ORANGE,
+    minDays: 3,
+  },
+  {
+    value: 'ppl',
+    label: 'Push / Pull / Legs',
+    subtitle: 'Dedicated push, pull, and leg days',
+    icon: 'fitness-outline',
+    color: GREEN,
+    minDays: 3,
+    requiresLevel: ['intermediate', 'advanced'],
+  },
+  {
+    value: 'bro_split',
+    label: 'Bro Split',
+    subtitle: 'Dedicated muscle-group days (Chest, Back…)',
+    icon: 'barbell-outline',
+    color: '#EF4444',
+    minDays: 4,
+    maxDays: 5,
+    requiresLevel: ['intermediate', 'advanced'],
+  },
+];
+
+function resolveSplitFamily(style: SplitStyleKey, days: number): string | null {
+  switch (style) {
+    case 'auto':        return null;
+    case 'full_body':   return days <= 2 ? 'fam_minimalist_2_day_aesthetics' : null;
+    case 'upper_lower': return days === 3 ? 'fam_upper_lower_full_3day' : days >= 4 ? 'fam_athletic_ul' : null;
+    case 'ppl':         return days >= 5 ? 'fam_ppl_6day' : 'fam_ppl_3day';
+    case 'bro_split':   return days >= 5 ? 'fam_brosplit_5day' : 'fam_brosplit_4day';
+    default:            return null;
+  }
+}
 
 // All 7 weekdays in display order — user taps which days they'll actually train
 const WEEKDAY_OPTIONS: { value: Weekday; label: string; abbr: string }[] = [
@@ -66,9 +135,20 @@ const EQUIPMENT: EquipmentConfig[] = [
   { value: 'bodyweight_only',    label: 'Bodyweight Only',  icon: 'body-outline',            color: ORANGE },
 ];
 
+function inferSplitStyleFromFamily(family: string | null | undefined): SplitStyleKey {
+  if (!family) return 'auto';
+  if (family.startsWith('fam_brosplit')) return 'bro_split';
+  if (family === 'fam_ppl_3day' || family === 'fam_ppl_6day' || family === 'fam_hypertrophy_ppl_v1') return 'ppl';
+  if (family === 'fam_upper_lower_full_3day' || family === 'fam_athletic_ul' || family === 'fam_fatloss_ul') return 'upper_lower';
+  if (family === 'fam_minimalist_2_day_aesthetics' || family === 'fam_minimalist_2_day_athletic') return 'full_body';
+  return 'auto';
+}
+
 export default function TrainingScreen() {
   const { data, updateData, setCurrentStep } = useOnboarding();
-  const { user } = useAuth();
+  const [splitStyle, setSplitStyle] = React.useState<SplitStyleKey>(() =>
+    inferSplitStyleFromFamily(data.preferred_split_family),
+  );
 
   // Backward-compat migrations
   React.useEffect(() => {
@@ -137,21 +217,15 @@ export default function TrainingScreen() {
 
   const handleContinue = () => {
     if (isValid) {
-      // Derive training_days_per_week and preferred_days_off from explicit selections
       const derivedDaysOff = WEEKDAY_OPTIONS
         .filter((d) => !selectedDays.includes(d.value))
         .map((d) => d.value) as Weekday[];
       updateData({
         training_days_per_week: trainingCount,
         preferred_days_off: derivedDaysOff,
+        preferred_split_family: resolveSplitFamily(splitStyle, trainingCount),
       });
       setCurrentStep(7);
-      if (user?.id) {
-        supabase
-          .from('onboarding_answers')
-          .upsert({ user_id: user.id, last_onboarding_step: 'nutrition' }, { onConflict: 'user_id' })
-          .then(() => {});
-      }
       router.push('/(onboarding)/nutrition');
     }
   };
@@ -297,6 +371,58 @@ export default function TrainingScreen() {
                     </View>
                   )}
                   {!sel && <View style={styles.radio} />}
+                </Pressable>
+              );
+            })}
+          </View>
+
+          {/* Preferred Split */}
+          <View style={styles.section}>
+            <Text style={styles.sectionLabel}>Preferred Training Split</Text>
+            <Text style={styles.sectionHint}>AI will always adapt to your available days</Text>
+            {SPLIT_OPTIONS.map((opt) => {
+              const isLevelGated = !!(opt.requiresLevel && !opt.requiresLevel.includes(data.experience_level as ExperienceLevel));
+              const isTooFewDays = trainingCount > 0 && trainingCount < opt.minDays;
+              const isTooManyDays = !!opt.maxDays && trainingCount > 0 && trainingCount > opt.maxDays;
+              const isDaysGated = isTooFewDays || isTooManyDays;
+              const isDisabled = isLevelGated || isDaysGated;
+              const sel = splitStyle === opt.value && !isDisabled;
+              const disabledReason = isLevelGated
+                ? 'Intermediate+ only'
+                : isTooFewDays
+                ? `Needs ${opt.minDays}+ days`
+                : isTooManyDays
+                ? `${opt.maxDays} days max — try PPL instead`
+                : null;
+              return (
+                <Pressable
+                  key={opt.value}
+                  style={[
+                    styles.listCard,
+                    sel && { borderColor: opt.color, backgroundColor: `${opt.color}0D` },
+                    isDisabled && styles.listCardDisabled,
+                  ]}
+                  onPress={() => {
+                    if (!isDisabled) setSplitStyle(opt.value);
+                  }}
+                >
+                  <View style={[styles.listIcon, { backgroundColor: sel ? opt.color : `${opt.color}20`, opacity: isDisabled ? 0.4 : 1 }]}>
+                    <Ionicons name={opt.icon} size={20} color={sel ? BG : opt.color} />
+                  </View>
+                  <View style={{ flex: 1 }}>
+                    <Text style={[styles.listLabel, sel && { color: opt.color }, isDisabled && { color: 'rgba(255,255,255,0.25)' }]}>
+                      {opt.label}
+                    </Text>
+                    <Text style={[styles.splitSubtitle, isDisabled && { color: 'rgba(255,255,255,0.18)' }]}>
+                      {disabledReason ?? opt.subtitle}
+                    </Text>
+                  </View>
+                  {sel && (
+                    <View style={[styles.radioSelected, { borderColor: opt.color }]}>
+                      <View style={[styles.radioDot, { backgroundColor: opt.color }]} />
+                    </View>
+                  )}
+                  {!sel && !isDisabled && <View style={styles.radio} />}
                 </Pressable>
               );
             })}
@@ -460,5 +586,14 @@ const styles = StyleSheet.create({
     fontSize: 15,
     fontFamily: 'Sora_400Regular',
     color: '#FFFFFF',
+  },
+  listCardDisabled: {
+    opacity: 0.5,
+  },
+  splitSubtitle: {
+    fontSize: 11,
+    fontFamily: 'Sora_400Regular',
+    color: 'rgba(255,255,255,0.35)',
+    marginTop: 2,
   },
 });
