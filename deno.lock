@@ -7026,6 +7026,7 @@
     "https://deno.land/std@0.220.0/yaml/type.ts": "708dde5f20b01cc1096489b7155b6af79a217d585afb841128e78c3c2391eb5c",
     "https://deno.land/std@0.224.0/async/delay.ts": "f90dd685b97c2f142b8069082993e437b1602b8e2561134827eeb7c12b95c499",
     "https://deno.land/std@0.224.0/http/server.ts": "f9313804bf6467a1704f45f76cb6cd0a3396a3b31c316035e6a4c2035d1ea514",
+    "https://esm.sh/@supabase/supabase-js@2.45.4": "1108d69216995335d057dbd15907caaf514a4d1ef082f097050573b9d589a57c",
     "https://esm.sh/@supabase/supabase-js@2.49.1": "947c71e163ca8bb5b538eccb5ee86fbc8da6bcb916a861586db5fad1af4701bb"
   },
   "workspace": {
@@ -7042,6 +7043,7 @@
         "npm:@nozbe/watermelondb@0.28",
         "npm:@react-native-async-storage/async-storage@2.2.0",
         "npm:@react-native-community/datetimepicker@8.4.4",
+        "npm:@sentry/react-native@^8.10.0",
         "npm:@supabase/supabase-js@^2.47.14",
         "npm:@tailwindcss/postcss@^4.2.4",
         "npm:@tanstack/react-query@^5.62.16",
@@ -7066,6 +7068,7 @@
         "npm:expo-secure-store@~15.0.8",
         "npm:expo-splash-screen@~31.0.13",
         "npm:expo-status-bar@~3.0.9",
+        "npm:expo-video@~3.0.16",
         "npm:expo@54.0",
         "npm:moti@0.30",
         "npm:postcss@^8.5.10",

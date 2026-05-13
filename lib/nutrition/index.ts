@@ -81,6 +81,19 @@ export {
   type GeneratedMealPlan,
 } from './meal-generation-service';
 
+export {
+  recommendMealFrequency,
+  resolveMealFrequencyChoice,
+  getMealFrequencyWarning,
+  getMealFrequencyAdvisory,
+  formatMealFrequencyLabel,
+  mealFrequencyChoiceToCount,
+  mealFrequencyChoiceList,
+  type MealFrequencyInput,
+  type MealFrequencyRecommendation,
+  type MealFrequencyWarningLevel,
+} from './meal-frequency';
+
 // Legacy exports for backward compatibility
 export {
   generateDayMealPlan as legacyGenerateDayMealPlan,
@@ -89,7 +102,7 @@ export {
 } from './meal-generator';
 
 export {
-  matchRecipesToMealSlots,
+  matchRecipes,
   type Recipe,
-  type MatchedRecipe,
+  type RecipeMatchResult as MatchedRecipe,
 } from './recipe-matcher';

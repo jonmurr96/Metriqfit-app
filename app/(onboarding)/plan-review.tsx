@@ -33,6 +33,11 @@ import {
 import { useOnboardingAnswers, useProfile, useUserTargets } from '../../hooks/useUser';
 import { useOnboardingReviewState, useSetReviewSectionAccepted } from '../../hooks/useOnboardingReview';
 import { trackEvent } from '../../lib/analytics';
+import {
+  formatMealFrequencyLabel,
+  getMealFrequencyAdvisory,
+  recommendMealFrequency,
+} from '../../lib/nutrition/meal-frequency';
 
 function safeParseWarnings(rawWarnings: unknown): string[] {
   if (!rawWarnings) return [];
@@ -126,6 +131,7 @@ export default function PlanReviewScreen() {
   const nutritionPlan = nutritionContextQuery.data?.editablePlan || null;
   const nutritionPlanSource = nutritionContextQuery.data?.source || 'none';
   const nutritionLoading = nutritionContextQuery.isLoading;
+  const answerPayload = (onboardingAnswers?.answers || {}) as Record<string, any>;
   const targets = useMemo(
     () => ({
       calories: Number(targetData?.calories || 2000),
@@ -136,6 +142,14 @@ export default function PlanReviewScreen() {
     }),
     [targetData?.calories, targetData?.carbs_g, targetData?.fat_g, targetData?.protein_g, targetData?.water_ml],
   );
+  const mealFrequencyRecommendation = useMemo(
+    () => recommendMealFrequency({
+      goalType: answerPayload.goal_type,
+      calories: targets.calories,
+      proteinGrams: targets.protein_g,
+    }),
+    [answerPayload.goal_type, targets.calories, targets.protein_g],
+  );
 
   const warnings = safeParseWarnings(params.warnings);
 
@@ -143,8 +157,6 @@ export default function PlanReviewScreen() {
   const setSectionAccepted = useSetReviewSectionAccepted();
   const [infoSheet, setInfoSheet] = useState<{ title: string; body: string } | null>(null);
   const [expandedPlan, setExpandedPlan] = useState<'workout' | 'nutrition' | null>(null);
-
-  const answerPayload = (onboardingAnswers?.answers || {}) as Record<string, any>;
 
   const weekRange = useMemo(() => getWeekRange(workoutPlan?.start_date), [workoutPlan?.start_date]);
   const { data: weekSchedule, isLoading: weekScheduleLoading } = useWorkoutScheduleByPlanId(
@@ -281,7 +293,8 @@ export default function PlanReviewScreen() {
       title: 'Why this nutrition plan',
       body: [
         `Macro target fit: Planned around ${Math.round(targets.calories)} kcal with P ${Math.round(targets.protein_g)}g / C ${Math.round(targets.carbs_g)}g / F ${Math.round(targets.fat_g)}g.`,
-        `Meal structure: ${String(answerPayload.meals_per_day || '3').replace('_', ' ')} meals/day based on your onboarding preference.`,
+        `Meal structure: ${formatMealFrequencyLabel(answerPayload.meals_per_day, mealFrequencyRecommendation)}.`,
+        getMealFrequencyAdvisory(answerPayload.meals_per_day, mealFrequencyRecommendation),
         `Dietary profile: ${String(answerPayload.dietary_preference || 'anything').replace('_', ' ')} with exclusions applied.`,
         allergies.length ? `Allergy exclusions: ${allergies.join(', ')}.` : 'No allergy exclusions provided.',
         refused.length ? `Foods avoided: ${refused.join(', ')}.` : 'No additional food refusals provided.',
@@ -428,7 +441,7 @@ export default function PlanReviewScreen() {
             icon="nutrition-outline"
             iconColor={c.macros.carbs}
             title="Nutrition Plan"
-            metadata={`${String(answerPayload.meals_per_day || '3').replace('_', ' ')} meals/day`}
+            metadata={formatMealFrequencyLabel(answerPayload.meals_per_day, mealFrequencyRecommendation)}
             subtitle={
               nutritionPlan
                 ? `${Math.round(targets.calories)} kcal · ${nutritionPlanSource === 'preview' ? 'Preview' : 'Live'}`

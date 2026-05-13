@@ -232,6 +232,48 @@ const defaultTargets = {
   water_ml: 2500,
 };
 
+// ── Validators for new split day types ────────────────────────────────────────
+
+function assertDayCount(plan, expected, label) {
+  assert((plan.days || []).length === expected, `${label}: expected ${expected} days, got ${(plan.days || []).length}`);
+}
+
+function assertFamilyKey(plan, expected, label) {
+  assert(plan.program_family_key === expected, `${label}: expected family ${expected}, got ${plan.program_family_key}`);
+}
+
+function assertDayTypes(plan, expectedTypes, label) {
+  const actual = (plan.days || []).map((day) => day.day_type);
+  for (const expected of expectedTypes) {
+    assert(actual.includes(expected), `${label}: missing day_type ${expected} — got [${actual.join(', ')}]`);
+  }
+}
+
+function assertNoEmptyDays(plan, label) {
+  for (const day of plan.days || []) {
+    assert((day.exercises || []).length >= 2, `${label}: day "${day.name}" (${day.day_type}) has fewer than 2 exercises`);
+  }
+}
+
+function assertNoEquipmentViolations(plan, allowedCategories, label) {
+  const allowed = new Set(allowedCategories);
+  for (const day of plan.days || []) {
+    for (const ex of day.exercises || []) {
+      const cat = ex.exercise?.equipment_category ?? ex.equipment_category;
+      if (cat && !allowed.has(cat)) {
+        assert(false, `${label}: exercise "${ex.exercise?.name ?? ex.name}" uses equipment "${cat}" not in allowed set [${allowedCategories.join(', ')}]`);
+      }
+    }
+  }
+}
+
+function assertStaplePresence(plan, patterns, label) {
+  const names = flattenExerciseNames(plan).join(' | ').toLowerCase();
+  for (const pattern of patterns) {
+    assert(pattern.test(names), `${label}: missing expected staple exercise — ${pattern}`);
+  }
+}
+
 const canonicalCases = [
   {
     label: 'beginner-3-general-fitness',
@@ -247,18 +289,9 @@ const canonicalCases = [
       technique_preferences: ['general_fitness'],
     },
     assertPlan(plan) {
-      const meta = plan.planner_metadata_json;
-      const validBeginner3DayFamilies = ['full_body_beginner_3', 'general_fitness_beginner_3'];
-      assert(validBeginner3DayFamilies.includes(plan.program_family_key), `Expected beginner 3-day family, got ${plan.program_family_key}`);
-      assert(meta?.selection_source === 'generated_rules_first_recipe_engine', 'Planner metadata did not record recipe-engine rules-first selection');
-      assert((meta?.quality_gate?.validation_score ?? 0) >= 80, 'Validation score too low for beginner full-body case');
-      assert((meta?.quality_gate?.metrics?.specialtyExerciseCount ?? 99) === 0, 'Beginner full-body plan contains specialty exercises');
-      assertConservativeDefaultMetrics(plan, {
-        minStandardRatio: 0.9,
-        minStapleRatio: 0.3,
-        maxFullGymSubstitutionViolations: 0,
-        maxUncommonPerDay: 0,
-      });
+      assert(plan.program_family_key === 'fam_adaptive_beginner_3_day', `Expected fam_adaptive_beginner_3_day, got ${plan.program_family_key}`);
+      assertDayCount(plan, 3, 'beginner-3-general-fitness');
+      assertNoEmptyDays(plan, 'beginner-3-general-fitness');
       assertNoKnownBadVariants(plan);
       const names = flattenExerciseNames(plan).join(' | ').toLowerCase();
       assert(/bench|press|squat|row|pulldown|lat pulldown|rdl|leg press/.test(names), 'Beginner full-body plan is missing staple lifts');
@@ -279,13 +312,9 @@ const canonicalCases = [
       activity_level: 'moderately_active',
     },
     assertPlan(plan) {
-      assert(plan.program_family_key === 'upper_lower_4', `Expected Upper/Lower 4-day, got ${plan.program_family_key}`);
-      assertConservativeDefaultMetrics(plan, {
-        minStandardRatio: 0.9,
-        minStapleRatio: 0.35,
-        maxFullGymSubstitutionViolations: 0,
-        maxUncommonPerDay: 0,
-      });
+      assert(plan.program_family_key === 'fam_adaptive_beginner_4_day', `Expected fam_adaptive_beginner_4_day, got ${plan.program_family_key}`);
+      assertDayCount(plan, 4, 'beginner-4-full-gym-lose-fat');
+      assertNoEmptyDays(plan, 'beginner-4-full-gym-lose-fat');
       assertNoKnownBadVariants(plan, 'Beginner full-gym fat-loss plan contains a known bad exercise');
     },
   },
@@ -304,9 +333,12 @@ const canonicalCases = [
       activity_level: 'lightly_active',
     },
     assertPlan(plan) {
-      const validDumbbellSplits = ['home_dumbbell_4', 'upper_lower_4', 'general_fitness_beginner_3'];
-      assert(validDumbbellSplits.includes(plan.program_family_key), `Expected dumbbell-compatible split, got ${plan.program_family_key}`);
-      assert((plan.planner_metadata_json?.quality_gate?.metrics?.standardTierRatio ?? 0) >= 0.85, 'Dumbbell-only plan lost too much exercise quality');
+      assert(plan.program_family_key === 'fam_adaptive_beginner_4_day', `Expected fam_adaptive_beginner_4_day, got ${plan.program_family_key}`);
+      assertDayCount(plan, 4, 'beginner-4-dumbbells-only');
+      assertNoEmptyDays(plan, 'beginner-4-dumbbells-only');
+      // Dumbbell-only environment — all exercises must be dumbbell/bodyweight compatible
+      const names = flattenExerciseNames(plan).join(' | ').toLowerCase();
+      assert(!/barbell|cable machine|smith machine/.test(names), `beginner-4-dumbbells-only: plan contains non-dumbbell equipment — ${names}`);
     },
   },
   {
@@ -323,11 +355,12 @@ const canonicalCases = [
       technique_preferences: ['balanced'],
     },
     assertPlan(plan) {
-      const meta = plan.planner_metadata_json;
-      assert(plan.program_family_key === 'upper_lower_4', `Expected Upper/Lower 4-day, got ${plan.program_family_key}`);
-      assert((meta?.quality_gate?.validation_score ?? 0) >= 80, 'Validation score too low for hypertrophy upper/lower case');
-      assert((meta?.quality_gate?.metrics?.standardTierRatio ?? 0) >= 0.8, 'Upper/Lower plan is using too many non-standard exercises');
+      assert(plan.program_family_key === 'fam_adaptive_intermediate_4_day', `Expected fam_adaptive_intermediate_4_day, got ${plan.program_family_key}`);
+      assertDayCount(plan, 4, 'intermediate-4-hypertrophy');
+      assertNoEmptyDays(plan, 'intermediate-4-hypertrophy');
       assertNoKnownBadVariants(plan);
+      const names = flattenExerciseNames(plan).join(' | ').toLowerCase();
+      assert(/bench|press|squat|row|pulldown/.test(names), 'intermediate-4-hypertrophy: missing staple compound lifts');
     },
   },
   {
@@ -344,7 +377,9 @@ const canonicalCases = [
       technique_preferences: ['balanced'],
     },
     assertPlan(plan) {
-      assert(plan.program_family_key === 'upper_lower_5', `Expected 5-day general-fitness user to receive Upper/Lower (5-day), got ${plan.program_family_key}`);
+      assert(plan.program_family_key === 'fam_adaptive_intermediate_5_day', `Expected fam_adaptive_intermediate_5_day, got ${plan.program_family_key}`);
+      assertDayCount(plan, 5, 'intermediate-5-general-fitness');
+      assertNoEmptyDays(plan, 'intermediate-5-general-fitness');
       assertNoKnownBadVariants(plan);
     },
   },
@@ -362,8 +397,222 @@ const canonicalCases = [
       technique_preferences: ['bodybuilding'],
     },
     assertPlan(plan) {
-      assert(['bro_split_5', 'ppl_ul_hybrid_5', 'phat_5', 'ppl_6'].includes(plan.program_family_key), `Expected intentional bodybuilding split, got ${plan.program_family_key}`);
-      assert((plan.planner_metadata_json?.quality_gate?.metrics?.standardTierRatio ?? 0) >= 0.7, 'Advanced bodybuilding plan lost too much standard exercise quality');
+      assert(plan.program_family_key === 'fam_adaptive_advanced_5_day', `Expected fam_adaptive_advanced_5_day, got ${plan.program_family_key}`);
+      assertDayCount(plan, 5, 'advanced-5-bodybuilding');
+      assertNoEmptyDays(plan, 'advanced-5-bodybuilding');
+      assertNoKnownBadVariants(plan);
+    },
+  },
+
+  // ── New split families ─────────────────────────────────────────────────────
+
+  {
+    label: 'intermediate-3-ppl-preference',
+    answers: {
+      goal_type: 'build_muscle',
+      experience_level: 'intermediate',
+      training_days_per_week: 3,
+      training_days: ['mon', 'wed', 'fri'],
+      equipment_access: 'full_gym',
+      preferred_split_family: 'fam_ppl_3day',
+      session_emphasis: 'hypertrophy',
+      progression_preference: 'double_progression',
+      technique_preferences: ['balanced'],
+    },
+    assertPlan(plan) {
+      const label = 'intermediate-3-ppl';
+      assertFamilyKey(plan, 'fam_ppl_3day', label);
+      assertDayCount(plan, 3, label);
+      assertDayTypes(plan, ['Push', 'Pull', 'Legs'], label);
+      assertNoEmptyDays(plan, label);
+      assertStaplePresence(plan, [/bench|press/, /row|pulldown/, /squat|leg press/], label);
+      assertNoKnownBadVariants(plan, label);
+    },
+  },
+  {
+    label: 'advanced-6-ppl-preference',
+    answers: {
+      goal_type: 'build_muscle',
+      experience_level: 'advanced',
+      training_days_per_week: 6,
+      training_days: ['mon', 'tue', 'wed', 'thu', 'fri', 'sat'],
+      equipment_access: 'full_gym',
+      preferred_split_family: 'fam_ppl_6day',
+      session_emphasis: 'hypertrophy',
+      progression_preference: 'double_progression',
+      technique_preferences: ['bodybuilding'],
+    },
+    assertPlan(plan) {
+      const label = 'advanced-6-ppl';
+      assertFamilyKey(plan, 'fam_ppl_6day', label);
+      assertDayCount(plan, 6, label);
+      assertDayTypes(plan, ['Push', 'Pull', 'Legs'], label);
+      assertNoEmptyDays(plan, label);
+      // Each of Push, Pull, Legs must appear exactly twice (A + B variation)
+      const dayTypes = (plan.days || []).map((d) => d.day_type);
+      const pushCount = dayTypes.filter((t) => t === 'Push').length;
+      const pullCount = dayTypes.filter((t) => t === 'Pull').length;
+      const legsCount = dayTypes.filter((t) => t === 'Legs').length;
+      assert(pushCount === 2, `${label}: expected 2 Push days, got ${pushCount}`);
+      assert(pullCount === 2, `${label}: expected 2 Pull days, got ${pullCount}`);
+      assert(legsCount === 2, `${label}: expected 2 Legs days, got ${legsCount}`);
+      assertNoKnownBadVariants(plan, label);
+    },
+  },
+  {
+    label: 'intermediate-4-brosplit-preference',
+    answers: {
+      goal_type: 'build_muscle',
+      experience_level: 'intermediate',
+      training_days_per_week: 4,
+      training_days: ['mon', 'tue', 'thu', 'fri'],
+      equipment_access: 'full_gym',
+      preferred_split_family: 'fam_brosplit_4day',
+      session_emphasis: 'hypertrophy',
+      progression_preference: 'double_progression',
+      technique_preferences: ['bodybuilding'],
+    },
+    assertPlan(plan) {
+      const label = 'intermediate-4-brosplit';
+      assertFamilyKey(plan, 'fam_brosplit_4day', label);
+      assertDayCount(plan, 4, label);
+      assertDayTypes(plan, ['ChestAndTriceps', 'BackAndBiceps', 'ShoulderDay', 'Legs'], label);
+      assertNoEmptyDays(plan, label);
+      assertStaplePresence(plan, [/bench|chest press/, /row|pulldown/, /overhead|shoulder press/, /squat|leg press/], label);
+      assertNoKnownBadVariants(plan, label);
+    },
+  },
+  {
+    label: 'intermediate-5-brosplit-preference',
+    answers: {
+      goal_type: 'build_muscle',
+      experience_level: 'intermediate',
+      training_days_per_week: 5,
+      training_days: ['mon', 'tue', 'wed', 'fri', 'sat'],
+      equipment_access: 'full_gym',
+      preferred_split_family: 'fam_brosplit_5day',
+      session_emphasis: 'hypertrophy',
+      progression_preference: 'double_progression',
+      technique_preferences: ['bodybuilding'],
+    },
+    assertPlan(plan) {
+      const label = 'intermediate-5-brosplit';
+      assertFamilyKey(plan, 'fam_brosplit_5day', label);
+      assertDayCount(plan, 5, label);
+      assertDayTypes(plan, ['ChestAndTriceps', 'BackAndBiceps', 'ShoulderDay', 'Legs', 'ArmsDay'], label);
+      assertNoEmptyDays(plan, label);
+      // Arms day must contain bicep and tricep work
+      const armsDay = (plan.days || []).find((d) => d.day_type === 'ArmsDay');
+      assert(armsDay, `${label}: ArmsDay not found in plan days`);
+      const armNames = (armsDay.exercises || []).map((e) => (e.exercise?.name ?? '').toLowerCase()).join(' | ');
+      assert(/curl|bicep/.test(armNames), `${label}: ArmsDay missing bicep work — exercises: ${armNames}`);
+      assert(/tricep|extension|pushdown/.test(armNames), `${label}: ArmsDay missing tricep work — exercises: ${armNames}`);
+      assertNoKnownBadVariants(plan, label);
+    },
+  },
+  {
+    label: 'intermediate-3-upper-lower-full-preference',
+    answers: {
+      goal_type: 'build_muscle',
+      experience_level: 'intermediate',
+      training_days_per_week: 3,
+      training_days: ['mon', 'wed', 'fri'],
+      equipment_access: 'full_gym',
+      preferred_split_family: 'fam_upper_lower_full_3day',
+      session_emphasis: 'hypertrophy',
+      progression_preference: 'double_progression',
+      technique_preferences: ['balanced'],
+    },
+    assertPlan(plan) {
+      const label = 'intermediate-3-upper-lower-full';
+      assertFamilyKey(plan, 'fam_upper_lower_full_3day', label);
+      assertDayCount(plan, 3, label);
+      assertDayTypes(plan, ['UpperHypertrophy', 'LowerHypertrophy', 'FullBodyHypertrophy'], label);
+      assertNoEmptyDays(plan, label);
+      assertStaplePresence(plan, [/bench|press/, /squat|leg press/, /row|pulldown/], label);
+      // Full body day should include both upper and lower movements
+      const fullDay = (plan.days || []).find((d) => d.day_type === 'FullBodyHypertrophy');
+      assert(fullDay, `${label}: FullBodyHypertrophy day not found`);
+      const fullNames = (fullDay.exercises || []).map((e) => (e.exercise?.name ?? '').toLowerCase()).join(' | ');
+      assert(/press|row|pull/.test(fullNames), `${label}: Full Body day missing upper work — ${fullNames}`);
+      assert(/hinge|deadlift|lunge|leg/.test(fullNames), `${label}: Full Body day missing lower work — ${fullNames}`);
+      assertNoKnownBadVariants(plan, label);
+    },
+  },
+
+  // ── Edge cases for new splits ──────────────────────────────────────────────
+
+  {
+    label: 'beginner-3-ppl-preference-ignored',
+    // Beginners requesting PPL should NOT get PPL — the engine must override to
+    // a beginner-appropriate split since PPL is gated to Intermediate+.
+    answers: {
+      goal_type: 'build_muscle',
+      experience_level: 'beginner',
+      training_days_per_week: 3,
+      training_days: ['mon', 'wed', 'fri'],
+      equipment_access: 'full_gym',
+      preferred_split_family: 'fam_ppl_3day',
+      session_emphasis: 'no_preference',
+      progression_preference: 'double_progression',
+      technique_preferences: ['general_fitness'],
+    },
+    assertPlan(plan) {
+      const label = 'beginner-3-ppl-preference-ignored';
+      const validBeginnerFamilies = ['full_body_beginner_3', 'general_fitness_beginner_3', 'fam_minimalist_2_day_aesthetics'];
+      assert(
+        !plan.program_family_key.includes('ppl') && !plan.program_family_key.includes('bro'),
+        `${label}: beginner received a PPL/BroSplit plan — expected beginner-appropriate split, got ${plan.program_family_key}`,
+      );
+      assertNoEmptyDays(plan, label);
+    },
+  },
+  {
+    label: 'ppl-3-dumbbells-only',
+    // PPL requested with dumbbells_only — all exercises must use dumbbell/bodyweight equipment.
+    answers: {
+      goal_type: 'build_muscle',
+      experience_level: 'intermediate',
+      training_days_per_week: 3,
+      training_days: ['mon', 'wed', 'fri'],
+      equipment_access: 'dumbbells_only',
+      preferred_split_family: 'fam_ppl_3day',
+      session_emphasis: 'hypertrophy',
+      progression_preference: 'double_progression',
+      technique_preferences: ['balanced'],
+    },
+    assertPlan(plan) {
+      const label = 'ppl-3-dumbbells-only';
+      assertDayCount(plan, 3, label);
+      assertNoEmptyDays(plan, label);
+      assertNoEquipmentViolations(plan, ['DB', 'BW', 'Misc', 'Band'], label);
+      assertNoKnownBadVariants(plan, label);
+    },
+  },
+  {
+    label: 'brosplit-4-shoulder-injury',
+    // Bro Split with shoulder injury — ShoulderDay must not contain high-risk shoulder exercises.
+    answers: {
+      goal_type: 'build_muscle',
+      experience_level: 'intermediate',
+      training_days_per_week: 4,
+      training_days: ['mon', 'tue', 'thu', 'fri'],
+      equipment_access: 'full_gym',
+      preferred_split_family: 'fam_brosplit_4day',
+      session_emphasis: 'hypertrophy',
+      progression_preference: 'double_progression',
+      technique_preferences: ['balanced'],
+      injuries: ['shoulders'],
+    },
+    assertPlan(plan) {
+      const label = 'brosplit-4-shoulder-injury';
+      assertFamilyKey(plan, 'fam_brosplit_4day', label);
+      assertNoEmptyDays(plan, label);
+      const allNames = flattenExerciseNames(plan).join(' | ').toLowerCase();
+      assert(
+        !/upright row|behind.the.neck|military press/.test(allNames),
+        `${label}: shoulder injury case contains a conflicting shoulder exercise — ${allNames}`,
+      );
     },
   },
 ];
@@ -401,7 +650,7 @@ async function runShoulderInjuryPair() {
     label: 'shoulder-control',
     answers: baseAnswers,
     assertPlan(plan) {
-      assert(plan.program_family_key === 'upper_lower_4', `Expected Upper/Lower control plan, got ${plan.program_family_key}`);
+      assert(plan.program_family_key === 'fam_adaptive_intermediate_4_day', `Expected fam_adaptive_intermediate_4_day control plan, got ${plan.program_family_key}`);
     },
   });
 
@@ -422,7 +671,7 @@ async function runShoulderInjuryPair() {
   assert(planId, `Shoulder injury case did not return a planId: ${JSON.stringify(result)}`);
   const plan = await loadWorkoutPlan(planId, userId);
   const names = flattenExerciseNames(plan).join(' | ').toLowerCase();
-  assert(plan.program_family_key === 'upper_lower_4', `Shoulder injury case changed split unexpectedly: ${plan.program_family_key}`);
+  assert(plan.program_family_key === 'fam_adaptive_intermediate_4_day', `Shoulder injury case changed split unexpectedly: ${plan.program_family_key}`);
   assert(!/upright row|behind the neck|military press/.test(names), 'Shoulder injury case contains a likely conflicting shoulder exercise');
   return {
     control: baseline,

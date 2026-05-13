@@ -102,13 +102,13 @@ export default function NutritionToolsScreen() {
             ]}
           >
             <Text style={{ color: c.textMuted, fontFamily: ty.body.familySemibold, fontSize: ty.sizes.xs }}>
-              QUICK STATUS
+              SCAN STATUS
             </Text>
             <Text style={{ color: c.text, fontFamily: ty.heading.familySemibold, fontSize: ty.sizes.md, marginTop: s.xs }}>
-              {snapshot?.pantryLowStockCount || 0} low-stock items
+              {snapshot?.scanQuotaLabel || 'No scan data'}
             </Text>
             <Text style={{ color: c.textMuted, fontFamily: ty.body.family, fontSize: ty.sizes.xs, marginTop: s.xs }}>
-              {snapshot?.latestGroceryListTitle || 'No active grocery list'}{snapshot?.scanQuotaLabel ? ` • ${snapshot.scanQuotaLabel}` : ''}
+              Faster logging and plan changes stay tied to the plan you are editing.
             </Text>
           </View>
         </View>
@@ -128,8 +128,8 @@ export default function NutritionToolsScreen() {
           <Text style={{ color: c.text, fontFamily: ty.heading.familySemibold, fontSize: ty.sizes.lg }}>
             Logging, planning, and AI helpers in one place
           </Text>
-          <Text style={{ color: c.textMuted, fontFamily: ty.body.family, fontSize: ty.sizes.sm, marginTop: s.sm }}>
-            Use scans for faster logging, import recipes into the meal flow, and keep grocery or pantry changes aligned with the plan you are currently editing.
+        <Text style={{ color: c.textMuted, fontFamily: ty.body.family, fontSize: ty.sizes.sm, marginTop: s.sm }}>
+            Use scans for faster logging, import recipes into the meal flow, and keep the plan you are currently editing aligned with your targets.
           </Text>
         </View>
 

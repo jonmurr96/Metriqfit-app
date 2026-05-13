@@ -59,6 +59,8 @@ export default function WeeklyReviewScreen() {
         primarySection="review"
         secondarySection="review"
         secondaryItem="weekly"
+        showPrimaryNav={false}
+        showSecondaryNav={false}
       >
         <View style={{ paddingHorizontal: s.lg, paddingBottom: 80 }}>
           <SubscriptionFeatureGate
@@ -80,6 +82,8 @@ export default function WeeklyReviewScreen() {
       primarySection="review"
       secondarySection="review"
       secondaryItem="weekly"
+      showPrimaryNav={false}
+      showSecondaryNav={false}
     >
       <ScrollView
         contentContainerStyle={{ paddingHorizontal: s.lg, paddingBottom: 80, gap: s.lg }}

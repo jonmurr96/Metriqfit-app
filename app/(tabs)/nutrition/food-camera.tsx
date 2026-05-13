@@ -198,8 +198,8 @@ export default function FoodCameraScreen() {
 
       // Take photo
       const photo = await cameraRef.current.takePictureAsync({
-        quality: 0.7,
-        base64: false,
+        quality: 0.55,
+        base64: true,
       });
 
       if (!photo) {
@@ -209,7 +209,7 @@ export default function FoodCameraScreen() {
       setCapturedPhoto(photo.uri);
 
       // Analyze with AI
-      const result = await analyzeFoodPhoto(photo.uri, user.id);
+      const result = await analyzeFoodPhoto({ uri: photo.uri, base64: photo.base64 }, user.id);
       setAnalysis(result);
 
       // Reload usage stats
@@ -233,7 +233,10 @@ export default function FoodCameraScreen() {
     if (!analysis || !user) return;
 
     const selectedFood = analysis.foods[selectedFoodIndex] || analysis.foods[0];
-    if (!selectedFood) return;
+    if (!selectedFood) {
+      Alert.alert('No food detected', 'Retake the photo with the food centered and well lit, or search manually.');
+      return;
+    }
 
     if (!selectedFood.estimatedGrams || selectedFood.estimatedGrams <= 0) {
       Alert.alert(
@@ -432,6 +435,17 @@ export default function FoodCameraScreen() {
               Detected Foods
             </Text>
 
+            {analysis.foods.length === 0 && (
+              <View style={[styles.warningCard, { backgroundColor: c.surface2, borderRadius: r.md, padding: s.md, marginTop: s.lg }]}>
+                <Text style={{ color: c.text, fontFamily: ty.body.familySemibold, fontSize: ty.sizes.md }}>
+                  No food detected
+                </Text>
+                <Text style={{ color: c.textMuted, fontFamily: ty.body.family, fontSize: ty.sizes.sm, marginTop: 6 }}>
+                  Retake the photo with the meal centered, closer to the camera, and in better light.
+                </Text>
+              </View>
+            )}
+
             {analysis.foods.map((food, index) => (
               <Pressable
                 key={index}
@@ -558,7 +572,7 @@ export default function FoodCameraScreen() {
               style={[
                 styles.actionButton,
                 {
-                  backgroundColor: isAnalyzing ? c.textMuted : c.primary,
+                  backgroundColor: isAnalyzing || analysis.foods.length === 0 ? c.textMuted : c.primary,
                   borderRadius: r.md,
                   flex: 1,
                 },
@@ -566,7 +580,7 @@ export default function FoodCameraScreen() {
               onPress={() => {
                 void handleConfirm();
               }}
-              disabled={isAnalyzing}
+              disabled={isAnalyzing || analysis.foods.length === 0}
             >
               {isAnalyzing ? (
                 <ActivityIndicator size="small" color={c.bg} />

@@ -35,10 +35,10 @@ export function TypingIndicator({ visible = true }: TypingIndicatorProps) {
         <View
           style={[
             styles.avatarContainer,
-            { backgroundColor: c.opacity.primaryLight },
+            { backgroundColor: c.surface2 },
           ]}
         >
-          <TabBarIcon name="sparkles" color={c.primary} size={16} />
+          <TabBarIcon name="sparkles" color={c.textMuted} size={15} />
         </View>
         <View style={styles.dotsContainer}>
           {[0, 1, 2].map((index) => (
@@ -82,7 +82,7 @@ const styles = StyleSheet.create({
   bubble: {
     flexDirection: 'row',
     alignItems: 'center',
-    paddingVertical: 12,
+    paddingVertical: 10,
     paddingHorizontal: 14,
     maxWidth: '80%',
   },

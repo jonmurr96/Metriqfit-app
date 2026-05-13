@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef } from 'react';
+import { useCallback, useEffect, useMemo, useRef } from 'react';
 import {
   StyleSheet,
   View,
@@ -10,13 +10,13 @@ import {
   Alert,
   Easing,
 } from 'react-native';
-import { useRouter } from 'expo-router';
+import { usePathname, useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import * as Haptics from 'expo-haptics';
 
 import { useTokens } from '../../lib/theme';
 import { TabBarIcon } from '../../components/navigation/TabBarIcon';
-import { QUICK_ADD_ACTIONS } from '../../lib/navigation/routes';
+import { PROGRESS_QUICK_ADD_ACTIONS, QUICK_ADD_ACTIONS, type QuickAddAction } from '../../lib/navigation/routes';
 import { useFeatureAccess } from '../../hooks/useSubscription';
 import {
   trackQuickAddActionSelected,
@@ -38,15 +38,20 @@ const CLOSE_BTN_SIZE = 64;
 export function QuickAddSheet({ isVisible, onClose }: QuickAddSheetProps) {
   const { c, ty } = useTokens();
   const router = useRouter();
+  const pathname = usePathname();
   const insets = useSafeAreaInsets();
   const photoScanAccess = useFeatureAccess('food_photo_scan');
   const barcodeScanAccess = useFeatureAccess('barcode_scan');
+  const actions = useMemo(
+    () => (pathname?.includes('/progress') ? PROGRESS_QUICK_ADD_ACTIONS : QUICK_ADD_ACTIONS),
+    [pathname],
+  );
 
   // Animation values
   const backdropAnim = useRef(new Animated.Value(0)).current;
   const closeBtnAnim = useRef(new Animated.Value(0)).current;
   const itemAnims = useRef(
-    QUICK_ADD_ACTIONS.map(() => new Animated.Value(0))
+    PROGRESS_QUICK_ADD_ACTIONS.map(() => new Animated.Value(0))
   ).current;
 
   const getActionAccess = useCallback(
@@ -96,7 +101,8 @@ export function QuickAddSheet({ isVisible, onClose }: QuickAddSheetProps) {
       }).start();
 
       // Items stagger in from bottom (last item = nearest close btn = first to appear)
-      const reversed = [...itemAnims].reverse();
+      const activeItemAnims = itemAnims.slice(0, actions.length);
+      const reversed = [...activeItemAnims].reverse();
       reversed.forEach((anim, i) => {
         Animated.spring(anim, {
           toValue: 1,
@@ -130,7 +136,7 @@ export function QuickAddSheet({ isVisible, onClose }: QuickAddSheetProps) {
         ),
       ]).start();
     }
-  }, [isVisible, backdropAnim, closeBtnAnim, itemAnims]);
+  }, [actions.length, isVisible, backdropAnim, closeBtnAnim, itemAnims]);
 
   const handleDismiss = useCallback(async () => {
     await trackQuickAddDismissed();
@@ -138,7 +144,7 @@ export function QuickAddSheet({ isVisible, onClose }: QuickAddSheetProps) {
   }, [onClose]);
 
   const handleActionPress = useCallback(
-    async (action: (typeof QUICK_ADD_ACTIONS)[number]) => {
+    async (action: QuickAddAction) => {
       try {
         const access = getActionAccess(action.id);
         const requiresPaidTier = action.requiredTier && action.requiredTier !== 'free';
@@ -217,7 +223,7 @@ export function QuickAddSheet({ isVisible, onClose }: QuickAddSheetProps) {
       </Animated.View>
 
       {/* Speed-dial items — absolutely positioned, center-aligned with FAB */}
-      {QUICK_ADD_ACTIONS.map((action, index) => {
+      {actions.map((action, index) => {
         const access = getActionAccess(action.id);
         const requiresPaidTier = action.requiredTier && action.requiredTier !== 'free';
         const isDisabled = requiresPaidTier && access.isLoading;
@@ -230,7 +236,7 @@ export function QuickAddSheet({ isVisible, onClose }: QuickAddSheetProps) {
 
         // Stack items upward from the close button
         // Item at the bottom of the list (highest index) is closest to the close button
-        const stackIndex = QUICK_ADD_ACTIONS.length - 1 - index;
+        const stackIndex = actions.length - 1 - index;
         const itemBottom =
           closeBottom + CLOSE_BTN_SIZE + 16 + stackIndex * (ICON_BTN_SIZE + ITEM_GAP);
 

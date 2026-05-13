@@ -14,15 +14,16 @@ import type { PatternSlot } from './exerciseClassification.ts';
 // Types
 // ---------------------------------------------------------------------------
 
-export type SplitType = 
-  | 'full_body' 
-  | 'upper_lower' 
-  | 'ppl' 
-  | 'arnold' 
-  | 'bro' 
-  | 'phat' 
-  | 'phul' 
-  | 'dc' 
+export type SplitType =
+  | 'full_body'
+  | 'upper_lower'
+  | 'ppl'
+  | 'arnold'
+  | 'bro'
+  | 'bro_split'
+  | 'phat'
+  | 'phul'
+  | 'dc'
   | 'gvt';
 
 export type PeriodizationModel = 'linear' | 'block' | 'dup' | 'rpe_based';

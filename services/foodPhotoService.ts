@@ -5,10 +5,10 @@
 
 import { supabase } from '../lib/supabase';
 import { invokeFunction } from '../lib/supabase/invokeFunction';
-import type { Database } from '../lib/supabase/types';
-import * as FileSystem from 'expo-file-system';
+import { File } from 'expo-file-system';
 import { getFeatureLimit } from './subscriptionService';
 import { getSubscriptionTier, getTierLabel, type SubscriptionTier } from '../lib/subscription/plans';
+import { addSentryBreadcrumb, captureSentryIssue, withSentrySpan } from '../lib/sentry';
 
 export interface RecognizedFood {
   name: string;
@@ -36,6 +36,11 @@ export interface PhotoScanUsage {
   tier: SubscriptionTier;
   isUnlimited: boolean;
   remainingScans: number;
+}
+
+export interface FoodPhotoInput {
+  uri: string;
+  base64?: string | null;
 }
 
 /**
@@ -99,34 +104,34 @@ export async function canScanPhoto(userId: string): Promise<boolean> {
 }
 
 /**
- * Increment photo scan usage counter
+ * Convert image URI to base64 for API submission
  */
-async function incrementPhotoScanUsage(userId: string): Promise<void> {
-  const today = new Date().toISOString().split('T')[0];
+async function imageInputToBase64(photo: string | FoodPhotoInput): Promise<string> {
+  const uri = typeof photo === 'string' ? photo : photo.uri;
+  const inlineBase64 = typeof photo === 'string' ? null : photo.base64;
 
-  const { error } = await supabase.rpc('increment_photo_scan_usage', {
-    p_user_id: userId,
-    p_date: today,
-  });
+  if (inlineBase64?.trim()) {
+    return stripDataUriPrefix(inlineBase64);
+  }
 
-  if (error) {
-    console.error('Failed to increment photo scan usage:', error);
+  if (!uri?.trim()) {
+    throw new Error('Failed to process image: missing photo URI.');
+  }
+
+  try {
+    const file = new File(uri);
+    if (!file.exists || file.size <= 0) {
+      throw new Error('Captured photo file is not readable.');
+    }
+    return stripDataUriPrefix(await file.base64());
+  } catch (error) {
+    console.error('Failed to convert image to base64:', error);
+    throw new Error('Failed to process image. Please retake the photo and try again.');
   }
 }
 
-/**
- * Convert image URI to base64 for API submission
- */
-async function imageUriToBase64(uri: string): Promise<string> {
-  try {
-    const base64 = await FileSystem.readAsStringAsync(uri, {
-      encoding: 'base64',
-    });
-    return base64;
-  } catch (error) {
-    console.error('Failed to convert image to base64:', error);
-    throw new Error('Failed to process image');
-  }
+function stripDataUriPrefix(value: string): string {
+  return value.replace(/^data:image\/[a-zA-Z0-9.+-]+;base64,/, '').trim();
 }
 
 /**
@@ -136,42 +141,65 @@ async function imageUriToBase64(uri: string): Promise<string> {
  * @returns FoodPhotoAnalysis with recognized foods
  */
 export async function analyzeFoodPhoto(
-  photoUri: string,
+  photo: string | FoodPhotoInput,
   userId: string
 ): Promise<FoodPhotoAnalysis> {
-  // Check rate limit first
-  const canScan = await canScanPhoto(userId);
-  if (!canScan) {
-    const usage = await getPhotoScanUsage(userId);
-    const nextTierLabel = usage.tier === 'premium' ? 'Elite' : 'Premium';
-    throw new Error(
-      `Daily scan limit reached (${usage.scansLimit} scans/day on ${getTierLabel(usage.tier)}). Upgrade to ${nextTierLabel} for ${usage.tier === 'premium' ? 'unlimited scans' : 'more scans'}.`
+  return withSentrySpan('Analyze food photo', 'food.photo.analyze', async () => {
+    addSentryBreadcrumb('Food photo scan started', 'nutrition.photo', {
+      userId,
+    });
+
+    const canScan = await canScanPhoto(userId);
+    if (!canScan) {
+      const usage = await getPhotoScanUsage(userId);
+      const nextTierLabel = usage.tier === 'premium' ? 'Elite' : 'Premium';
+      throw new Error(
+        `Daily scan limit reached (${usage.scansLimit} scans/day on ${getTierLabel(usage.tier)}). Upgrade to ${nextTierLabel} for ${usage.tier === 'premium' ? 'unlimited scans' : 'more scans'}.`
+      );
+    }
+
+    const base64Image = await imageInputToBase64(photo);
+    if (!base64Image) {
+      throw new Error('Failed to process image. Please retake the photo and try again.');
+    }
+
+    const { data, parsedError, rawError } = await invokeFunction<FoodPhotoAnalysis>(() =>
+      supabase.functions.invoke('analyze-food-photo', {
+        body: {
+          image: base64Image,
+          userId,
+        },
+      })
     );
-  }
 
-  // Convert image to base64
-  const base64Image = await imageUriToBase64(photoUri);
-
-  // Call Supabase Edge Function for AI analysis
-  const { data, parsedError, rawError } = await invokeFunction(() =>
-    supabase.functions.invoke('analyze-food-photo', {
-      body: {
-        image: base64Image,
+    if (rawError) {
+      addSentryBreadcrumb('Food photo scan failed', 'nutrition.photo', {
+        status: parsedError?.status || rawError?.context?.status || null,
+        message: parsedError?.error || parsedError?.message || rawError?.message || null,
+      });
+      captureSentryIssue(rawError, {
+        operation: 'food.photo.analyze',
+        status: parsedError?.status || rawError?.context?.status || null,
         userId,
-      },
-    })
-  );
+        category: 'backend_failure',
+        severity: 'error',
+      });
+      console.error('AI food photo analysis error:', rawError);
+      const message = parsedError?.error || parsedError?.message || rawError?.message || 'Failed to analyze photo. Please try again.';
+      throw new Error(message.replace(/^Photo analysis failed \(429\)$/i, 'Photo analysis is temporarily busy. Please wait a few seconds and try again.'));
+    }
 
-  if (rawError) {
-    console.error('AI food photo analysis error:', rawError);
-    throw new Error(parsedError?.error || parsedError?.message || rawError?.message || 'Failed to analyze photo. Please try again.');
-  }
+    if (!data?.foods || !Array.isArray(data.foods)) {
+      throw new Error('Photo analysis returned an invalid result. Please try again.');
+    }
 
-  // Increment usage counter
-  await incrementPhotoScanUsage(userId);
-
-  // Parse and return the analysis
-  return data as FoodPhotoAnalysis;
+    addSentryBreadcrumb('Food photo scan completed', 'nutrition.photo', {
+      userId,
+      foods: data.foods.length,
+      totalCalories: data.totalCalories,
+    });
+    return data as FoodPhotoAnalysis;
+  });
 }
 
 /**
@@ -180,7 +208,7 @@ export async function analyzeFoodPhoto(
 export function convertToMealLogItems(
   analysis: FoodPhotoAnalysis,
   mealSlot: 'breakfast' | 'lunch' | 'dinner' | 'snack'
-): Array<{
+): {
   food_name: string;
   grams: number;
   calories: number;
@@ -189,7 +217,7 @@ export function convertToMealLogItems(
   fat_g: number;
   meal_slot: string;
   source: string;
-}> {
+}[] {
   return analysis.foods.map((food) => ({
     food_name: food.name,
     grams: food.estimatedGrams,

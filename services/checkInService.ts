@@ -1,5 +1,6 @@
 import { supabase } from '../lib/supabase';
 import type { Database } from '../lib/supabase/types';
+import { addSentryBreadcrumb, captureSentryIssue, withSentrySpan } from '../lib/sentry';
 
 export interface CheckInInput {
   userId: string;
@@ -132,144 +133,186 @@ function computeProposedTargets(
 }
 
 export async function previewCheckIn(input: CheckInInput): Promise<CheckInPreviewResult> {
-  const { userId, weightValue, unitSystem, sleep, stress, energy } = input;
+  return withSentrySpan('Preview check-in', 'checkin.preview', async () => {
+    const { userId, weightValue, unitSystem, sleep, stress, energy } = input;
 
-  const weightKg = unitSystem === 'imperial' ? weightValue * KG_PER_LB : weightValue;
-  if (!Number.isFinite(weightKg) || weightKg <= 0) {
-    throw new Error('Please enter a valid weight value.');
-  }
+    const weightKg = unitSystem === 'imperial' ? weightValue * KG_PER_LB : weightValue;
+    if (!Number.isFinite(weightKg) || weightKg <= 0) {
+      throw new Error('Please enter a valid weight value.');
+    }
 
-  const [{ data: profile }, { data: targets, error: targetsError }, { data: onboarding }] = await Promise.all([
-    supabase
+    addSentryBreadcrumb('Check-in preview started', 'checkin', { userId });
+
+    const [{ data: profile }, { data: targets, error: targetsError }, { data: onboarding }] = await Promise.all([
+      supabase
+        .from('profiles')
+        .select('current_weight_kg, unit_system')
+        .eq('id', userId)
+        .maybeSingle(),
+      supabase
+        .from('user_targets')
+        .select('calories, protein_g, carbs_g, fat_g, water_ml')
+        .eq('user_id', userId)
+        .single(),
+      supabase
+        .from('onboarding_answers')
+        .select('answers')
+        .eq('user_id', userId)
+        .maybeSingle(),
+    ]);
+
+    if (targetsError || !targets) {
+      captureSentryIssue(targetsError || new Error('Could not load targets for check-in.'), {
+        category: 'backend_failure',
+        severity: 'error',
+        operation: 'checkin.preview.targets',
+        userId,
+      });
+      throw new Error(targetsError?.message || 'Could not load targets for check-in.');
+    }
+
+    const previousWeightKg = profile?.current_weight_kg ?? null;
+    const weightChangeKg = previousWeightKg !== null ? weightKg - previousWeightKg : null;
+
+    const normalizedSleep = clamp(sleep, 1, 10);
+    const normalizedStress = clamp(stress, 1, 10);
+    const normalizedEnergy = clamp(energy, 1, 10);
+    const recoveryScore = clamp(((normalizedSleep + normalizedEnergy + (11 - normalizedStress)) / 30) * 100, 0, 100);
+
+    const goalType = parseGoalType(onboarding?.answers);
+
+    const baselineTargets: TargetSnapshot = {
+      calories: targets.calories,
+      protein_g: targets.protein_g,
+      carbs_g: targets.carbs_g,
+      fat_g: targets.fat_g,
+      water_ml: targets.water_ml,
+    };
+
+    const proposedTargets = computeProposedTargets(
+      baselineTargets,
+      goalType,
+      recoveryScore,
+      weightChangeKg,
+      normalizedStress,
+    );
+
+    const metadata = {
+      source: 'weekly_check_in',
+      sleep: normalizedSleep,
+      stress: normalizedStress,
+      energy: normalizedEnergy,
+      recoveryScore: round(recoveryScore),
+      previousWeightKg,
+      proposedTargets,
+      goalType,
+      recordedAt: new Date().toISOString(),
+    };
+
+    const { data: measurement, error: measurementError } = await supabase
+      .from('user_measurements')
+      .insert({
+        user_id: userId,
+        weight_kg: round(weightKg * 10) / 10,
+        logged_at: new Date().toISOString(),
+        notes: JSON.stringify(metadata),
+      } satisfies Database['public']['Tables']['user_measurements']['Insert'])
+      .select('id')
+      .single();
+
+    if (measurementError || !measurement) {
+      captureSentryIssue(measurementError || new Error('Could not save check-in measurement.'), {
+        category: 'backend_failure',
+        severity: 'error',
+        operation: 'checkin.preview.measurement',
+        userId,
+      });
+      throw new Error(measurementError?.message || 'Could not save check-in measurement.');
+    }
+
+    const { error: profileUpdateError } = await supabase
       .from('profiles')
-      .select('current_weight_kg, unit_system')
-      .eq('id', userId)
-      .maybeSingle(),
-    supabase
-      .from('user_targets')
-      .select('calories, protein_g, carbs_g, fat_g, water_ml')
-      .eq('user_id', userId)
-      .single(),
-    supabase
-      .from('onboarding_answers')
-      .select('answers')
-      .eq('user_id', userId)
-      .maybeSingle(),
-  ]);
+      .update({
+        current_weight_kg: round(weightKg * 10) / 10,
+        updated_at: new Date().toISOString(),
+      } satisfies Database['public']['Tables']['profiles']['Update'])
+      .eq('id', userId);
 
-  if (targetsError || !targets) {
-    throw new Error(targetsError?.message || 'Could not load targets for check-in.');
-  }
+    if (profileUpdateError) {
+      captureSentryIssue(profileUpdateError, {
+        category: 'backend_failure',
+        severity: 'error',
+        operation: 'checkin.preview.profile_update',
+        userId,
+      });
+      throw new Error(profileUpdateError.message);
+    }
 
-  const previousWeightKg = profile?.current_weight_kg ?? null;
-  const weightChangeKg = previousWeightKg !== null ? weightKg - previousWeightKg : null;
+    const deltas = {
+      calories: proposedTargets.calories - baselineTargets.calories,
+      protein_g: proposedTargets.protein_g - baselineTargets.protein_g,
+      carbs_g: proposedTargets.carbs_g - baselineTargets.carbs_g,
+      fat_g: proposedTargets.fat_g - baselineTargets.fat_g,
+      water_ml: proposedTargets.water_ml - baselineTargets.water_ml,
+    };
 
-  const normalizedSleep = clamp(sleep, 1, 10);
-  const normalizedStress = clamp(stress, 1, 10);
-  const normalizedEnergy = clamp(energy, 1, 10);
-  const recoveryScore = clamp(((normalizedSleep + normalizedEnergy + (11 - normalizedStress)) / 30) * 100, 0, 100);
+    addSentryBreadcrumb('Check-in preview completed', 'checkin', {
+      userId,
+      goalType,
+      weightKg: round(weightKg * 10) / 10,
+      deltaCalories: deltas.calories,
+    });
 
-  const goalType = parseGoalType(onboarding?.answers);
-
-  const baselineTargets: TargetSnapshot = {
-    calories: targets.calories,
-    protein_g: targets.protein_g,
-    carbs_g: targets.carbs_g,
-    fat_g: targets.fat_g,
-    water_ml: targets.water_ml,
-  };
-
-  const proposedTargets = computeProposedTargets(
-    baselineTargets,
-    goalType,
-    recoveryScore,
-    weightChangeKg,
-    normalizedStress,
-  );
-
-  const metadata = {
-    source: 'weekly_check_in',
-    sleep: normalizedSleep,
-    stress: normalizedStress,
-    energy: normalizedEnergy,
-    recoveryScore: round(recoveryScore),
-    previousWeightKg,
-    proposedTargets,
-    goalType,
-    recordedAt: new Date().toISOString(),
-  };
-
-  const { data: measurement, error: measurementError } = await supabase
-    .from('user_measurements')
-    .insert({
-      user_id: userId,
-      weight_kg: round(weightKg * 10) / 10,
-      logged_at: new Date().toISOString(),
-      notes: JSON.stringify(metadata),
-    } satisfies Database['public']['Tables']['user_measurements']['Insert'])
-    .select('id')
-    .single();
-
-  if (measurementError || !measurement) {
-    throw new Error(measurementError?.message || 'Could not save check-in measurement.');
-  }
-
-  const { error: profileUpdateError } = await supabase
-    .from('profiles')
-    .update({
-      current_weight_kg: round(weightKg * 10) / 10,
-      updated_at: new Date().toISOString(),
-    } satisfies Database['public']['Tables']['profiles']['Update'])
-    .eq('id', userId);
-
-  if (profileUpdateError) {
-    throw new Error(profileUpdateError.message);
-  }
-
-  const deltas = {
-    calories: proposedTargets.calories - baselineTargets.calories,
-    protein_g: proposedTargets.protein_g - baselineTargets.protein_g,
-    carbs_g: proposedTargets.carbs_g - baselineTargets.carbs_g,
-    fat_g: proposedTargets.fat_g - baselineTargets.fat_g,
-    water_ml: proposedTargets.water_ml - baselineTargets.water_ml,
-  };
-
-  return {
-    measurementId: measurement.id,
-    goalType,
-    weightKg: round(weightKg * 10) / 10,
-    previousWeightKg,
-    weightChangeKg: weightChangeKg !== null ? round(weightChangeKg * 10) / 10 : null,
-    recoveryScore: round(recoveryScore),
-    baselineTargets,
-    proposedTargets,
-    deltas,
-    recommendation: buildRecommendation(goalType, deltas.calories, recoveryScore, weightChangeKg),
-  };
+    return {
+      measurementId: measurement.id,
+      goalType,
+      weightKg: round(weightKg * 10) / 10,
+      previousWeightKg,
+      weightChangeKg: weightChangeKg !== null ? round(weightChangeKg * 10) / 10 : null,
+      recoveryScore: round(recoveryScore),
+      baselineTargets,
+      proposedTargets,
+      deltas,
+      recommendation: buildRecommendation(goalType, deltas.calories, recoveryScore, weightChangeKg),
+    };
+  });
 }
 
 export async function applyCheckInUpdates(userId: string, preview: CheckInPreviewResult): Promise<TargetSnapshot> {
-  const { error } = await supabase
-    .from('user_targets')
-    .update({
+  return withSentrySpan('Apply check-in updates', 'checkin.apply', async () => {
+    const { error } = await supabase
+      .from('user_targets')
+      .update({
+        calories: preview.proposedTargets.calories,
+        protein_g: preview.proposedTargets.protein_g,
+        carbs_g: preview.proposedTargets.carbs_g,
+        fat_g: preview.proposedTargets.fat_g,
+        water_ml: preview.proposedTargets.water_ml,
+        computation_method: 'check_in_v1',
+        updated_at: new Date().toISOString(),
+      } satisfies Database['public']['Tables']['user_targets']['Update'])
+      .eq('user_id', userId);
+
+    if (error) {
+      captureSentryIssue(error, {
+        category: 'backend_failure',
+        severity: 'error',
+        operation: 'checkin.apply.targets_update',
+        userId,
+      });
+      throw new Error(error.message || 'Failed to apply check-in updates.');
+    }
+
+    addSentryBreadcrumb('Check-in targets applied', 'checkin', {
+      userId,
       calories: preview.proposedTargets.calories,
-      protein_g: preview.proposedTargets.protein_g,
-      carbs_g: preview.proposedTargets.carbs_g,
-      fat_g: preview.proposedTargets.fat_g,
-      water_ml: preview.proposedTargets.water_ml,
-      computation_method: 'check_in_v1',
-      updated_at: new Date().toISOString(),
-    } satisfies Database['public']['Tables']['user_targets']['Update'])
-    .eq('user_id', userId);
+    });
 
-  if (error) {
-    throw new Error(error.message || 'Failed to apply check-in updates.');
-  }
+    // Best-effort consistency refresh for progress/coach cards.
+    await supabase.functions.invoke('compute-plan-consistency', {
+      body: { days: 7 },
+    }).catch(() => undefined);
 
-  // Best-effort consistency refresh for progress/coach cards.
-  await supabase.functions.invoke('compute-plan-consistency', {
-    body: { days: 7 },
-  }).catch(() => undefined);
-
-  return preview.proposedTargets;
+    return preview.proposedTargets;
+  });
 }

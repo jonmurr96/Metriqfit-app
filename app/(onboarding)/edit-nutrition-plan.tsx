@@ -23,9 +23,10 @@ import {
   useRemoveNutritionPlanMeal,
   useCopyNutritionDayMeals,
 } from '../../hooks/usePlan';
-import { useOnboardingAnswers } from '../../hooks/useUser';
+import { useOnboardingAnswers, useUserTargets } from '../../hooks/useUser';
 import { useSetReviewSectionAccepted, useUpdateReviewNutritionPlan } from '../../hooks/useOnboardingReview';
 import { trackEvent } from '../../lib/analytics';
+import { formatMealFrequencyLabel, recommendMealFrequency } from '../../lib/nutrition/meal-frequency';
 
 const MEAL_OPTIONS = ['2', '3', '4', '5_plus', 'no_preference'] as const;
 const DIET_OPTIONS = ['anything', 'vegetarian', 'vegan', 'keto', 'paleo', 'pescatarian', 'other'] as const;
@@ -86,6 +87,7 @@ export default function EditNutritionPlanScreen() {
 
   const { data: nutritionPlan, isLoading: nutritionLoading } = useActiveNutritionPlan();
   const { data: onboardingAnswers, isLoading: onboardingLoading } = useOnboardingAnswers();
+  const { data: targetData } = useUserTargets();
   const {
     data: selectedDayMeals,
     isLoading: selectedDayMealsLoading,
@@ -102,10 +104,20 @@ export default function EditNutritionPlanScreen() {
   const copyDayMutation = useCopyNutritionDayMeals();
 
   const answers = (onboardingAnswers?.answers || {}) as Record<string, any>;
+  const mealFrequencyRecommendation = useMemo(() => {
+    if (!targetData) return null;
+    return recommendMealFrequency({
+      goalType: answers.goal_type,
+      calories: Number(targetData.calories || 0),
+      proteinGrams: Number(targetData.protein_g || 0),
+    });
+  }, [answers.goal_type, targetData]);
 
   const [name, setName] = useState(nutritionPlan?.name || 'MetriqFit Adaptive Nutrition Plan');
   const [description, setDescription] = useState(nutritionPlan?.description || '');
-  const [mealsPerDay, setMealsPerDay] = useState(String(answers.meals_per_day || '3'));
+  const [mealsPerDay, setMealsPerDay] = useState(
+    String(answers.meals_per_day || mealFrequencyRecommendation?.recommendedMealsPerDay || '3'),
+  );
   const [dietaryPreference, setDietaryPreference] = useState(String(answers.dietary_preference || 'anything'));
   const [allergies, setAllergies] = useState(Array.isArray(answers.allergies_exclusions) ? answers.allergies_exclusions.join(', ') : '');
   const [refusedFoods, setRefusedFoods] = useState(Array.isArray(answers.refused_foods) ? answers.refused_foods.join(', ') : '');
@@ -120,7 +132,7 @@ export default function EditNutritionPlanScreen() {
     if (nutritionLoading || onboardingLoading || !nutritionPlan) return;
     setName(nutritionPlan?.name || 'MetriqFit Adaptive Nutrition Plan');
     setDescription(nutritionPlan?.description || '');
-    setMealsPerDay(String(answers.meals_per_day || '3'));
+    setMealsPerDay(String(answers.meals_per_day || mealFrequencyRecommendation?.recommendedMealsPerDay || '3'));
     setDietaryPreference(String(answers.dietary_preference || 'anything'));
     setAllergies(Array.isArray(answers.allergies_exclusions) ? answers.allergies_exclusions.join(', ') : '');
     setRefusedFoods(Array.isArray(answers.refused_foods) ? answers.refused_foods.join(', ') : '');
@@ -129,6 +141,7 @@ export default function EditNutritionPlanScreen() {
     answers.dietary_preference,
     answers.meals_per_day,
     answers.refused_foods,
+    mealFrequencyRecommendation?.recommendedMealsPerDay,
     nutritionLoading,
     nutritionPlan,
     onboardingLoading,
@@ -316,6 +329,11 @@ export default function EditNutritionPlanScreen() {
 
         <View style={styles.fieldWrap}>
           <Text style={[styles.label, { color: c.text, fontFamily: ty.body.familySemibold }]}>Meals per day</Text>
+          {mealFrequencyRecommendation && (
+            <Text style={[styles.helperText, { color: c.textMuted, fontFamily: ty.body.family }]}>
+              Recommended: {formatMealFrequencyLabel(mealFrequencyRecommendation.recommendedMealsPerDay, mealFrequencyRecommendation)}
+            </Text>
+          )}
           <View style={styles.rowWrap}>
             {MEAL_OPTIONS.map((option) => {
               const selected = mealsPerDay === option;
@@ -601,6 +619,10 @@ const styles = StyleSheet.create({
   label: {
     fontSize: 13,
     marginBottom: 6,
+  },
+  helperText: {
+    fontSize: 12,
+    marginBottom: 10,
   },
   input: {
     borderWidth: 1,

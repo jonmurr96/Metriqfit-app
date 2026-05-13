@@ -7,7 +7,7 @@ export function getMacroLabel(macro: MacroKind) {
     case 'calories':
       return 'KCAL';
     case 'protein':
-      return 'PRO';
+      return 'PROTEIN';
     case 'carbs':
       return 'CARBS';
     case 'fat':

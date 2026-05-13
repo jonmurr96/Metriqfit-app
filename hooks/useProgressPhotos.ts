@@ -7,6 +7,7 @@ import {
   type ProgressPhoto,
   type UploadProgressPhotoInput,
 } from "../services/progressPhotoService";
+import { progressBodyKeys } from "./useProgressBody";
 
 export const progressPhotoKeys = {
   all: ["progress-photos"] as const,
@@ -42,6 +43,9 @@ export function useUploadProgressPhoto() {
       queryClient.invalidateQueries({
         queryKey: progressPhotoKeys.all,
       });
+      queryClient.invalidateQueries({
+        queryKey: progressBodyKeys.all,
+      });
     },
   });
 }
@@ -60,7 +64,9 @@ export function useDeleteProgressPhoto() {
       queryClient.invalidateQueries({
         queryKey: progressPhotoKeys.all,
       });
+      queryClient.invalidateQueries({
+        queryKey: progressBodyKeys.all,
+      });
     },
   });
 }
-

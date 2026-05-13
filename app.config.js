@@ -25,17 +25,34 @@ module.exports = ({ config }) => {
     false,
   );
   const revenueCatExpoPluginAvailable = hasExpoConfigPlugin('react-native-purchases');
+  const sentryPluginAvailable = hasExpoConfigPlugin('@sentry/react-native');
+
+  const sentryOrg = process.env.SENTRY_ORG || process.env.EXPO_PUBLIC_SENTRY_ORG || base.extra?.sentryOrg || null;
+  const sentryProject = process.env.SENTRY_PROJECT || process.env.EXPO_PUBLIC_SENTRY_PROJECT || base.extra?.sentryProject || null;
+  const sentryAuthTokenAvailable = Boolean(process.env.SENTRY_AUTH_TOKEN);
 
   const basePlugins = Array.isArray(base.plugins) ? base.plugins : [];
   const pluginsWithoutPurchases = basePlugins.filter((plugin) =>
     Array.isArray(plugin) ? plugin[0] !== 'react-native-purchases' : plugin !== 'react-native-purchases',
   );
+  const pluginsWithoutSentry = pluginsWithoutPurchases.filter((plugin) =>
+    Array.isArray(plugin) ? plugin[0] !== '@sentry/react-native' : plugin !== '@sentry/react-native',
+  );
 
-  const plugins = [...pluginsWithoutPurchases];
+  const plugins = [...pluginsWithoutSentry];
   if (nativeRevenueCatPluginEnabled && revenueCatExpoPluginAvailable) {
     const anchorIndex = plugins.findIndex((plugin) => plugin === 'expo-font');
     const insertIndex = anchorIndex >= 0 ? anchorIndex + 1 : plugins.length;
     plugins.splice(insertIndex, 0, 'react-native-purchases');
+  }
+  if (sentryPluginAvailable && sentryOrg && sentryProject && sentryAuthTokenAvailable) {
+    plugins.push([
+      '@sentry/react-native',
+      {
+        organization: sentryOrg,
+        project: sentryProject,
+      },
+    ]);
   }
 
   const extra = {
@@ -52,6 +69,7 @@ module.exports = ({ config }) => {
       process.env.EXPO_PUBLIC_AUTH_GOOGLE_ENABLED || base.extra?.authGoogleEnabled || 'true',
     authAppleEnabled:
       process.env.EXPO_PUBLIC_AUTH_APPLE_ENABLED || base.extra?.authAppleEnabled || 'false',
+    sentryDsn: process.env.EXPO_PUBLIC_SENTRY_DSN || process.env.SENTRY_DSN || base.extra?.sentryDsn || '',
   };
 
   return {

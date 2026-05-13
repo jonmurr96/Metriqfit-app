@@ -12,8 +12,6 @@ import { MotiView } from 'moti';
 import { Ionicons } from '@expo/vector-icons';
 import { metriqfitTheme } from '../../lib/theme';
 import { useOnboarding, GoalType, ActivityLevel, ExperienceLevel } from '../../lib/onboarding';
-import { useAuth } from '../../lib/auth';
-import { supabase } from '../../lib/supabase';
 import { PremiumHeader, PremiumFooter } from '../../components/onboarding/premium';
 
 const { spacing: s } = metriqfitTheme;
@@ -66,7 +64,6 @@ const EXPERIENCE: ExperienceConfig[] = [
 
 export default function GoalsScreen() {
   const { data, updateData, setCurrentStep } = useOnboarding();
-  const { user } = useAuth();
 
   // Backward-compat: map old goal values to simplified UI values once
   React.useEffect(() => {
@@ -85,12 +82,6 @@ export default function GoalsScreen() {
   const handleContinue = () => {
     if (isValid) {
       setCurrentStep(6);
-      if (user?.id) {
-        supabase
-          .from('onboarding_answers')
-          .upsert({ user_id: user.id, last_onboarding_step: 'training' }, { onConflict: 'user_id' })
-          .then(() => {});
-      }
       router.push('/(onboarding)/training');
     }
   };

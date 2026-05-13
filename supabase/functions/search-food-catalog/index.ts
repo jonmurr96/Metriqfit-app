@@ -62,6 +62,25 @@ function jsonResponse(body: unknown, status = 200) {
   });
 }
 
+async function requireUser(request: Request, supabaseUrl: string) {
+  const anonKey = Deno.env.get("SUPABASE_ANON_KEY") ?? Deno.env.get("ANON_KEY");
+  const authHeader = request.headers.get("Authorization") ?? "";
+  if (!anonKey || !authHeader) {
+    return { user: null, error: "Unauthorized" };
+  }
+
+  const userClient = createClient(supabaseUrl, anonKey, {
+    global: { headers: { Authorization: authHeader } },
+    auth: { persistSession: false },
+  });
+  const { data, error } = await userClient.auth.getUser();
+  if (error || !data.user) {
+    return { user: null, error: "Unauthorized" };
+  }
+
+  return { user: data.user, error: null };
+}
+
 function num(value: unknown): number | undefined {
   if (value === null || value === undefined || value === "") return undefined;
   const parsed = typeof value === "string" ? Number(value) : value as number;
@@ -150,7 +169,7 @@ function createAdminClient() {
 }
 
 async function readCachedSearch(
-  supabase: ReturnType<typeof createClient> | null,
+  supabase: any,
   queryKey: string,
 ) {
   if (!supabase) return null;
@@ -170,7 +189,7 @@ async function readCachedSearch(
 }
 
 async function writeCachedSearch(
-  supabase: ReturnType<typeof createClient> | null,
+  supabase: any,
   queryKey: string,
   normalizedQuery: string,
   limit: number,
@@ -448,6 +467,16 @@ serve(async (request) => {
   }
 
   try {
+    const supabaseUrl = Deno.env.get("SUPABASE_URL");
+    if (!supabaseUrl) {
+      return jsonResponse({ ok: false, error: "Supabase URL is not configured" }, 500);
+    }
+
+    const auth = await requireUser(request, supabaseUrl);
+    if (!auth.user) {
+      return jsonResponse({ ok: false, error: auth.error }, 401);
+    }
+
     const { query, limit } = await request.json();
     const normalizedQuery = String(query ?? "").trim();
     const normalizedLimit = Math.min(Math.max(Number(limit) || 20, 1), 30);

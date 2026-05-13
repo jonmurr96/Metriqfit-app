@@ -73,6 +73,10 @@ export enum DayType {
   FullBodyGenFit = 'FullBodyGenFit',
   Conditioning = 'Conditioning',
   Recovery = 'Recovery',
+  ChestAndTriceps = 'ChestAndTriceps',
+  BackAndBiceps = 'BackAndBiceps',
+  ShoulderDay = 'ShoulderDay',
+  ArmsDay = 'ArmsDay',
 }
 
 export enum SlotArchetype {

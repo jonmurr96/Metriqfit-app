@@ -89,6 +89,8 @@ export default function PersonalRecordsScreen() {
         primarySection="performance"
         secondarySection="performance"
         secondaryItem="records"
+        showPrimaryNav={false}
+        showSecondaryNav={false}
       >
         <View style={{ paddingHorizontal: s.lg, paddingTop: s.lg }}>
           <SubscriptionFeatureGate
@@ -107,6 +109,8 @@ export default function PersonalRecordsScreen() {
       primarySection="performance"
       secondarySection="performance"
       secondaryItem="records"
+      showPrimaryNav={false}
+      showSecondaryNav={false}
     >
       <ScrollView
         contentContainerStyle={{ paddingHorizontal: s.lg, paddingBottom: 80 }}
@@ -144,6 +148,15 @@ export default function PersonalRecordsScreen() {
             );
           })}
         </View>
+
+        <GlassCard style={{ padding: 18, marginTop: s.lg }}>
+          <Text style={{ color: c.text, fontFamily: ty.heading.familySemibold, fontSize: ty.sizes.md }}>
+            PR timeline
+          </Text>
+          <Text style={{ color: c.textMuted, fontFamily: ty.body.family, fontSize: ty.sizes.sm, marginTop: s.sm, lineHeight: 20 }}>
+            Best lifts, recent records, and movement-family strength are consolidated here.
+          </Text>
+        </GlassCard>
 
         {!summary || (!summary.highlight && summary.recentRecords.length === 0) ? (
           <GlassCard style={{ padding: 20, marginTop: s.xl }}>

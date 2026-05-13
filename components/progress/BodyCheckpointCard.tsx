@@ -5,6 +5,8 @@ import { useTokens } from "../../lib/theme";
 import { TabBarIcon } from "../navigation/TabBarIcon";
 import type { ProgressBodyCheckpoint } from "../../services/progressBodyService";
 
+const REQUIRED_ANGLES = ["front", "side", "back"] as const;
+
 export interface BodyCheckpointCardProps {
   checkpoint: ProgressBodyCheckpoint;
   onCompareWithPrevious?: (checkpointId: string, previousCheckpointId: string) => void;
@@ -26,6 +28,10 @@ export function BodyCheckpointCard({
   onDeletePhoto,
 }: BodyCheckpointCardProps) {
   const { c, s, ty, r } = useTokens();
+  const photosByAngle = new Map(checkpoint.photos.map((photo) => [photo.angle, photo]));
+  const missingAngles = REQUIRED_ANGLES.filter((angle) => !photosByAngle.has(angle));
+  const isComplete = missingAngles.length === 0;
+  const customPhotos = checkpoint.photos.filter((photo) => photo.angle === "custom");
 
   return (
     <GlassCard style={{ padding: 16 }}>
@@ -35,16 +41,24 @@ export function BodyCheckpointCard({
             {checkpoint.label}
           </Text>
           <Text style={{ color: c.textMuted, fontFamily: ty.body.family, fontSize: ty.sizes.xs, marginTop: 4 }}>
-            {checkpoint.angles.map((angle) => angle.toUpperCase()).join(" · ")}
+            {isComplete
+              ? "Front · Side · Back complete"
+              : `Missing ${missingAngles.map((angle) => angle.toUpperCase()).join(" · ")}`}
           </Text>
         </View>
-        {checkpoint.compareEligible ? (
-          <View style={[styles.flag, { borderRadius: r.pill, backgroundColor: `${c.primary}14` }]}>
-            <Text style={{ color: c.primary, fontFamily: ty.body.familySemibold, fontSize: ty.sizes.xs }}>
-              Comparable
+        <View
+          style={[
+            styles.flag,
+            {
+              borderRadius: r.pill,
+              backgroundColor: isComplete ? `${c.success}14` : `${c.warning}14`,
+            },
+          ]}
+        >
+            <Text style={{ color: isComplete ? c.success : c.warning, fontFamily: ty.body.familySemibold, fontSize: ty.sizes.xs }}>
+              {isComplete ? "Complete" : "Incomplete"}
             </Text>
-          </View>
-        ) : null}
+        </View>
       </View>
 
       <Text style={{ color: c.textMuted, fontFamily: ty.body.family, fontSize: ty.sizes.sm, marginTop: s.md }}>
@@ -56,29 +70,37 @@ export function BodyCheckpointCard({
       </Text>
 
       <View style={[styles.photoRow, { marginTop: s.md }]}>
-        {checkpoint.photos.map((photo) => (
+        {[...REQUIRED_ANGLES, ...customPhotos.map((photo) => photo.angle)].map((angle, index) => {
+          const photo = angle === "custom" ? customPhotos[index - REQUIRED_ANGLES.length] : photosByAngle.get(angle);
+          const label = angle.toUpperCase();
+          return (
           <View
-            key={photo.id}
+            key={photo?.id || `${checkpoint.checkpointId}-${angle}-${index}`}
             style={[
               styles.photoTile,
               {
                 borderRadius: r.md,
-                borderColor: c.border,
+                borderColor: photo ? c.border : `${c.warning}55`,
               },
             ]}
           >
-            {photo.signed_url ? (
+            {photo?.signed_url ? (
               <Image source={{ uri: photo.signed_url }} style={styles.photo} resizeMode="cover" />
             ) : (
               <View style={[styles.photo, styles.photoFallback, { backgroundColor: c.surface2 }]}>
-                <TabBarIcon name="image-outline" color={c.textMuted} size={16} />
+                <TabBarIcon name={photo ? "image-outline" : "add-circle-outline"} color={photo ? c.textMuted : c.warning} size={18} />
+                {!photo ? (
+                  <Text style={{ color: c.warning, fontFamily: ty.body.familySemibold, fontSize: 10, marginTop: 6 }}>
+                    Needed
+                  </Text>
+                ) : null}
               </View>
             )}
             <View style={styles.photoFooter}>
               <Text style={{ color: c.text, fontFamily: ty.body.familySemibold, fontSize: 11 }}>
-                {photo.angle.toUpperCase()}
+                {label}
               </Text>
-              {onDeletePhoto ? (
+              {photo && onDeletePhoto ? (
                 <Pressable
                   onPress={() =>
                     Alert.alert("Delete photo?", "This photo will be removed from your timeline.", [
@@ -96,11 +118,12 @@ export function BodyCheckpointCard({
               ) : null}
             </View>
           </View>
-        ))}
+          );
+        })}
       </View>
 
       <View style={[styles.actions, { marginTop: s.md, gap: s.sm }]}>
-        {checkpoint.compareEligible && checkpoint.previousComparableCheckpointId && onCompareWithPrevious ? (
+        {isComplete && checkpoint.compareEligible && checkpoint.previousComparableCheckpointId && onCompareWithPrevious ? (
           <Pressable
             onPress={() =>
               onCompareWithPrevious(checkpoint.checkpointId, checkpoint.previousComparableCheckpointId as string)

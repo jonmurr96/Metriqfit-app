@@ -4,6 +4,15 @@
  */
 
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { nutritionDashboardKeys } from './useNutritionDashboard';
+import { planKeys } from './usePlan';
+import { progressBodyKeys } from './useProgressBody';
+import { progressMetricKeys } from './useProgressMetrics';
+import { userKeys } from './useUser';
+import { waterKeys } from './useWater';
+import { workoutBuilderKeys } from './useWorkoutBuilder';
+import { workoutKeys } from './useWorkout';
+import { addSentryBreadcrumb } from '../lib/sentry';
 import {
   approveActionProposal,
   appendStatusReceiptMessage,
@@ -62,6 +71,19 @@ export const aiCoachKeys = {
   statusStrip: (userId: string) => [...aiCoachKeys.all, 'status-strip', userId] as const,
   pendingActions: (userId: string) => [...aiCoachKeys.all, 'pending-actions', userId] as const,
 };
+
+function invalidateCoachSideEffectQueries(queryClient: ReturnType<typeof useQueryClient>, userId: string) {
+  queryClient.invalidateQueries({ queryKey: userKeys.all });
+  queryClient.invalidateQueries({ queryKey: userKeys.profile(userId) });
+  queryClient.invalidateQueries({ queryKey: userKeys.measurements(userId) });
+  queryClient.invalidateQueries({ queryKey: nutritionDashboardKeys.all });
+  queryClient.invalidateQueries({ queryKey: waterKeys.all });
+  queryClient.invalidateQueries({ queryKey: planKeys.all });
+  queryClient.invalidateQueries({ queryKey: workoutKeys.all });
+  queryClient.invalidateQueries({ queryKey: workoutBuilderKeys.all });
+  queryClient.invalidateQueries({ queryKey: progressMetricKeys.all });
+  queryClient.invalidateQueries({ queryKey: progressBodyKeys.all });
+}
 
 export function useConversationHistory(userId?: string, limit = 50) {
   return useQuery<ChatMessage[]>({
@@ -223,6 +245,11 @@ export function useSendMessage(userId?: string) {
     onMutate: async (input) => {
       if (!userId) return;
       const message = typeof input === 'string' ? input : input.message;
+      addSentryBreadcrumb('AI Coach message queued', 'ai.coach', {
+        userId,
+        threadId: typeof input === 'string' ? null : input.options?.threadId || null,
+        messageLength: message.length,
+      });
 
       await queryClient.cancelQueries({ queryKey: aiCoachKeys.conversation(userId) });
 
@@ -260,6 +287,7 @@ export function useSendMessage(userId?: string) {
     },
     onSuccess: () => {
       if (!userId) return;
+      addSentryBreadcrumb('AI Coach message completed', 'ai.coach', { userId });
       queryClient.invalidateQueries({ queryKey: aiCoachKeys.conversation(userId) });
       queryClient.invalidateQueries({ queryKey: aiCoachKeys.parsedConversation(userId) });
       queryClient.invalidateQueries({ queryKey: aiCoachKeys.threads(userId) });
@@ -273,6 +301,7 @@ export function useSendMessage(userId?: string) {
       queryClient.invalidateQueries({ queryKey: aiCoachKeys.memory(userId) });
       queryClient.invalidateQueries({ queryKey: aiCoachKeys.statusStrip(userId) });
       queryClient.invalidateQueries({ queryKey: aiCoachKeys.pendingActions(userId) });
+      invalidateCoachSideEffectQueries(queryClient, userId);
     },
     onError: (_error, _message, context) => {
       if (!userId) return;
@@ -290,6 +319,7 @@ export function useClearConversation(userId?: string) {
     mutationFn: () => userId ? clearConversationHistory(userId) : Promise.resolve(),
     onSuccess: () => {
       if (!userId) return;
+      addSentryBreadcrumb('AI Coach conversation cleared', 'ai.coach', { userId });
       queryClient.setQueryData(aiCoachKeys.conversation(userId), []);
       queryClient.setQueryData(aiCoachKeys.parsedConversation(userId), []);
       queryClient.invalidateQueries({ queryKey: aiCoachKeys.dashboard(userId) });
@@ -383,13 +413,15 @@ export function useApproveAICoachAction(userId?: string) {
       if (!userId) throw new Error('User ID required');
       return approveActionProposal(proposalId, userId);
     },
-    onSuccess: () => {
+    onSuccess: (_data, proposalId) => {
       if (!userId) return;
+      addSentryBreadcrumb('AI Coach action approved', 'ai.coach', { userId, proposalId });
       queryClient.invalidateQueries({ queryKey: aiCoachKeys.threads(userId) });
       queryClient.invalidateQueries({ queryKey: [...aiCoachKeys.all, 'thread', userId] });
       queryClient.invalidateQueries({ queryKey: aiCoachKeys.dashboard(userId) });
       queryClient.invalidateQueries({ queryKey: aiCoachKeys.pendingActions(userId) });
       queryClient.invalidateQueries({ queryKey: aiCoachKeys.memory(userId) });
+      invalidateCoachSideEffectQueries(queryClient, userId);
     },
   });
 }
@@ -402,8 +434,9 @@ export function useRejectAICoachAction(userId?: string) {
       if (!userId) throw new Error('User ID required');
       return rejectActionProposal(proposalId, userId);
     },
-    onSuccess: () => {
+    onSuccess: (_data, proposalId) => {
       if (!userId) return;
+      addSentryBreadcrumb('AI Coach action rejected', 'ai.coach', { userId, proposalId });
       queryClient.invalidateQueries({ queryKey: aiCoachKeys.threads(userId) });
       queryClient.invalidateQueries({ queryKey: [...aiCoachKeys.all, 'thread', userId] });
       queryClient.invalidateQueries({ queryKey: aiCoachKeys.dashboard(userId) });
@@ -431,6 +464,7 @@ export function useAICoachSettingsActions(userId?: string) {
     },
     onSuccess: () => {
       if (!userId) return;
+      addSentryBreadcrumb('AI Coach setting updated', 'ai.coach', { userId, setting: 'unit_system' });
       queryClient.invalidateQueries({ queryKey: aiCoachKeys.threads(userId) });
       queryClient.invalidateQueries({ queryKey: [...aiCoachKeys.all, 'thread', userId] });
       queryClient.invalidateQueries({ queryKey: aiCoachKeys.memory(userId) });
@@ -449,6 +483,7 @@ export function useExecuteAICoachLowRiskAction(userId?: string) {
     },
     onSuccess: () => {
       if (!userId) return;
+      addSentryBreadcrumb('AI Coach low-risk action executed', 'ai.coach', { userId });
       queryClient.invalidateQueries({ queryKey: aiCoachKeys.threads(userId) });
       queryClient.invalidateQueries({ queryKey: [...aiCoachKeys.all, 'thread', userId] });
       queryClient.invalidateQueries({ queryKey: aiCoachKeys.dashboard(userId) });
@@ -467,6 +502,7 @@ export function useAICoachWebSearch(userId?: string) {
     },
     onSuccess: () => {
       if (!userId) return;
+      addSentryBreadcrumb('AI Coach web search completed', 'ai.coach', { userId });
       queryClient.invalidateQueries({ queryKey: aiCoachKeys.threads(userId) });
       queryClient.invalidateQueries({ queryKey: [...aiCoachKeys.all, 'thread', userId] });
     },

@@ -1,5 +1,5 @@
 import { Redirect, Tabs, useSegments, usePathname } from 'expo-router';
-import { StyleSheet, View, Pressable, Platform, ActivityIndicator, Text, Alert } from 'react-native';
+import { StyleSheet, View, Pressable, Platform, ActivityIndicator } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useState, useCallback, useEffect } from 'react';
 import * as Haptics from 'expo-haptics';
@@ -65,6 +65,11 @@ export default function TabLayout() {
           setIsCheckingOnboarding(false);
           return;
         }
+        if (!cancelled && status.hasCompletedOnboarding && status.hasPlans && !status.hasCompletedPaywall) {
+          setRedirectTo('/(onboarding)/plan-review');
+          setIsCheckingOnboarding(false);
+          return;
+        }
       } catch (error) {
         console.error('Onboarding guard error:', error);
         // If we can't verify, let them through (fail open for UX)
@@ -84,7 +89,8 @@ export default function TabLayout() {
   const activeNestedSegment = segments[2];
   const hideBottomTabChrome =
     (activeTabSegment === 'workout' && !!activeNestedSegment) ||
-    (activeTabSegment === 'nutrition' && !!activeNestedSegment);
+    (activeTabSegment === 'nutrition' && !!activeNestedSegment) ||
+    (activeTabSegment === 'progress' && !!activeNestedSegment);
 
   useEffect(() => {
     if (hideBottomTabChrome && isQuickAddOpen) {

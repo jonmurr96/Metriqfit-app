@@ -12,6 +12,23 @@ import { supabase } from '../lib/supabase';
 import type { Database } from '../lib/supabase/types';
 import { awardXP } from './gamificationService';
 
+/**
+ * Returns a broad UTC range that encompasses the given local date string (YYYY-MM-DD)
+ * across any timezone. Used for initial Supabase filtering before precise client-side date matching.
+ */
+const getWideUtcRangeForLocalDate = (dateStr: string) => {
+  const date = new Date(dateStr);
+  const start = new Date(date);
+  start.setUTCDate(start.getUTCDate() - 1);
+  const end = new Date(date);
+  end.setUTCDate(end.getUTCDate() + 1);
+
+  return {
+    startUtc: `${start.toISOString().split('T')[0]}T00:00:00Z`,
+    endUtc: `${end.toISOString().split('T')[0]}T23:59:59Z`,
+  };
+};
+
 // ============================================================================
 // Types
 // ============================================================================
@@ -95,20 +112,19 @@ export async function deleteWaterLog(logId: string): Promise<void> {
  * @param date - Date in YYYY-MM-DD format
  */
 export async function getDailyWaterLogs(userId: string, date: string): Promise<WaterLog[]> {
-  // Use PostgreSQL's date casting to compare only the date part in the database's timezone
-  // This avoids timezone conversion issues by comparing dates directly
+  const { startUtc, endUtc } = getWideUtcRangeForLocalDate(date);
+
   const { data, error } = await supabase
     .from('water_logs')
     .select('*')
     .eq('user_id', userId)
-    .gte('logged_at', `${date}T00:00:00`)
-    .lt('logged_at', `${date}T23:59:59.999`)
+    .gte('logged_at', startUtc)
+    .lte('logged_at', endUtc)
     .order('logged_at', { ascending: false });
 
   if (error) throw error;
 
-  // Additional client-side filtering to ensure we only get logs from the specified date
-  // This handles any edge cases where timezone differences might cause issues
+  // Client-side filtering to ensure we only get logs from the specified local date
   const filtered = (data || []).filter(log => {
     const logDate = new Date(log.logged_at);
     const targetDate = new Date(`${date}T12:00:00`); // Use noon to avoid timezone edge cases

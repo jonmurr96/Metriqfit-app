@@ -11,6 +11,7 @@ import {
   useProgressBodyTimeline,
 } from '../../../hooks/useProgressBody';
 import { useDeleteProgressPhoto } from '../../../hooks/useProgressPhotos';
+import { useProfile } from '../../../hooks/useUser';
 import {
   trackProgressBodyCheckpointSelected,
   trackProgressBodyCtaTapped,
@@ -19,6 +20,7 @@ import {
   trackProgressPhotoTimelineViewed,
 } from '../../../lib/analytics';
 import { useTokens } from '../../../lib/theme';
+import { formatWeightKg } from '../../../lib/progress/weight-units';
 
 function formatDate(iso: string | null) {
   if (!iso) return 'No check-in yet';
@@ -32,6 +34,7 @@ export default function ProgressPhotosScreen() {
   const router = useRouter();
   const { data: timeline, isLoading } = useProgressBodyTimeline(24);
   const { data: latestStatus } = useLatestBodyCheckInStatus();
+  const { data: profile } = useProfile();
   const deletePhotoMutation = useDeleteProgressPhoto();
 
   useEffect(() => {
@@ -60,10 +63,12 @@ export default function ProgressPhotosScreen() {
 
   return (
     <ProgressSectionShell
-      title="Body Timeline"
+      title="Body"
       primarySection="body"
       secondarySection="body"
       secondaryItem="timeline"
+      showPrimaryNav={false}
+      showSecondaryNav={false}
     >
       <ScrollView
         contentContainerStyle={{ paddingHorizontal: s.lg, paddingBottom: 90, gap: s.lg }}
@@ -71,10 +76,10 @@ export default function ProgressPhotosScreen() {
       >
         <GlassCard style={{ padding: 20 }}>
           <Text style={{ color: c.text, fontFamily: ty.heading.familySemibold, fontSize: ty.sizes.lg }}>
-            Latest body status
+            Check-in archive
           </Text>
           <Text style={{ color: c.textMuted, fontFamily: ty.body.family, fontSize: ty.sizes.sm, marginTop: s.sm, lineHeight: 20 }}>
-            Private, measurement-linked checkpoints with real body context instead of a loose photo gallery.
+            Each checkpoint is treated as a front, side, and back bundle so comparisons stay consistent over time.
           </Text>
 
           <View style={[styles.statusRow, { marginTop: s.lg }]}>
@@ -87,7 +92,7 @@ export default function ProgressPhotosScreen() {
             <View style={styles.statusBlock}>
               <Text style={{ color: c.textMuted, fontFamily: ty.body.family, fontSize: ty.sizes.xs }}>Weight</Text>
               <Text style={{ color: c.text, fontFamily: ty.body.familySemibold, fontSize: ty.sizes.sm, marginTop: 4 }}>
-                {latestStatus?.latestWeightKg == null ? '--' : `${latestStatus.latestWeightKg} kg`}
+                {formatWeightKg(latestStatus?.latestWeightKg, profile?.unit_system)}
               </Text>
             </View>
             <View style={styles.statusBlock}>
@@ -99,7 +104,7 @@ export default function ProgressPhotosScreen() {
           </View>
 
           <Text style={{ color: c.textMuted, fontFamily: ty.body.family, fontSize: ty.sizes.sm, marginTop: s.md }}>
-            {latestStatus?.latestPhotoCheckpointCount || 0} checkpoints saved
+                {latestStatus?.latestPhotoCheckpointCount || 0} photo checkpoints saved
           </Text>
 
           <View style={[styles.ctaRow, { marginTop: s.lg, gap: s.sm }]}>
@@ -126,7 +131,7 @@ export default function ProgressPhotosScreen() {
             Checkpoint timeline
           </Text>
           <Text style={{ color: c.textMuted, fontFamily: ty.body.family, fontSize: ty.sizes.sm, marginTop: s.xs }}>
-            Grouped by measurement-linked checkpoint when available, otherwise by capture date.
+              Complete checkpoints are best for comparisons. Missing angles are shown directly on each card.
           </Text>
         </View>
 

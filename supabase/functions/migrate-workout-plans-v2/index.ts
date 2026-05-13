@@ -23,7 +23,7 @@ serve(async (req) => {
     const serviceRoleKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
     const adminSecret = Deno.env.get("WORKOUT_MIGRATION_ADMIN_SECRET");
 
-    if (!supabaseUrl || !serviceRoleKey) {
+    if (!supabaseUrl || !serviceRoleKey || !adminSecret) {
       return jsonResponse({ success: false, error: "Missing Supabase config" }, 500);
     }
 
@@ -35,7 +35,7 @@ serve(async (req) => {
       adminSecret?: string;
     };
 
-    if (adminSecret && body.adminSecret !== adminSecret) {
+    if (body.adminSecret !== adminSecret) {
       return jsonResponse({ success: false, error: "Unauthorized" }, 401);
     }
 

@@ -37,6 +37,25 @@ function jsonResponse(body: unknown, status = 200) {
   });
 }
 
+async function requireUser(req: Request, supabaseUrl: string) {
+  const anonKey = Deno.env.get("SUPABASE_ANON_KEY") ?? Deno.env.get("ANON_KEY");
+  const authHeader = req.headers.get("Authorization") ?? "";
+  if (!anonKey || !authHeader) {
+    return { user: null, error: "Unauthorized" };
+  }
+
+  const userClient = createClient(supabaseUrl, anonKey, {
+    global: { headers: { Authorization: authHeader } },
+    auth: { persistSession: false },
+  });
+  const { data, error } = await userClient.auth.getUser();
+  if (error || !data.user) {
+    return { user: null, error: "Unauthorized" };
+  }
+
+  return { user: data.user, error: null };
+}
+
 function toNumber(value: unknown): number | null {
   if (value === null || value === undefined) return null;
   const n = typeof value === "number" ? value : Number(value);
@@ -88,6 +107,11 @@ serve(async (req) => {
       return jsonResponse({ success: false, error: "Missing Supabase env vars" }, 500);
     }
 
+    const auth = await requireUser(req, supabaseUrl);
+    if (!auth.user) {
+      return jsonResponse({ success: false, error: auth.error }, 401);
+    }
+
     const admin = createClient(supabaseUrl, serviceRoleKey, {
       auth: { persistSession: false },
     });
@@ -117,6 +141,10 @@ serve(async (req) => {
 
     if (!foodRow) {
       return jsonResponse({ success: false, error: "Food item not found" }, 404);
+    }
+
+    if (foodRow.created_by_user_id !== auth.user.id) {
+      return jsonResponse({ success: false, error: "Food item is not user-owned" }, 403);
     }
 
     // 2) We require per-serving macros to exist to normalize

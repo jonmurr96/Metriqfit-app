@@ -7,6 +7,7 @@ import {
   calculatePrepTimeMinutes,
   type AssemblyType,
 } from "./mealAssembly.ts";
+import { determineProduceDecision, type ProduceKind, type ProduceSlot } from "./produceStrategy.ts";
 
 export interface MealSlot {
   name: string;
@@ -90,6 +91,7 @@ export interface MealCandidate {
   scoreBreakdown: {
     workoutFit: number;
     mealContextFit: number;
+    preferenceFit: number;
     varietyFit: number;
     goalFormFit: number;
   };
@@ -110,6 +112,7 @@ export interface GeneratedMeal {
     protein: { food: FoodWithMetadata; grams: number };
     carb: { food: FoodWithMetadata; grams: number };
     fat: { food: FoodWithMetadata; grams: number };
+    produce?: { food: FoodWithMetadata; grams: number };
   };
   macros: {
     calories: number;
@@ -131,12 +134,37 @@ export interface GeneratedMeal {
 export function getSlotTemplate(
   hasWorkout: boolean,
   workoutTime: string | null,
-  schedule?: ScheduleConfig
+  schedule?: ScheduleConfig,
+  mealsPerDay?: number,
 ): MealSlot[] {
-  if (hasWorkout && workoutTime) {
-    return getTrainingDaySlots(workoutTime, schedule);
+  const slots = hasWorkout && workoutTime
+    ? getTrainingDaySlots(workoutTime, schedule)
+    : getRestDaySlots(schedule);
+  if (mealsPerDay && mealsPerDay > 0 && mealsPerDay < slots.length) {
+    return trimSlotsToCount(slots, mealsPerDay);
   }
-  return getRestDaySlots(schedule);
+  return slots;
+}
+
+// Slot priority: lower number = higher importance (kept first when trimming)
+const SLOT_PRIORITY: Record<string, number> = {
+  breakfast: 1,
+  lunch: 2,
+  dinner: 3,
+  "post-workout": 4,
+  "pre-workout": 5,
+  snack: 6,
+  evening: 7,
+};
+
+export function trimSlotsToCount(slots: MealSlot[], count: number): MealSlot[] {
+  if (count >= slots.length) return slots;
+  const sorted = [...slots].sort(
+    (a, b) => (SLOT_PRIORITY[a.slot] ?? 9) - (SLOT_PRIORITY[b.slot] ?? 9),
+  );
+  const kept = sorted.slice(0, count);
+  // Re-sort by original timing so the day reads chronologically
+  return kept.sort((a, b) => a.timing.localeCompare(b.timing));
 }
 
 function parseTimeToMinutes(time: string): number {
@@ -287,11 +315,17 @@ function getRestDaySlots(schedule?: ScheduleConfig): MealSlot[] {
 // ============================================================================
 
 const WEIGHTS = {
-  workoutFit: 0.40,
-  mealContextFit: 0.25,
-  userPreferenceFit: 0.20,
-  varietyFit: 0.15,
+  workoutFit: 0.28,
+  mealContextFit: 0.20,
+  userPreferenceFit: 0.27,
+  varietyFit: 0.20,
   goalFormFit: 0.05,
+};
+
+const PREFERENCE_WEIGHTS = {
+  protein: 0.4,
+  carb: 0.3,
+  fat: 0.3,
 };
 
 export function scoreMealCandidate(
@@ -299,23 +333,22 @@ export function scoreMealCandidate(
   slot: MealSlot,
   previousMeals: GeneratedMeal[],
   goal: "muscle_gain" | "fat_loss" | "maintenance",
+  selections: UserNutritionSelections,
   traditionalMeals: boolean,
   options: GenerationOptions
 ): MealCandidate {
   const workoutFit = calculateWorkoutFit(combo, slot);
   const mealContextFit = calculateMealContextFit(combo, slot, traditionalMeals);
+  const preferenceFit = calculatePreferenceFit(combo, selections);
   const varietyFit = calculateVarietyFit(combo, previousMeals, options, slot);
   const goalFormFit = calculateGoalFormFit(combo, goal);
-  
-  // User preference is implicit (we only select from their chosen foods)
-  const userPreferenceFit = 1.0;
-  
-  const penalties = calculatePenalties(combo, slot, previousMeals, options);
-  
+
+  const penalties = calculatePenalties(combo, slot, previousMeals, selections, options);
+
   const score =
     workoutFit * WEIGHTS.workoutFit +
     mealContextFit * WEIGHTS.mealContextFit +
-    userPreferenceFit * WEIGHTS.userPreferenceFit +
+    preferenceFit * WEIGHTS.userPreferenceFit +
     varietyFit * WEIGHTS.varietyFit +
     goalFormFit * WEIGHTS.goalFormFit -
     penalties;
@@ -328,6 +361,7 @@ export function scoreMealCandidate(
     scoreBreakdown: {
       workoutFit,
       mealContextFit,
+      preferenceFit,
       varietyFit,
       goalFormFit,
     },
@@ -450,6 +484,11 @@ function calculateVarietyFit(
       fit -= 0.15;
     }
 
+    // Same fat source across many meals makes a plan feel like macro bookkeeping.
+    if (combo.fat.variety_family === pastMeal.items.fat.food.variety_family) {
+      fit -= 0.1;
+    }
+
     // Same protein family back-to-back in same slot — light penalty
     if (
       combo.protein.variety_family === pastMeal.items.protein.food.variety_family &&
@@ -459,10 +498,39 @@ function calculateVarietyFit(
     }
   }
 
+  const familyFrequency = new Map<string, number>();
+  for (const pastMeal of lookbackWindow) {
+    familyFrequency.set(
+      pastMeal.items.protein.food.variety_family,
+      (familyFrequency.get(pastMeal.items.protein.food.variety_family) || 0) + 1,
+    );
+    familyFrequency.set(
+      pastMeal.items.carb.food.variety_family,
+      (familyFrequency.get(pastMeal.items.carb.food.variety_family) || 0) + 1,
+    );
+    familyFrequency.set(
+      pastMeal.items.fat.food.variety_family,
+      (familyFrequency.get(pastMeal.items.fat.food.variety_family) || 0) + 1,
+    );
+  }
+
+  const proteinFrequency = familyFrequency.get(combo.protein.variety_family) || 0;
+  const carbFrequency = familyFrequency.get(combo.carb.variety_family) || 0;
+  const fatFrequency = familyFrequency.get(combo.fat.variety_family) || 0;
+  if (proteinFrequency > 1) fit -= Math.min(0.25, (proteinFrequency - 1) * 0.06);
+  if (carbFrequency > 1) fit -= Math.min(0.3, (carbFrequency - 1) * 0.08);
+  if (fatFrequency > 1) fit -= Math.min(0.2, (fatFrequency - 1) * 0.05);
+
   // Back-to-back same protein (immediate previous meal) — additional penalty
   const lastMeal = previousMeals[previousMeals.length - 1];
   if (combo.protein.variety_family === lastMeal.items.protein.food.variety_family) {
     fit -= 0.4;
+  }
+  if (combo.carb.variety_family === lastMeal.items.carb.food.variety_family) {
+    fit -= 0.3;
+  }
+  if (combo.fat.variety_family === lastMeal.items.fat.food.variety_family) {
+    fit -= 0.2;
   }
 
   // Meal prep mode allows more repetition
@@ -493,10 +561,118 @@ function calculateGoalFormFit(
   return Math.min(fit, 1.0);
 }
 
+function normalizePreferenceToken(value: string): string {
+  return String(value || "")
+    .toLowerCase()
+    .trim()
+    .replace(/[\s-]+/g, "_")
+    .replace(/[^a-z0-9_]/g, "");
+}
+
+function getFoodPreferenceKeys(food: FoodWithMetadata, category: "protein" | "carb" | "fat"): string[] {
+  const keys = new Set<string>();
+  const rawName = String(food.name || "").toLowerCase();
+  const nameTokens = rawName.split(/[^a-z0-9]+/g).filter(Boolean);
+  const tags = (food.tags || []).map(normalizePreferenceToken);
+  const family = normalizePreferenceToken(food.variety_family || food.name);
+
+  if (family) keys.add(family);
+  for (const token of nameTokens) keys.add(normalizePreferenceToken(token));
+  for (const tag of tags) keys.add(tag);
+
+  const add = (...values: string[]) => {
+    for (const value of values) {
+      const normalized = normalizePreferenceToken(value);
+      if (normalized) keys.add(normalized);
+    }
+  };
+
+  if (category === "protein") {
+    if (keys.has("fish") || keys.has("salmon") || keys.has("tuna") || keys.has("cod") || keys.has("tilapia")) {
+      add("fish", "seafood");
+    }
+    if (keys.has("shellfish") || keys.has("shrimp") || keys.has("crab") || keys.has("lobster")) {
+      add("shellfish", "seafood");
+    }
+    if (keys.has("egg") || keys.has("eggs")) add("egg", "eggs");
+    if (keys.has("tofu") || keys.has("tempeh") || keys.has("soy")) add("tofu", "tempeh", "soy", "plant_protein");
+    if (keys.has("whey") || keys.has("casein") || keys.has("protein") || rawName.includes("protein powder")) add("protein_powder", "whey", "casein", "protein_powder");
+    if (keys.has("chicken") || keys.has("turkey") || keys.has("beef") || keys.has("pork")) add("meat");
+    if (keys.has("lentil") || keys.has("lentils") || keys.has("bean") || keys.has("beans") || keys.has("chickpea") || keys.has("chickpeas")) {
+      add("legumes", "legume", "plant_protein");
+    }
+    if (keys.has("dairy") || keys.has("milk") || keys.has("yogurt") || keys.has("cheese") || keys.has("cottage")) add("dairy");
+  } else if (category === "carb") {
+    if (keys.has("rice") || rawName.includes("rice")) add("rice");
+    if (keys.has("oat") || keys.has("oats")) add("oats");
+    if (keys.has("sweet") && keys.has("potato")) add("sweet_potato");
+    if (keys.has("potato")) add("potato");
+    if (keys.has("quinoa")) add("quinoa");
+    if (keys.has("pasta") || keys.has("noodle") || keys.has("noodles")) add("pasta");
+    if (keys.has("bread") || keys.has("toast")) add("bread");
+    if (keys.has("fruit") || tags.includes("fruit") || /banana|berries|apple|orange|grape|mango|pineapple|kiwi|pear|peach/.test(rawName)) {
+      add("fruit");
+    }
+    if (tags.includes("grain") || /rice|oat|quinoa|pasta|bread|cereal/.test(rawName)) add("grain");
+    if (tags.includes("vegetable") || /sweet_potato|potato|corn|peas/.test(rawName)) add("vegetables");
+  } else if (category === "fat") {
+    if (keys.has("oil") || rawName.includes("oil")) add("oil", "olive_oil", "coconut_oil");
+    if (keys.has("olive") || rawName.includes("olive")) add("olive_oil");
+    if (keys.has("almond") || keys.has("almonds") || keys.has("walnut") || keys.has("walnuts") || keys.has("cashew") || keys.has("cashews") || keys.has("peanut") || keys.has("peanuts")) {
+      add("nuts");
+    }
+    if (keys.has("chia") || keys.has("flax") || keys.has("seed") || keys.has("seeds")) add("seeds", "chia_seeds");
+    if (keys.has("avocado")) add("avocado");
+    if (keys.has("peanut") || keys.has("peanuts") || rawName.includes("peanut butter")) add("peanut_butter");
+    if (keys.has("cheese") || keys.has("dairy")) add("cheese", "dairy");
+  }
+
+  return Array.from(keys);
+}
+
+function scorePreferenceRank(
+  food: FoodWithMetadata,
+  preferredFamilies: string[] | undefined,
+  category: "protein" | "carb" | "fat"
+): number {
+  const normalizedPrefs = (preferredFamilies || [])
+    .map(normalizePreferenceToken)
+    .filter(Boolean);
+
+  if (normalizedPrefs.length === 0) return 0.5;
+
+  const foodKeys = new Set(getFoodPreferenceKeys(food, category));
+  for (let idx = 0; idx < normalizedPrefs.length; idx++) {
+    if (foodKeys.has(normalizedPrefs[idx])) {
+      return Math.max(0.1, 1 - idx * 0.45);
+    }
+  }
+
+  // Generic category fallback keeps the engine usable even when the user's
+  // preferred family labels do not directly match the food metadata.
+  return 0.15;
+}
+
+function calculatePreferenceFit(
+  combo: { protein: FoodWithMetadata; carb: FoodWithMetadata; fat: FoodWithMetadata },
+  selections: UserNutritionSelections
+): number {
+  const proteinScore = scorePreferenceRank(combo.protein, selections.proteins, "protein");
+  const carbScore = scorePreferenceRank(combo.carb, selections.carbs, "carb");
+  const fatScore = scorePreferenceRank(combo.fat, selections.fats, "fat");
+
+  return Math.max(0.1, Math.min(1.0,
+    proteinScore * PREFERENCE_WEIGHTS.protein +
+    carbScore * PREFERENCE_WEIGHTS.carb +
+    fatScore * PREFERENCE_WEIGHTS.fat
+  ));
+}
+
 function calculatePenalties(
   combo: { protein: FoodWithMetadata; carb: FoodWithMetadata; fat: FoodWithMetadata },
   slot: MealSlot,
   previousMeals: GeneratedMeal[],
+  selections: UserNutritionSelections,
   options: GenerationOptions
 ): number {
   let penalty = 0;
@@ -512,23 +688,31 @@ function calculatePenalties(
     if (combo.protein.variety_family === lastMeal.items.protein.food.variety_family) {
       penalty += 0.2;
     }
+    if (combo.carb.variety_family === lastMeal.items.carb.food.variety_family) {
+      penalty += 0.15;
+    }
+    if (combo.fat.variety_family === lastMeal.items.fat.food.variety_family) {
+      penalty += 0.12;
+    }
   }
 
   // Carb tolerance soft preferences
   const carbTolerance = (options.carbTolerance || "energized_satiated").toLowerCase();
   const carbSpeed = combo.carb.carb_speed;
   const isWorkoutSlot = !!slot.workoutContext;
+  const carbPreferenceMatch = scorePreferenceRank(combo.carb, selections.carbs, "carb") >= 0.95;
+  const carbPenaltyMultiplier = carbPreferenceMatch ? 0.35 : 1.0;
   if (carbTolerance === "tired_satiated") {
-    if (carbSpeed === "fast" && !isWorkoutSlot) penalty += 0.25;
+    if (carbSpeed === "fast" && !isWorkoutSlot) penalty += 0.25 * carbPenaltyMultiplier;
     if (carbSpeed === "slow") penalty -= 0.1; // bonus
   } else if (carbTolerance === "energized_hungry") {
-    if (carbSpeed === "slow" && !isWorkoutSlot) penalty += 0.2;
+    if (carbSpeed === "slow" && !isWorkoutSlot) penalty += 0.2 * carbPenaltyMultiplier;
     if (carbSpeed === "fast") penalty -= 0.1; // bonus
   } else if (carbTolerance === "tired_hungry") {
-    if ((carbSpeed === "fast" || carbSpeed === "slow") && !isWorkoutSlot) penalty += 0.15;
+    if ((carbSpeed === "fast" || carbSpeed === "slow") && !isWorkoutSlot) penalty += 0.15 * carbPenaltyMultiplier;
   } else {
     // energized_satiated (default) — slight penalty for fast outside workout
-    if (carbSpeed === "fast" && !isWorkoutSlot) penalty += 0.1;
+    if (carbSpeed === "fast" && !isWorkoutSlot) penalty += 0.1 * carbPenaltyMultiplier;
   }
 
   // Cooking level soft preferences
@@ -664,22 +848,103 @@ function buildCandidatePools(
   macroMin: number,
   category: "protein" | "carb" | "fat"
 ): { preferred: FoodWithMetadata[]; fallback: FoodWithMetadata[] } {
+  const normalizeFamily = (value: string) => String(value || "").toLowerCase().trim();
+  const preferredOrder = (preferredFamilies || []).map(normalizeFamily).filter(Boolean);
+  const preferredSet = new Set(preferredOrder);
   const byMacro = (f: FoodWithMetadata) => {
     if (category === "protein") return f.protein_per_100g > macroMin;
     if (category === "carb") return f.carbs_per_100g > macroMin;
     return f.fat_per_100g > macroMin;
   };
 
-  const preferred = catalog
-    .filter((f) => preferredFamilies.includes(f.variety_family) && byMacro(f))
-    .slice(0, 8);
+  const foodScore = (f: FoodWithMetadata) => {
+    const name = f.name.toLowerCase();
+    const macroScore =
+      category === "protein" ? f.protein_per_100g :
+      category === "carb" ? f.carbs_per_100g :
+      f.fat_per_100g;
+    const contextScore = Math.max(
+      f.breakfast_score || 0,
+      f.lunch_dinner_score || 0,
+      f.preworkout_score || 0,
+      f.postworkout_score || 0,
+      f.evening_score || 0,
+    );
+    const fiberBonus = category === "carb" ? Math.min(f.fiber_per_100g || 0, 8) * 0.6 : 0;
+    const proteinLeannessBonus =
+      category === "protein" && f.protein_leanness === "lean" ? 8 :
+      category === "protein" && f.protein_leanness === "moderate" ? 3 :
+      0;
+    const proteinFatPenalty = category === "protein" ? Math.max(0, f.fat_per_100g - 12) * 0.9 : 0;
+    const processedProteinPenalty =
+      category === "protein" && /(bacon|sausage|pepperoni|salami|hot dog)/.test(name) ? 24 : 0;
+    const processedCarbPenalty =
+      category === "carb" && /(cracker|juice|cereal|granola|cookie|muffin)/.test(name) ? 12 : 0;
+    const ultraDensePenalty =
+      category === "fat" && f.calories_per_100g > 750 && !f.name.toLowerCase().includes("oil") ? 6 : 0;
+    return macroScore
+      + contextScore * 2
+      + fiberBonus
+      + proteinLeannessBonus
+      - proteinFatPenalty
+      - processedProteinPenalty
+      - processedCarbPenalty
+      - ultraDensePenalty;
+  };
+
+  const byFamily = new Map<string, FoodWithMetadata[]>();
+  for (const food of catalog) {
+    if (!byMacro(food)) continue;
+    const family = normalizeFamily(food.variety_family || food.name);
+    const list = byFamily.get(family) || [];
+    list.push(food);
+    byFamily.set(family, list);
+  }
+
+  for (const [family, foods] of byFamily.entries()) {
+    const uniqueByName = new Map<string, FoodWithMetadata>();
+    for (const food of foods) {
+      const nameKey = food.name.toLowerCase().replace(/[^a-z0-9]+/g, " ").trim();
+      const current = uniqueByName.get(nameKey);
+      if (!current || foodScore(food) > foodScore(current)) {
+        uniqueByName.set(nameKey, food);
+      }
+    }
+    byFamily.set(
+      family,
+      Array.from(uniqueByName.values()).sort((a, b) => foodScore(b) - foodScore(a)),
+    );
+  }
+
+  const preferred: FoodWithMetadata[] = [];
+  for (const family of preferredOrder) {
+    const familyFoods = byFamily.get(family) || [];
+    preferred.push(...familyFoods.slice(0, 2));
+  }
 
   const preferredIds = new Set(preferred.map((f) => f.id));
-  const fallback = catalog
-    .filter((f) => !preferredIds.has(f.id) && byMacro(f))
+  const fallbackFamilies = Array.from(byFamily.entries())
+    .filter(([family]) => !preferredSet.has(family))
+    .flatMap(([, foods]) => foods.slice(0, 1))
+    .filter((f) => !preferredIds.has(f.id))
+    .sort((a, b) => foodScore(b) - foodScore(a))
     .slice(0, 8);
 
-  return { preferred, fallback };
+  const rankSortedPreferred = preferred
+    .slice(0, 12)
+    .sort((a, b) => {
+      const prefDiff = scorePreferenceRank(b, preferredFamilies, category) - scorePreferenceRank(a, preferredFamilies, category);
+      if (Math.abs(prefDiff) > 0.001) return prefDiff;
+      return foodScore(b) - foodScore(a);
+    });
+
+  const rankSortedFallback = fallbackFamilies.sort((a, b) => {
+    const prefDiff = scorePreferenceRank(b, preferredFamilies, category) - scorePreferenceRank(a, preferredFamilies, category);
+    if (Math.abs(prefDiff) > 0.001) return prefDiff;
+    return foodScore(b) - foodScore(a);
+  });
+
+  return { preferred: rankSortedPreferred, fallback: rankSortedFallback };
 }
 
 function calculateCookingComplexity(food: FoodWithMetadata): number {
@@ -813,21 +1078,41 @@ export function generateDailyMeals(
 
   const meals: GeneratedMeal[] = [];
   let remainingMacros = { ...macroTargets };
+  // Track protein+carb family pairs used within this day to prevent exact same-day duplicates.
+  const usedProteinCarbPairs = new Set<string>();
 
   for (let slotIdx = 0; slotIdx < slots.length; slotIdx++) {
     const slot = slots[slotIdx];
     const remainingSlots = slots.slice(slotIdx + 1);
 
     const allPreviousMeals = [...(options.previousDaysMeals || []), ...meals];
+
+    // Build per-slot pools: exclude carb families already used today if alternatives exist.
+    const usedCarbFamilies = new Set(meals.map((m) => m.items.carb.food.variety_family));
+    const freshCarbs = availableCarbs.filter((c) => !usedCarbFamilies.has(c.variety_family));
+    const slotCarbs = freshCarbs.length > 0 ? freshCarbs : availableCarbs;
+
+    // Build per-slot pools: exclude protein families already used today if alternatives exist.
+    const usedProteinFamilies = new Set(meals.map((m) => m.items.protein.food.variety_family));
+    const freshProteins = availableProteins.filter((p) => !usedProteinFamilies.has(p.variety_family));
+    const slotProteins = freshProteins.length > 0 ? freshProteins : availableProteins;
+
+    // Additionally hard-filter out exact protein+carb family pairs already seen today.
+    const filteredProteins = slotProteins.filter((p) =>
+      slotCarbs.some((c) => !usedProteinCarbPairs.has(`${p.variety_family}+${c.variety_family}`))
+    );
+    const finalProteins = filteredProteins.length > 0 ? filteredProteins : slotProteins;
+
     const meal = generateBestMeal(
-      availableProteins,
-      availableCarbs,
+      finalProteins,
+      slotCarbs,
       availableFats,
       slot,
       allPreviousMeals,
       remainingMacros,
       remainingSlots,
       goal,
+      selections,
       selections.traditional_meals,
       options
     );
@@ -835,6 +1120,9 @@ export function generateDailyMeals(
     if (meal) {
       meals.push(meal);
       remainingMacros = subtractMacros(remainingMacros, meal.macros);
+      usedProteinCarbPairs.add(
+        `${meal.items.protein.food.variety_family}+${meal.items.carb.food.variety_family}`,
+      );
     }
   }
 
@@ -846,7 +1134,8 @@ export function generateDailyMeals(
     );
   }
 
-  const scaledMeals = scalePortions(meals, macroTargets);
+  const mealsWithProduce = addProduceSides(meals, restrictedCatalog, goal, options.previousDaysMeals || []);
+  const scaledMeals = scalePortions(mealsWithProduce, macroTargets);
   return { meals: scaledMeals, warnings, logs };
 }
 
@@ -859,6 +1148,7 @@ function generateBestMeal(
   remainingMacros: MacroTargets,
   remainingSlots: MealSlot[],
   goal: "muscle_gain" | "fat_loss" | "maintenance",
+  selections: UserNutritionSelections,
   traditionalMeals: boolean,
   options: GenerationOptions
 ): GeneratedMeal | null {
@@ -885,7 +1175,7 @@ function generateBestMeal(
           continue;
         }
 
-        const candidate = scoreMealCandidate(combo, slot, previousMeals, goal, traditionalMeals, options);
+        const candidate = scoreMealCandidate(combo, slot, previousMeals, goal, selections, traditionalMeals, options);
 
         if (candidate.score > bestScore) {
           bestScore = candidate.score;
@@ -1021,6 +1311,133 @@ function calculateFoodMacros(food: FoodWithMetadata, grams: number) {
   };
 }
 
+function isNonStarchyVegetable(food: FoodWithMetadata): boolean {
+  const category = String(food.category || "").toLowerCase();
+  const name = food.name.toLowerCase();
+  if (!category.includes("vegetable")) return false;
+  if (/(potato|sweet potato|corn|peas|beans|lentil|garlic)/.test(name)) return false;
+  return food.calories_per_100g <= 55 && food.carbs_per_100g <= 11;
+}
+
+function isWholeFruit(food: FoodWithMetadata): boolean {
+  const category = String(food.category || "").toLowerCase();
+  const name = food.name.toLowerCase();
+  if (!category.includes("fruit")) return false;
+  if (/(juice|dates|dried)/.test(name)) return false;
+  return food.calories_per_100g <= 90 && food.carbs_per_100g <= 23;
+}
+
+function produceGrams(food: FoodWithMetadata): number {
+  const name = food.name.toLowerCase();
+  if (/(spinach|lettuce|mixed greens|kale)/.test(name)) return 75;
+  if (isWholeFruit(food)) return 140;
+  return 120;
+}
+
+function selectProduce(
+  pool: FoodWithMetadata[],
+  usedItems: Map<string, number>,
+  slot: string,
+  preferredKinds: ProduceKind[],
+): FoodWithMetadata | null {
+  const orderedPool =
+    preferredKinds
+      .flatMap((kind) => pool.filter((food) => {
+        const isFruit = isWholeFruit(food);
+        const isVeg = isNonStarchyVegetable(food);
+        if (kind === "fruit") return isFruit;
+        if (kind === "vegetable") return isVeg;
+        return isFruit || isVeg;
+      }))
+      .filter((food, index, array) => array.findIndex((candidate) => candidate.id === food.id) === index);
+
+  const candidateSource = orderedPool.length > 0
+    ? orderedPool
+    : pool.filter((food) => {
+      if (slot === "lunch" || slot === "dinner") return isNonStarchyVegetable(food);
+      if (slot === "breakfast" || slot === "snack" || slot === "evening" || slot === "post-workout") return isWholeFruit(food);
+      return false;
+    });
+
+  const candidates = candidateSource
+    .sort((a, b) => {
+      const aKey = a.name.toLowerCase().replace(/[^a-z0-9]+/g, " ").trim();
+      const bKey = b.name.toLowerCase().replace(/[^a-z0-9]+/g, " ").trim();
+      const aCount = usedItems.get(aKey) || 0;
+      const bCount = usedItems.get(bKey) || 0;
+      if (aCount !== bCount) return aCount - bCount;
+      const aFiber = a.fiber_per_100g || 0;
+      const bFiber = b.fiber_per_100g || 0;
+      if (aFiber !== bFiber) return bFiber - aFiber;
+      return a.name.localeCompare(b.name);
+    });
+
+  return candidates[0] || null;
+}
+
+function addProduceSides(
+  meals: GeneratedMeal[],
+  restrictedCatalog: FoodWithMetadata[],
+  goal: "muscle_gain" | "fat_loss" | "maintenance",
+  previousDaysMeals: GeneratedMeal[] = [],
+): GeneratedMeal[] {
+  const producePool = restrictedCatalog.filter((food) => isNonStarchyVegetable(food) || isWholeFruit(food));
+  if (!producePool.length) return meals;
+
+  const usedFamilies = new Map<string, number>();
+  for (const previousMeal of previousDaysMeals) {
+    const previousProduce = previousMeal.items.produce;
+    if (!previousProduce) continue;
+    const previousKey = previousProduce.food.name.toLowerCase().replace(/[^a-z0-9]+/g, " ").trim();
+    usedFamilies.set(previousKey, (usedFamilies.get(previousKey) || 0) + 1);
+  }
+
+  return meals.map((meal) => {
+    const baseFiber = calculateMealFiber(meal);
+    const decision = determineProduceDecision({
+      slot: meal.slot as ProduceSlot,
+      goal,
+      baseFiberG: baseFiber,
+      baseCalories: meal.macros.calories,
+    });
+    if (!decision.include) return meal;
+
+    const produce = selectProduce(producePool, usedFamilies, meal.slot, decision.preferredKinds);
+    if (!produce) return meal;
+
+    const grams = decision.grams || produceGrams(produce);
+    const produceMacros = calculateFoodMacros(produce, grams);
+    const produceKey = produce.name.toLowerCase().replace(/[^a-z0-9]+/g, " ").trim();
+    usedFamilies.set(produceKey, (usedFamilies.get(produceKey) || 0) + 1);
+
+    return {
+      ...meal,
+      description: `${meal.description} Includes ${produce.name.toLowerCase()} for micronutrients and fiber.`,
+      items: {
+        ...meal.items,
+        produce: { food: produce, grams },
+      },
+      macros: {
+        calories: meal.macros.calories + produceMacros.calories,
+        protein: Math.round((meal.macros.protein + produceMacros.protein) * 10) / 10,
+        carbs: Math.round((meal.macros.carbs + produceMacros.carbs) * 10) / 10,
+        fat: Math.round((meal.macros.fat + produceMacros.fat) * 10) / 10,
+      },
+    };
+  });
+}
+
+function calculateMealFiber(meal: GeneratedMeal): number {
+  const produceFiber = meal.items.produce
+    ? (meal.items.produce.food.fiber_per_100g / 100) * meal.items.produce.grams
+    : 0;
+  const proteinFiber = (meal.items.protein.food.fiber_per_100g / 100) * meal.items.protein.grams;
+  const carbFiber = (meal.items.carb.food.fiber_per_100g / 100) * meal.items.carb.grams;
+  const fatFiber = (meal.items.fat.food.fiber_per_100g / 100) * meal.items.fat.grams;
+
+  return proteinFiber + carbFiber + fatFiber + produceFiber;
+}
+
 function generateRationale(candidate: MealCandidate, slot: MealSlot): string {
   const parts: string[] = [];
   
@@ -1031,9 +1448,15 @@ function generateRationale(candidate: MealCandidate, slot: MealSlot): string {
   if (candidate.scoreBreakdown.mealContextFit > 0.7) {
     parts.push("Culturally appropriate for this time of day");
   }
-  
+
+  if (candidate.scoreBreakdown.preferenceFit > 0.8) {
+    parts.push("Built around your preferred protein, carb, and fat choices");
+  } else if (candidate.scoreBreakdown.preferenceFit > 0.65) {
+    parts.push("Built around your preferred foods");
+  }
+
   if (candidate.scoreBreakdown.varietyFit < 1) {
-    parts.push("Selected for protein variety");
+    parts.push("Adjusted to preserve weekly variety");
   }
   
   return parts.join(". ") || "Balanced macronutrient meal";
@@ -1059,6 +1482,10 @@ function scalePortions(meals: GeneratedMeal[], targets: MacroTargets): Generated
     const pFood = meal.items.protein.food;
     const cFood = meal.items.carb.food;
     const fFood = meal.items.fat.food;
+    const produceItem = meal.items.produce;
+    const produceMacros = produceItem
+      ? calculateFoodMacros(produceItem.food, produceItem.grams)
+      : { calories: 0, protein: 0, carbs: 0, fat: 0 };
 
     const proteinShare = meal.macros.protein / Math.max(currentTotals.protein, 1);
     const carbShare = meal.macros.carbs / Math.max(currentTotals.carbs, 1);
@@ -1082,19 +1509,23 @@ function scalePortions(meals: GeneratedMeal[], targets: MacroTargets): Generated
       calories:
         calculateFoodMacros(pFood, pGrams).calories +
         calculateFoodMacros(cFood, cGrams).calories +
-        calculateFoodMacros(fFood, fGrams).calories,
+        calculateFoodMacros(fFood, fGrams).calories +
+        produceMacros.calories,
       protein:
         calculateFoodMacros(pFood, pGrams).protein +
         calculateFoodMacros(cFood, cGrams).protein +
-        calculateFoodMacros(fFood, fGrams).protein,
+        calculateFoodMacros(fFood, fGrams).protein +
+        produceMacros.protein,
       carbs:
         calculateFoodMacros(pFood, pGrams).carbs +
         calculateFoodMacros(cFood, cGrams).carbs +
-        calculateFoodMacros(fFood, fGrams).carbs,
+        calculateFoodMacros(fFood, fGrams).carbs +
+        produceMacros.carbs,
       fat:
         calculateFoodMacros(pFood, pGrams).fat +
         calculateFoodMacros(cFood, cGrams).fat +
-        calculateFoodMacros(fFood, fGrams).fat,
+        calculateFoodMacros(fFood, fGrams).fat +
+        produceMacros.fat,
     };
 
     return {
@@ -1103,6 +1534,7 @@ function scalePortions(meals: GeneratedMeal[], targets: MacroTargets): Generated
         protein: { food: pFood, grams: pGrams },
         carb: { food: cFood, grams: cGrams },
         fat: { food: fFood, grams: fGrams },
+        ...(produceItem ? { produce: produceItem } : {}),
       },
       macros,
     };
@@ -1199,14 +1631,27 @@ export function analyzeWeeklyCoherence(weeklyMeals: GeneratedMeal[][]): WeeklyCo
   const averagePrepTime = totalMeals > 0 ? Math.round(totalPrepTime / totalMeals) : 0;
 
   const isChaotic = uniqueProteins > 5 || uniqueCarbs > 5 || uniqueFats > 4 || singletonCount > 6;
+  const dominantCount = Math.max(
+    0,
+    ...Object.values(proteinFreq),
+    ...Object.values(carbFreq),
+    ...Object.values(fatFreq),
+  );
+  const dominantShare = totalMeals > 0 ? dominantCount / totalMeals : 0;
 
   // Realism score: 0-100
   let score = 100;
   if (uniqueProteins > 5) score -= (uniqueProteins - 5) * 5;
   if (uniqueCarbs > 5) score -= (uniqueCarbs - 5) * 5;
   if (uniqueFats > 4) score -= (uniqueFats - 4) * 5;
+  if (uniqueProteins < Math.min(3, totalMeals)) score -= (Math.min(3, totalMeals) - uniqueProteins) * 12;
+  if (uniqueCarbs < Math.min(3, totalMeals)) score -= (Math.min(3, totalMeals) - uniqueCarbs) * 12;
+  if (uniqueFats < Math.min(2, totalMeals)) score -= (Math.min(2, totalMeals) - uniqueFats) * 10;
+  if (dominantShare > 0.45) score -= Math.round((dominantShare - 0.45) * 80);
   score -= singletonCount * 3;
-  score -= exactRepeat48h * 4;
+  const possibleProteinCarbPairs = Math.max(1, uniqueProteins * uniqueCarbs);
+  const repeatPenalty = possibleProteinCarbPairs <= 9 ? 2 : 4;
+  score -= exactRepeat48h * repeatPenalty;
   score -= weirdPairingCount * 5;
   if (averagePrepTime > 35) score -= (averagePrepTime - 35);
 
@@ -1235,7 +1680,7 @@ export function rebalanceWeeklyMeals(
   foodCatalog: FoodWithMetadata[],
   selections: UserNutritionSelections,
   allSlots: MealSlot[][],
-  macroTargets: MacroTargets,
+  macroTargets: MacroTargets | MacroTargets[],
   goal: "muscle_gain" | "fat_loss" | "maintenance",
   baseOptions: GenerationOptions,
   weeklyMeals: GeneratedMeal[][]
@@ -1294,7 +1739,7 @@ export function rebalanceWeeklyMeals(
       foodCatalog,
       selections,
       allSlots[idx],
-      macroTargets,
+      Array.isArray(macroTargets) ? macroTargets[idx] : macroTargets,
       goal,
       rebalanceOptions
     );

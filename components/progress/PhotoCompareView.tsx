@@ -5,6 +5,7 @@ import { TabBarIcon } from '../navigation/TabBarIcon';
 import { ComparePairSelector } from './ComparePairSelector';
 import type { ProgressPhotoAngle } from '../../services/progressPhotoService';
 import type { ProgressPhotoCompareSnapshot } from '../../services/progressBodyService';
+import { formatWeightDeltaKg, type WeightUnitSystem } from '../../lib/progress/weight-units';
 
 export interface PhotoCompareViewProps {
   snapshot: ProgressPhotoCompareSnapshot;
@@ -13,6 +14,7 @@ export interface PhotoCompareViewProps {
   onAngleChange: (angle: ProgressPhotoAngle) => void;
   onBeforeChange: (checkpointId: string) => void;
   onAfterChange: (checkpointId: string) => void;
+  unitSystem?: WeightUnitSystem | null;
 }
 
 const ANGLES: ProgressPhotoAngle[] = ['front', 'side', 'back', 'custom'];
@@ -42,6 +44,7 @@ export function PhotoCompareView({
   onAngleChange,
   onBeforeChange,
   onAfterChange,
+  unitSystem,
 }: PhotoCompareViewProps) {
   const { c, ty, s, r } = useTokens();
 
@@ -126,7 +129,7 @@ export function PhotoCompareView({
         <View style={styles.summaryCell}>
           <Text style={{ color: c.textMuted, fontFamily: ty.body.family, fontSize: ty.sizes.xs }}>Weight delta</Text>
           <Text style={{ color: c.text, fontFamily: ty.body.familySemibold, fontSize: ty.sizes.sm, marginTop: 4 }}>
-            {formatDelta(snapshot.weightDeltaKg, 'kg')}
+            {formatWeightDeltaKg(snapshot.weightDeltaKg, unitSystem)}
           </Text>
         </View>
         <View style={styles.summaryCell}>

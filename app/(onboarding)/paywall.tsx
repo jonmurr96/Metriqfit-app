@@ -117,7 +117,7 @@ export default function PaywallScreen() {
         : (eliteMonthlyPackage?.price_string || '$19.99/month'),
       helper: billingPeriod === 'annual' ? 'Best value for daily AI coaching' : 'AI-first, coaching-first, no limits',
       trialLabel: '7-day free trial',
-      features: ['Unlimited AI coach, scans, and plan regenerations', 'Menu scan, recipe import, grocery planner, pantry', 'Prep auto-adjust and highest-touch personalization'],
+      features: ['Unlimited AI coach, scans, and plan regenerations', 'Menu scan, recipe import, and advanced nutrition tools', 'Prep auto-adjust and highest-touch personalization'],
       packageId: billingPeriod === 'annual'
         ? (eliteAnnualPackage?.id || 'elite_annual')
         : (eliteMonthlyPackage?.id || 'elite_monthly'),
@@ -139,12 +139,30 @@ export default function PaywallScreen() {
   ] as const;
 
   async function markPaywallComplete(userId: string) {
-    await supabase
+    const completedAt = new Date().toISOString();
+    const { data: existing, error: readError } = await supabase
       .from('onboarding_answers')
-      .upsert(
-        { user_id: userId, paywall_completed_at: new Date().toISOString() },
-        { onConflict: 'user_id' }
-      );
+      .select('answers, completed_at')
+      .eq('user_id', userId)
+      .maybeSingle();
+
+    if (readError) {
+      throw readError;
+    }
+
+    const payload = {
+      user_id: userId,
+      answers: (existing?.answers || {}) as any,
+      completed_at: existing?.completed_at || completedAt,
+    };
+
+    const { error } = await supabase
+      .from('onboarding_answers')
+      .upsert(payload, { onConflict: 'user_id' });
+
+    if (error) {
+      throw error;
+    }
   }
 
   const completeWithFreeTier = async () => {
@@ -167,135 +185,157 @@ export default function PaywallScreen() {
 
   const handlePurchase = async () => {
     if (!user?.id) return;
-    if (billingStatus && !billingStatus.canPurchase) {
-      setInlineError(billingStatus.reason);
-      return;
-    }
 
-    setInlineError(null);
-    trackEvent('onboarding_purchase_started', {
-      generation_run_id: resolvedRunId,
-      package_id: selectedPackage?.id,
-      tier: selectedTier,
-      billing_period: billingPeriod,
-    });
-
-    if (
-      billingStatus?.mode === 'revenuecat_native'
-      || billingStatus?.mode === 'revenuecat_sandbox'
-      || billingStatus?.mode === 'revenuecat_test_store'
-    ) {
-      const hostedResult = await hostedPaywall.mutateAsync();
-
-      if (hostedResult.cancelled) {
+    try {
+      if (billingStatus && !billingStatus.canPurchase) {
+        setInlineError(billingStatus.reason);
         return;
       }
 
-      const refreshedEntitlement = await checkEntitlementStatus(user.id).catch(() => null);
-      const hasPaidAccess = Boolean(refreshedEntitlement?.isPremium || refreshedEntitlement?.isElite);
+      setInlineError(null);
+      trackEvent('onboarding_purchase_started', {
+        generation_run_id: resolvedRunId,
+        package_id: selectedPackage?.id,
+        tier: selectedTier,
+        billing_period: billingPeriod,
+      });
 
-      if (hostedResult.success || (hostedResult.notPresented && hasPaidAccess)) {
-        if (resolvedRunId) {
-          await setPricingDecision.mutateAsync({
-            runId: resolvedRunId,
-            tier: toPricingDecision(
-              refreshedEntitlement?.planType,
-              (selectedPackage?.id as PricingDecision | undefined) || 'elite_annual',
-            ),
-          });
+      if (
+        billingStatus?.mode === 'revenuecat_native'
+        || billingStatus?.mode === 'revenuecat_sandbox'
+        || billingStatus?.mode === 'revenuecat_test_store'
+      ) {
+        const hostedResult = await hostedPaywall.mutateAsync();
+
+        if (hostedResult.cancelled) {
+          return;
         }
 
-        await markPaywallComplete(user.id);
-        trackEvent('onboarding_purchase_succeeded', {
-          generation_run_id: resolvedRunId,
-          package_id: refreshedEntitlement?.planType || selectedPackage?.id,
-          tier: refreshedEntitlement?.tier || selectedTier,
-          billing_period: billingPeriod,
-          paywall_mode: billingStatus.mode,
-        });
+        const refreshedEntitlement = await checkEntitlementStatus(user.id).catch(() => null);
+        const hasPaidAccess = Boolean(refreshedEntitlement?.isPremium || refreshedEntitlement?.isElite);
 
-        router.replace('/(tabs)/home');
-        return;
+        if (hostedResult.success || (hostedResult.notPresented && hasPaidAccess)) {
+          if (resolvedRunId) {
+            await setPricingDecision.mutateAsync({
+              runId: resolvedRunId,
+              tier: toPricingDecision(
+                refreshedEntitlement?.planType,
+                (selectedPackage?.id as PricingDecision | undefined) || 'elite_annual',
+              ),
+            });
+          }
+
+          await markPaywallComplete(user.id);
+          trackEvent('onboarding_purchase_succeeded', {
+            generation_run_id: resolvedRunId,
+            package_id: refreshedEntitlement?.planType || selectedPackage?.id,
+            tier: refreshedEntitlement?.tier || selectedTier,
+            billing_period: billingPeriod,
+            paywall_mode: billingStatus.mode,
+          });
+
+          router.replace('/(tabs)/home');
+          return;
+        }
+
+        if (!selectedPackage?.id) {
+          const message = 'RevenueCat paywall could not complete a purchase.';
+          setInlineError(message);
+          trackEvent('onboarding_purchase_failed', {
+            generation_run_id: resolvedRunId,
+            package_id: selectedPackage?.id,
+            reason: message,
+          });
+          return;
+        }
       }
 
-      if (!selectedPackage?.id) {
-        const message = 'RevenueCat paywall could not complete a purchase.';
+      if (!selectedPackage?.id) return;
+
+      const result = await purchasePackage.mutateAsync(selectedPackage.id);
+
+      if (!result?.success) {
+        const message = result?.error || 'Purchase could not be completed.';
         setInlineError(message);
         trackEvent('onboarding_purchase_failed', {
           generation_run_id: resolvedRunId,
-          package_id: selectedPackage?.id,
+          package_id: selectedPackage.id,
           reason: message,
         });
         return;
       }
-    }
 
-    if (!selectedPackage?.id) return;
+      if (resolvedRunId) {
+        await setPricingDecision.mutateAsync({
+          runId: resolvedRunId,
+          tier: selectedPackage.id as PricingDecision,
+        });
+      }
 
-    const result = await purchasePackage.mutateAsync(selectedPackage.id);
-
-    if (!result?.success) {
-      const message = result?.error || 'Purchase could not be completed.';
-      setInlineError(message);
-      trackEvent('onboarding_purchase_failed', {
+      await markPaywallComplete(user.id);
+      trackEvent('onboarding_purchase_succeeded', {
         generation_run_id: resolvedRunId,
         package_id: selectedPackage.id,
+        tier: selectedTier,
+        billing_period: billingPeriod,
+      });
+
+      router.replace('/(tabs)/home');
+    } catch (error: any) {
+      const message = error?.message || 'Please try again.';
+      setInlineError(message);
+      Alert.alert('Unable to continue', message);
+      trackEvent('onboarding_purchase_failed', {
+        generation_run_id: resolvedRunId,
+        package_id: selectedPackage?.id,
         reason: message,
       });
-      return;
     }
-
-    if (resolvedRunId) {
-      await setPricingDecision.mutateAsync({
-        runId: resolvedRunId,
-        tier: selectedPackage.id as PricingDecision,
-      });
-    }
-
-    await markPaywallComplete(user.id);
-    trackEvent('onboarding_purchase_succeeded', {
-      generation_run_id: resolvedRunId,
-      package_id: selectedPackage.id,
-      tier: selectedTier,
-      billing_period: billingPeriod,
-    });
-
-    router.replace('/(tabs)/home');
   };
 
   const handleRestorePurchases = async () => {
-    if (!billingStatus?.canPurchase) {
-      Alert.alert('Restore unavailable', billingStatus?.reason || 'Purchase restore is not available in this build.');
-      return;
-    }
+    try {
+      if (!billingStatus?.canPurchase) {
+        Alert.alert('Restore unavailable', billingStatus?.reason || 'Purchase restore is not available in this build.');
+        return;
+      }
 
-    trackEvent('onboarding_restore_started', {
-      generation_run_id: resolvedRunId,
-      source: 'onboarding_paywall',
-    });
+      trackEvent('onboarding_restore_started', {
+        generation_run_id: resolvedRunId,
+        source: 'onboarding_paywall',
+      });
 
-    const result = await restorePurchases.mutateAsync();
+      const result = await restorePurchases.mutateAsync();
 
-    if (!result?.isPremium && !result?.isElite) {
+      if (!result?.isPremium && !result?.isElite) {
+        trackEvent('onboarding_restore_failed', {
+          generation_run_id: resolvedRunId,
+          source: 'onboarding_paywall',
+          reason: 'no_active_purchase_found',
+        });
+        Alert.alert('No purchases found', 'We could not find an active purchase to restore for this account.');
+        return;
+      }
+
+      if (user?.id) await markPaywallComplete(user.id);
+      trackEvent('onboarding_restore_succeeded', {
+        generation_run_id: resolvedRunId,
+        source: 'onboarding_paywall',
+        tier: result.tier,
+        plan_type: result.planType,
+        grandfathered_into_tier: result.grandfatheredIntoTier,
+      });
+
+      router.replace('/(tabs)/home');
+    } catch (error: any) {
+      const message = error?.message || 'Please try again.';
+      Alert.alert('Unable to restore', message);
       trackEvent('onboarding_restore_failed', {
         generation_run_id: resolvedRunId,
         source: 'onboarding_paywall',
-        reason: 'no_active_purchase_found',
+        reason: message,
       });
-      Alert.alert('No purchases found', 'We could not find an active purchase to restore for this account.');
-      return;
     }
-
-    if (user?.id) await markPaywallComplete(user.id);
-    trackEvent('onboarding_restore_succeeded', {
-      generation_run_id: resolvedRunId,
-      source: 'onboarding_paywall',
-      tier: result.tier,
-      plan_type: result.planType,
-      grandfathered_into_tier: result.grandfatheredIntoTier,
-    });
-
-    router.replace('/(tabs)/home');
   };
 
   if (isLoading) {

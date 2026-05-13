@@ -1,5 +1,5 @@
 import React, { useState, useMemo } from 'react';
-import { View, Text, StyleSheet, Pressable, TextInput, Platform } from 'react-native';
+import { View, Text, StyleSheet, Pressable, TextInput, Keyboard } from 'react-native';
 import { useTokens } from '../../lib/theme';
 import { TabBarIcon } from '../navigation/TabBarIcon';
 
@@ -63,6 +63,9 @@ export function OneRepMaxCalculator({ onClose, animated = true }: OneRepMaxCalcu
                             value={weight}
                             onChangeText={setWeight}
                             keyboardType="numeric"
+                            returnKeyType="done"
+                            onSubmitEditing={Keyboard.dismiss}
+                            blurOnSubmit
                             style={[styles.input, {
                                 color: c.text,
                                 backgroundColor: c.surface2,
@@ -76,6 +79,9 @@ export function OneRepMaxCalculator({ onClose, animated = true }: OneRepMaxCalcu
                             value={reps}
                             onChangeText={setReps}
                             keyboardType="numeric"
+                            returnKeyType="done"
+                            onSubmitEditing={Keyboard.dismiss}
+                            blurOnSubmit
                             style={[styles.input, {
                                 color: c.text,
                                 backgroundColor: c.surface2,

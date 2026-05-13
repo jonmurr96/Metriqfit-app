@@ -24,6 +24,11 @@ import {
   type GeneratedSplitDayDefinition,
 } from "../../../lib/workout/generated-split-selection.ts";
 import {
+  recommendMealFrequency,
+  resolveMealFrequencyChoice,
+} from "../../../lib/nutrition/meal-frequency.ts";
+import { determineProduceDecision, type ProduceGoal } from "./produceStrategy.ts";
+import {
   generateDailyMeals,
   getSlotTemplate,
   type FoodWithMetadata,
@@ -32,6 +37,7 @@ import {
   type GenerationOptions,
   type GeneratedMeal,
   type MealSlot,
+  type MacroTargets,
 } from "./scientificMealEngine.ts";
 import { routeUserToPlan, type OnboardingProfileInput } from "../../../lib/workout/v1_librarian_router.ts";
 import { hydrateTemplate } from "../../../lib/workout/v1_architect.ts";
@@ -238,7 +244,7 @@ async function storeV1WorkoutPlan(
       day_number: day.day_number,
       name: day.day_type,
       focus: dayFocus,
-      day_type: "workout",
+      day_type: day.day_type || "workout",
       estimated_duration_min: Math.max(30, Math.floor(day.exercises.reduce((acc: number, ex: any) => acc + (ex.estimated_duration_seconds / 60), 0))),
     });
 
@@ -373,6 +379,8 @@ type NutritionRegenerationRequest = {
   allergies?: string[];
   refused_foods?: string[];
   preferred_proteins?: string[];
+  preferred_carbs?: string[];
+  preferred_fats?: string[];
   prep_time_target_min?: number | null;
   budget_limit?: number | null;
   keep_meal_slots?: boolean;
@@ -420,6 +428,7 @@ type OnboardingAnswers = {
   goal_type?: string;
   experience_level?: "beginner" | "intermediate" | "advanced";
   training_days_per_week?: number;
+  training_days?: string[];
   preferred_days_off?: string[];
   equipment_access?: string;
   injuries?: string[];
@@ -453,6 +462,7 @@ type UserContext = {
     goal_type: string;
     experience_level: "beginner" | "intermediate" | "advanced";
     training_days_per_week: number;
+    training_days: string[];
     preferred_days_off: string[];
     equipment_access: string;
     injuries: string[];
@@ -480,7 +490,14 @@ type UserContext = {
     protein_g: number;
     carbs_g: number;
     fat_g: number;
+    fiber_g?: number | null;
     water_ml: number;
+    day_type_targets_json?: {
+      daily?: MacroTargets & { fiber_g?: number };
+      trainingDay?: MacroTargets & { fiber_g?: number };
+      restDay?: MacroTargets & { fiber_g?: number };
+    } | null;
+    target_diagnostics_json?: Record<string, unknown> | null;
   };
   exercises: Array<{
     id: string;
@@ -976,6 +993,77 @@ const SPLIT_LIBRARY: SplitDefinition[] = [
       { key: "pow_deadlift", name: "Deadlift Focus", focus: "Posterior chain strength", tags: ["hamstrings", "glutes", "back", "core"], sets: 5, repRange: [2, 5], restSeconds: 180 },
       { key: "pow_upper_hyp", name: "Upper Hypertrophy", focus: "Volume upper body", tags: ["chest", "back", "shoulders", "arms"], sets: 4, repRange: [8, 12], restSeconds: 90 },
       { key: "pow_lower_hyp", name: "Lower Hypertrophy", focus: "Volume lower body", tags: ["legs", "hamstrings", "glutes", "core"], sets: 4, repRange: [8, 12], restSeconds: 90 },
+    ],
+  },
+  {
+    key: "intermediate-upper-lower-full-3",
+    familyKey: "fam_upper_lower_full_3day",
+    name: "Upper / Lower / Full (3 days)",
+    description: "3-day hybrid hitting every muscle group twice per week: Upper, Lower, then a Full Body day.",
+    recommendedFor: "intermediate",
+    frequency: 3,
+    days: [
+      { key: "ulf3_upper", name: "Upper", focus: "Horizontal press + vertical pull + shoulders + biceps", tags: ["chest", "back", "shoulders", "arms"], sets: 3, repRange: [8, 12], restSeconds: 120 },
+      { key: "ulf3_lower", name: "Lower", focus: "Squat + hinge + unilateral + calves", tags: ["legs", "glutes", "hamstrings", "core"], sets: 4, repRange: [6, 12], restSeconds: 150 },
+      { key: "ulf3_full", name: "Full Body", focus: "Vertical press + horizontal pull + unilateral hinge + triceps", tags: ["chest", "back", "shoulders", "legs", "arms"], sets: 3, repRange: [8, 12], restSeconds: 120 },
+    ],
+  },
+  {
+    key: "intermediate-ppl-3",
+    familyKey: "fam_ppl_3day",
+    name: "Push / Pull / Legs (3 days)",
+    description: "Classic 3-day PPL split hitting each muscle group once per week with targeted volume.",
+    recommendedFor: "intermediate",
+    frequency: 3,
+    days: [
+      { key: "ppl3_push", name: "Push", focus: "Chest, shoulders, triceps", tags: ["chest", "shoulders", "arms"], sets: 4, repRange: [6, 12], restSeconds: 120 },
+      { key: "ppl3_pull", name: "Pull", focus: "Back and biceps", tags: ["back", "arms"], sets: 4, repRange: [6, 12], restSeconds: 120 },
+      { key: "ppl3_legs", name: "Legs", focus: "Quads, hamstrings, glutes, calves", tags: ["legs", "glutes", "hamstrings", "core"], sets: 4, repRange: [6, 12], restSeconds: 150 },
+    ],
+  },
+  {
+    key: "advanced-ppl-6",
+    familyKey: "fam_ppl_6day",
+    name: "Push / Pull / Legs (6 days)",
+    description: "High-frequency PPL 6-day split with A/B variation for maximum hypertrophy.",
+    recommendedFor: "advanced",
+    frequency: 6,
+    days: [
+      { key: "ppl6_push_a", name: "Push A", focus: "Horizontal press emphasis, triceps", tags: ["chest", "shoulders", "arms"], sets: 4, repRange: [5, 10], restSeconds: 150 },
+      { key: "ppl6_pull_a", name: "Pull A", focus: "Vertical pull emphasis, biceps", tags: ["back", "arms"], sets: 4, repRange: [5, 10], restSeconds: 150 },
+      { key: "ppl6_legs_a", name: "Legs A", focus: "Squat dominant, calves, core", tags: ["legs", "glutes", "hamstrings", "core"], sets: 4, repRange: [5, 10], restSeconds: 180 },
+      { key: "ppl6_push_b", name: "Push B", focus: "Vertical press emphasis, chest fly", tags: ["chest", "shoulders", "arms"], sets: 4, repRange: [8, 15], restSeconds: 120 },
+      { key: "ppl6_pull_b", name: "Pull B", focus: "Horizontal pull emphasis, rear delt", tags: ["back", "arms", "shoulders"], sets: 4, repRange: [8, 15], restSeconds: 120 },
+      { key: "ppl6_legs_b", name: "Legs B", focus: "Hinge dominant, unilateral, calves", tags: ["legs", "glutes", "hamstrings", "core"], sets: 4, repRange: [6, 12], restSeconds: 180 },
+    ],
+  },
+  {
+    key: "intermediate-brosplit-4",
+    familyKey: "fam_brosplit_4day",
+    name: "Bro Split (4 days)",
+    description: "Classic Bro Split with dedicated Chest/Triceps, Back/Biceps, Shoulders, and Legs days.",
+    recommendedFor: "intermediate",
+    frequency: 4,
+    days: [
+      { key: "bro4_chest_tri", name: "Chest & Triceps", focus: "Full chest volume + tricep isolation", tags: ["chest", "arms"], sets: 4, repRange: [8, 12], restSeconds: 120 },
+      { key: "bro4_back_bi", name: "Back & Biceps", focus: "Full back volume + bicep isolation", tags: ["back", "arms"], sets: 4, repRange: [8, 12], restSeconds: 120 },
+      { key: "bro4_shoulders", name: "Shoulders", focus: "Overhead press, laterals, rear delts", tags: ["shoulders", "arms"], sets: 4, repRange: [8, 15], restSeconds: 90 },
+      { key: "bro4_legs", name: "Legs", focus: "Quads, hamstrings, glutes, calves", tags: ["legs", "glutes", "hamstrings", "core"], sets: 4, repRange: [8, 12], restSeconds: 150 },
+    ],
+  },
+  {
+    key: "intermediate-brosplit-5",
+    familyKey: "fam_brosplit_5day",
+    name: "Bro Split (5 days)",
+    description: "5-day Bro Split adding a dedicated Arms day on top of the classic 4-day structure.",
+    recommendedFor: "intermediate",
+    frequency: 5,
+    days: [
+      { key: "bro5_chest_tri", name: "Chest & Triceps", focus: "Full chest volume + tricep isolation", tags: ["chest", "arms"], sets: 4, repRange: [8, 12], restSeconds: 120 },
+      { key: "bro5_back_bi", name: "Back & Biceps", focus: "Full back volume + bicep isolation", tags: ["back", "arms"], sets: 4, repRange: [8, 12], restSeconds: 120 },
+      { key: "bro5_shoulders", name: "Shoulders", focus: "Overhead press, laterals, rear delts", tags: ["shoulders", "arms"], sets: 4, repRange: [8, 15], restSeconds: 90 },
+      { key: "bro5_legs", name: "Legs", focus: "Quads, hamstrings, glutes, calves", tags: ["legs", "glutes", "hamstrings", "core"], sets: 4, repRange: [8, 12], restSeconds: 150 },
+      { key: "bro5_arms", name: "Arms", focus: "Bicep and tricep volume day", tags: ["arms", "shoulders"], sets: 4, repRange: [8, 15], restSeconds: 75 },
     ],
   },
 ];
@@ -1846,6 +1934,7 @@ function buildMealVariant(
   slot: "breakfast" | "lunch" | "dinner" | "snack",
   target: { protein: number; carbs: number; fat: number },
   foods: FoodCandidate[],
+  goal: ProduceGoal,
   daySeed: number,
   variantIndex: number,
   foodLookup: FoodRecordLookup,
@@ -1859,7 +1948,6 @@ function buildMealVariant(
   const protein = options?.anchors?.protein || pickFoodForMacro(foods, "protein", daySeed + variantIndex * 3);
   const carb = options?.anchors?.carb || pickFoodForMacro(foods, "carb", daySeed + variantIndex * 5 + 11);
   const fat = options?.anchors?.fat || pickFoodForMacro(foods, "fat", daySeed + variantIndex * 7 + 23);
-  const veggie = options?.anchors?.veggie || getFoodByTag(foods, slot === "breakfast" ? "fruit" : "veggie", excludedNames, daySeed + variantIndex * 9 + 37);
 
   const proteinPerGram = {
     protein: Math.max(0.01, protein.protein100 / 100),
@@ -1876,11 +1964,6 @@ function buildMealVariant(
     carbs: fat.carbs100 / 100,
     fat: Math.max(0.01, fat.fat100 / 100),
   };
-  const veggiePerGram = {
-    protein: veggie.protein100 / 100,
-    carbs: veggie.carbs100 / 100,
-    fat: veggie.fat100 / 100,
-  };
 
   const proteinBounds: [number, number] = slot === "snack"
     ? [strictMacroMode ? 0.1 : 10, protein.defaultGrams * (strictMacroMode ? 6 : 1.8)]
@@ -1891,19 +1974,15 @@ function buildMealVariant(
   const fatBounds: [number, number] = slot === "snack"
     ? [strictMacroMode ? 0.1 : 1, fat.defaultGrams * (strictMacroMode ? 6 : 1.6)]
     : [strictMacroMode ? 2 : Math.max(4, fat.defaultGrams * 0.4), fat.defaultGrams * (strictMacroMode ? 3 : 2.2)];
-  const snackVeggieBase = target.carbs < 15 ? 20 : 45;
-  const veggieGrams = slot === "snack"
-    ? strictMacroMode ? 0 : clamp(snackVeggieBase, 0, 90)
-    : clamp(veggie.defaultGrams, 60, 180);
 
   let proteinGrams = clamp(target.protein / proteinPerGram.protein, proteinBounds[0], proteinBounds[1]);
   let carbGrams = clamp(target.carbs / carbPerGram.carbs, carbBounds[0], carbBounds[1]);
   let fatGrams = clamp(target.fat / fatPerGram.fat, fatBounds[0], fatBounds[1]);
 
   const applyTotals = (p: number, c: number, f: number) => ({
-    protein: (p * proteinPerGram.protein) + (c * carbPerGram.protein) + (f * fatPerGram.protein) + (veggieGrams * veggiePerGram.protein),
-    carbs: (p * proteinPerGram.carbs) + (c * carbPerGram.carbs) + (f * fatPerGram.carbs) + (veggieGrams * veggiePerGram.carbs),
-    fat: (p * proteinPerGram.fat) + (c * carbPerGram.fat) + (f * fatPerGram.fat) + (veggieGrams * veggiePerGram.fat),
+    protein: (p * proteinPerGram.protein) + (c * carbPerGram.protein) + (f * fatPerGram.protein),
+    carbs: (p * proteinPerGram.carbs) + (c * carbPerGram.carbs) + (f * fatPerGram.carbs),
+    fat: (p * proteinPerGram.fat) + (c * carbPerGram.fat) + (f * fatPerGram.fat),
   });
 
   // Iteratively fit the three anchor ingredients so combined macros converge on target.
@@ -1923,11 +2002,42 @@ function buildMealVariant(
     fatGrams = clamp(fatGrams * (1 - drift * 0.5), fatBounds[0], fatBounds[1]);
   }
 
+  const baseMacros = {
+    calories: round1(
+      (proteinGrams * protein.calories100) / 100 +
+      (carbGrams * carb.calories100) / 100 +
+      (fatGrams * fat.calories100) / 100,
+    ),
+  };
+  const baseFiber =
+    (proteinGrams * protein.fiber100) / 100 +
+    (carbGrams * carb.fiber100) / 100 +
+    (fatGrams * fat.fiber100) / 100;
+
+  const produceDecision = determineProduceDecision({
+    slot,
+    goal,
+    baseFiberG: baseFiber,
+    baseCalories: baseMacros.calories,
+  });
+
+  let produce: FoodCandidate | null = null;
+  let produceGrams = 0;
+  if (produceDecision.include) {
+    const preferredTag = produceDecision.kind === "vegetable" ? "veggie" : "fruit";
+    produce =
+      getFoodByTag(foods, preferredTag, excludedNames, daySeed + variantIndex * 9 + 37) ||
+      getFoodByTag(foods, preferredTag === "fruit" ? "veggie" : "fruit", excludedNames, daySeed + variantIndex * 9 + 37);
+    if (produce) {
+      produceGrams = produceDecision.grams;
+    }
+  }
+
   const itemPlan = [
     { food: protein, grams: proteinGrams },
     { food: carb, grams: carbGrams },
     { food: fat, grams: fatGrams },
-    { food: veggie, grams: veggieGrams },
+    ...(produce ? [{ food: produce, grams: produceGrams }] : []),
   ];
 
   const items: MealItem[] = itemPlan
@@ -1970,7 +2080,9 @@ function buildMealVariant(
   return {
     variant_type: variantIndex === 0 ? "default" : "alternative",
     name: variantName,
-    description: `Auto-generated ${slot} option aligned to macro targets.`,
+    description: produce
+      ? `Auto-generated ${slot} option aligned to macro targets with produce for fiber and micronutrients.`
+      : `Auto-generated ${slot} option aligned to macro targets.`,
     source: "rule",
     prep_time_min: slot === "snack" ? 5 : 15,
     items,
@@ -1992,7 +2104,7 @@ async function fetchUserContext(supabase: SupabaseClient, userId: string): Promi
   const [profileRes, onboardingRes, targetsRes, exercisesRes, foodsRes] = await Promise.all([
     supabase.from("profiles").select("first_name, sex, unit_system").eq("id", userId).single(),
     supabase.from("onboarding_answers").select("answers").eq("user_id", userId).single(),
-    supabase.from("user_targets").select("calories, protein_g, carbs_g, fat_g, water_ml").eq("user_id", userId).single(),
+    supabase.from("user_targets").select("*").eq("user_id", userId).single(),
     supabase.from("exercises").select("id, name, category, equipment_required, primary_muscle, pattern, difficulty, popularity_score").limit(2000),
     supabase.from("food_items").select("id, name, calories_per_100g, protein_per_100g, carbs_per_100g, fat_per_100g, fiber_per_100g, category, breakfast_score, lunch_dinner_score, preworkout_score, postworkout_score, evening_score, digestion_speed, fat_load, carb_speed, protein_leanness, formality, goal_form, variety_family").limit(400),
   ]);
@@ -2052,6 +2164,7 @@ async function fetchUserContext(supabase: SupabaseClient, userId: string): Promi
       goal_type: answers.goal_type || "general_fitness",
       experience_level: answers.experience_level || "beginner",
       training_days_per_week: clamp(Number(answers.training_days_per_week || 3), 2, 6),
+      training_days: Array.isArray(answers.training_days) ? answers.training_days : [],
       preferred_days_off: answers.preferred_days_off || [],
       equipment_access: answers.equipment_access || "full_gym",
       injuries: answers.injuries || [],
@@ -2462,11 +2575,18 @@ function applyNutritionRegenerationToContext(
   if (nutritionRegeneration.preferred_proteins?.length) {
     nextContext.onboarding.preferred_proteins = nutritionRegeneration.preferred_proteins;
   }
+  if (nutritionRegeneration.preferred_carbs?.length) {
+    nextContext.onboarding.preferred_carbs = nutritionRegeneration.preferred_carbs;
+  }
+  if (nutritionRegeneration.preferred_fats?.length) {
+    nextContext.onboarding.preferred_fats = nutritionRegeneration.preferred_fats;
+  }
 
   return nextContext;
 }
 
 function resolveNutritionMealSlots(
+  context: UserContext,
   nutritionRegeneration: NutritionRegenerationRequest | null,
   currentPlanContext: CurrentNutritionPlanContext | null,
 ) {
@@ -2479,7 +2599,20 @@ function resolveNutritionMealSlots(
     return normalizeNutritionSlots(SLOT_ORDER.slice(0, clamp(mealsPerDayOverride, 1, SLOT_ORDER.length)));
   }
 
-  return [...SLOT_ORDER];
+  const mealFrequencyRecommendation = recommendMealFrequency({
+    goalType: context.onboarding.goal_type,
+    calories: context.targets.calories,
+    proteinGrams: context.targets.protein_g,
+  });
+
+  const resolvedMealsPerDay = resolveMealFrequencyChoice(context.onboarding.meals_per_day, mealFrequencyRecommendation);
+  const mealCount = clamp(
+    resolvedMealsPerDay === '5_plus' ? 5 : Number(resolvedMealsPerDay),
+    1,
+    SLOT_ORDER.length,
+  );
+
+  return normalizeNutritionSlots(SLOT_ORDER.slice(0, mealCount));
 }
 
 function buildWorkoutGenerationConfig(input: {
@@ -2960,6 +3093,7 @@ async function insertWorkoutPlanDayWithFallback(
       day_number: payload.day_number,
       name: payload.name,
       focus: payload.focus,
+      day_type: payload.day_type,
     },
   ];
 
@@ -3854,13 +3988,29 @@ async function storeWorkoutPlan(
  * Convert database food records to scientific engine format
  */
 function getDefaultPortionBounds(category: string | null): { min: number; max: number } {
-  switch (category) {
+  const normalized = String(category || "").toLowerCase();
+  switch (normalized) {
     case "protein":
+    case "proteins":
       return { min: 50, max: 400 };
     case "carb":
+    case "carbs":
+    case "grain":
+    case "grains":
+    case "starch":
+    case "starches":
       return { min: 30, max: 500 };
     case "fat":
+    case "fats":
+    case "nuts":
+    case "seeds":
       return { min: 5, max: 80 };
+    case "vegetable":
+    case "vegetables":
+      return { min: 40, max: 450 };
+    case "fruit":
+    case "fruits":
+      return { min: 60, max: 350 };
     default:
       return { min: 10, max: 300 };
   }
@@ -3879,6 +4029,15 @@ function getFoodSpecificBounds(food: UserContext["foods"][number]): { min: numbe
   if (name.includes("avocado")) return { min: 30, max: 150 };
   if (name.includes("cheese")) return { min: 15, max: 80 };
   if (name.includes("egg white")) return { min: 100, max: 400 };
+  if (name.includes("rice")) return { min: 90, max: 520 };
+  if (name.includes("quinoa")) return { min: 90, max: 520 };
+  if (name.includes("sweet potato")) return { min: 150, max: 650 };
+  if (name.includes("potato")) return { min: 150, max: 650 };
+  if (name.includes("pasta")) return { min: 90, max: 500 };
+  if (name.includes("oat")) return { min: 40, max: 180 };
+  if (name.includes("bread") || name.includes("toast") || name.includes("muffin") || name.includes("tortilla")) {
+    return { min: 50, max: 220 };
+  }
   if (name.includes("whey") || name.includes("protein powder") || name.includes("casein")) {
     return { min: 20, max: 100 };
   }
@@ -3887,9 +4046,11 @@ function getFoodSpecificBounds(food: UserContext["foods"][number]): { min: numbe
 }
 
 function convertFoodsToScientificFormat(foods: UserContext["foods"]): FoodWithMetadata[] {
-  return foods.map((food) => {
+  const seen = new Map<string, FoodWithMetadata>();
+
+  for (const food of foods) {
     const bounds = getFoodSpecificBounds(food);
-    return {
+    const converted = {
       id: food.id,
       name: food.name,
       calories_per_100g: food.calories_per_100g,
@@ -3914,7 +4075,55 @@ function convertFoodsToScientificFormat(foods: UserContext["foods"]): FoodWithMe
       min_grams: bounds.min,
       max_grams: bounds.max,
     };
-  });
+    const key = `${String(converted.variety_family || "").toLowerCase()}::${String(converted.name || "").toLowerCase().replace(/[^a-z0-9]+/g, " ").trim()}`;
+    const existing = seen.get(key);
+    const metadataScore = (converted.breakfast_score || 0)
+      + (converted.lunch_dinner_score || 0)
+      + (converted.preworkout_score || 0)
+      + (converted.postworkout_score || 0)
+      + (converted.evening_score || 0)
+      + (converted.fiber_per_100g || 0) * 0.1;
+    const existingScore = existing
+      ? (existing.breakfast_score || 0)
+        + (existing.lunch_dinner_score || 0)
+        + (existing.preworkout_score || 0)
+        + (existing.postworkout_score || 0)
+        + (existing.evening_score || 0)
+        + (existing.fiber_per_100g || 0) * 0.1
+      : -Infinity;
+
+    if (!existing || metadataScore > existingScore) {
+      seen.set(key, converted);
+    }
+  }
+
+  return Array.from(seen.values());
+}
+
+function baseMacroTargets(targets: UserContext["targets"]): MacroTargets {
+  return {
+    calories: Number(targets.calories || 0),
+    protein_g: Number(targets.protein_g || 0),
+    carbs_g: Number(targets.carbs_g || 0),
+    fat_g: Number(targets.fat_g || 0),
+  };
+}
+
+function normalizeDayTypeTarget(raw: unknown, fallback: MacroTargets): MacroTargets {
+  const candidate = raw && typeof raw === "object" ? raw as Record<string, unknown> : {};
+  return {
+    calories: Number(candidate.calories || fallback.calories),
+    protein_g: Number(candidate.protein_g || fallback.protein_g),
+    carbs_g: Number(candidate.carbs_g || fallback.carbs_g),
+    fat_g: Number(candidate.fat_g || fallback.fat_g),
+  };
+}
+
+function macroTargetsForDay(context: UserContext, hasWorkout: boolean): MacroTargets {
+  const fallback = baseMacroTargets(context.targets);
+  const dayTypeTargets = context.targets.day_type_targets_json;
+  if (!dayTypeTargets) return fallback;
+  return normalizeDayTypeTarget(hasWorkout ? dayTypeTargets.trainingDay : dayTypeTargets.restDay, fallback);
 }
 
 /**
@@ -3930,6 +4139,7 @@ async function generateScientificMealPlan(
   horizonDays: number,
   currentPlanId: string | null,
   workoutSchedule: Array<{ day: number; hasWorkout: boolean; time: string | null }>,
+  mealsPerDay?: number,
 ): Promise<{ planId: string; variantCount: number; warnings: string[] }> {
   const warnings: string[] = [];
   const nutritionDays = Math.max(7, Math.min(14, horizonDays));
@@ -4024,11 +4234,13 @@ async function generateScientificMealPlan(
   // Phase 1: Generate all days independently (with cross-day variety via previousDaysMeals)
   const dayPlans: { meals: GeneratedMeal[]; slots: MealSlot[]; dayIndex: number }[] = [];
   const allDayMeals: GeneratedMeal[][] = [];
+  const allDayTargets: MacroTargets[] = [];
 
   for (let dayIndex = 0; dayIndex < nutritionDays; dayIndex++) {
     const dayWorkout = workoutSchedule[dayIndex % workoutSchedule.length];
     const hasWorkout = dayWorkout?.hasWorkout || false;
     const workoutTime = dayWorkout?.time || null;
+    const dayTargets = macroTargetsForDay(context, hasWorkout);
 
     const scheduleConfig: ScheduleConfig = {
       wake_time:
@@ -4047,7 +4259,7 @@ async function generateScientificMealPlan(
       workout_time: workoutTime,
     };
 
-    const slots = getSlotTemplate(hasWorkout, workoutTime, scheduleConfig);
+    const slots = getSlotTemplate(hasWorkout, workoutTime, scheduleConfig, mealsPerDay);
 
     const mealGenOptions: GenerationOptions = {
       carbTolerance: context.onboarding.carb_tolerance || undefined,
@@ -4063,12 +4275,7 @@ async function generateScientificMealPlan(
       scientificFoods,
       selections,
       slots,
-      {
-        calories: context.targets.calories,
-        protein_g: context.targets.protein_g,
-        carbs_g: context.targets.carbs_g,
-        fat_g: context.targets.fat_g,
-      },
+      dayTargets,
       goal,
       mealGenOptions,
     );
@@ -4087,6 +4294,7 @@ async function generateScientificMealPlan(
 
     dayPlans.push({ meals: dailyMeals, slots, dayIndex });
     allDayMeals.push(dailyMeals);
+    allDayTargets.push(dayTargets);
   }
 
   // Phase 2: Weekly coherence pass (soft rebalance if chaotic)
@@ -4107,12 +4315,7 @@ async function generateScientificMealPlan(
     scientificFoods,
     selections,
     allSlots,
-    {
-      calories: context.targets.calories,
-      protein_g: context.targets.protein_g,
-      carbs_g: context.targets.carbs_g,
-      fat_g: context.targets.fat_g,
-    },
+    allDayTargets,
     goal,
     baseOptions,
     allDayMeals
@@ -4123,6 +4326,18 @@ async function generateScientificMealPlan(
 
   const postCoherence = analyzeWeeklyCoherence(rebalancedDays);
   console.log(`[generate-user-plans] Post-coherence score: ${postCoherence.realismScore} (${postCoherence.realismLabel})`);
+
+  const generatedSlots = Array.from(new Set(rebalancedDays.flat().map((meal) => meal.slot)));
+  if (generatedSlots.length) {
+    await supabase
+      .from("user_nutrition_plans")
+      .update({
+        meal_structure: {
+          slots: generatedSlots,
+        },
+      })
+      .eq("id", nutritionPlan.id);
+  }
 
   // Phase 3: Store in database
   let variantCount = 0;
@@ -4191,7 +4406,7 @@ async function generateScientificMealPlan(
           protein: round1((meal.items.protein.food.protein_per_100g / 100) * meal.items.protein.grams),
           carbs: round1((meal.items.protein.food.carbs_per_100g / 100) * meal.items.protein.grams),
           fat: round1((meal.items.protein.food.fat_per_100g / 100) * meal.items.protein.grams),
-          fiber: 0,
+          fiber: round1((meal.items.protein.food.fiber_per_100g / 100) * meal.items.protein.grams),
           order_index: 0,
         },
         {
@@ -4205,7 +4420,7 @@ async function generateScientificMealPlan(
           protein: round1((meal.items.carb.food.protein_per_100g / 100) * meal.items.carb.grams),
           carbs: round1((meal.items.carb.food.carbs_per_100g / 100) * meal.items.carb.grams),
           fat: round1((meal.items.carb.food.fat_per_100g / 100) * meal.items.carb.grams),
-          fiber: 0,
+          fiber: round1((meal.items.carb.food.fiber_per_100g / 100) * meal.items.carb.grams),
           order_index: 1,
         },
         {
@@ -4219,10 +4434,27 @@ async function generateScientificMealPlan(
           protein: round1((meal.items.fat.food.protein_per_100g / 100) * meal.items.fat.grams),
           carbs: round1((meal.items.fat.food.carbs_per_100g / 100) * meal.items.fat.grams),
           fat: round1((meal.items.fat.food.fat_per_100g / 100) * meal.items.fat.grams),
-          fiber: 0,
+          fiber: round1((meal.items.fat.food.fiber_per_100g / 100) * meal.items.fat.grams),
           order_index: 2,
         },
       ];
+
+      if (meal.items.produce) {
+        itemsPayload.push({
+          variant_id: variantRow.id,
+          food_item_id: meal.items.produce.food.id,
+          item_name: meal.items.produce.food.name,
+          quantity_value: Math.round(meal.items.produce.grams),
+          quantity_unit: "g",
+          grams: Math.round(meal.items.produce.grams),
+          calories: Math.round((meal.items.produce.food.calories_per_100g / 100) * meal.items.produce.grams),
+          protein: round1((meal.items.produce.food.protein_per_100g / 100) * meal.items.produce.grams),
+          carbs: round1((meal.items.produce.food.carbs_per_100g / 100) * meal.items.produce.grams),
+          fat: round1((meal.items.produce.food.fat_per_100g / 100) * meal.items.produce.grams),
+          fiber: round1((meal.items.produce.food.fiber_per_100g / 100) * meal.items.produce.grams),
+          order_index: 3,
+        });
+      }
 
       const { error: itemsError } = await supabase
         .from("user_nutrition_plan_meal_variant_items")
@@ -4435,11 +4667,23 @@ async function storeNutritionPlan(
     const dayActualTotals = { calories: 0, protein: 0, carbs: 0, fat: 0 };
 
     for (const [slotIndex, meal] of mealTargets.entries()) {
-      // Use snack as the balancing slot to close residual macros for the day.
-      if (meal.slot === "snack") {
-        meal.protein = Math.max(0, dayTargets.protein - dayActualTotals.protein);
-        meal.carbs = Math.max(0, dayTargets.carbs - dayActualTotals.carbs);
-        meal.fat = Math.max(0, dayTargets.fat - dayActualTotals.fat);
+      // Last slot absorbs remaining macros, but capped at 1.5× its ratio share to
+      // prevent any single slot (especially snack) from ballooning into a full meal.
+      if (slotIndex === mealTargets.length - 1) {
+        const maxRatio = Math.max(slotRatio[meal.slot] || 0, 1 / mealTargets.length);
+        const cap = 1.5;
+        meal.protein = Math.min(
+          Math.max(0, dayTargets.protein - dayActualTotals.protein),
+          dayTargets.protein * maxRatio * cap,
+        );
+        meal.carbs = Math.min(
+          Math.max(0, dayTargets.carbs - dayActualTotals.carbs),
+          dayTargets.carbs * maxRatio * cap,
+        );
+        meal.fat = Math.min(
+          Math.max(0, dayTargets.fat - dayActualTotals.fat),
+          dayTargets.fat * maxRatio * cap,
+        );
       }
 
       const slotSeed = dayIndex * 97 + slotIndex * 17 + meal.slot.length;
@@ -4471,6 +4715,7 @@ async function storeNutritionPlan(
           legacySlot,
           meal,
           workingFoods,
+          goal,
           dayIndex * 31 + meal.slot.length,
           0,
           dbFoodLookup,
@@ -4497,6 +4742,7 @@ async function storeNutritionPlan(
             legacySlot,
             meal,
             workingFoods,
+            goal,
             dayIndex * 37 + meal.slot.length,
             1,
             dbFoodLookup,
@@ -4506,6 +4752,7 @@ async function storeNutritionPlan(
             legacySlot,
             meal,
             workingFoods,
+            goal,
             dayIndex * 43 + meal.slot.length,
             2,
             dbFoodLookup,
@@ -4813,60 +5060,34 @@ serve(async (req: Request) => {
 
     const authHeader = req.headers.get("Authorization") || "";
     const jwt = (authHeader.split(" ")[1] ?? "").trim();
-    const xServiceKey = (req.headers.get("x-service-role") ?? "").trim();
-    const cleanServiceKey = (serviceRoleKey ?? "").trim();
-    
-    // @ts-ignore: Deno is defined at runtime
-    const adminBypassSecret = (Deno as any).env.get("ADMIN_BYPASS_SECRET");
-    // @ts-ignore: Deno is defined at runtime
-    const environment = (Deno as any).env.get("SUPABASE_ENVIRONMENT") || "development";
-    const xBypass = req.headers.get("x-bypass");
-    
-    // 🛡️ SECURE BYPASS: Only if secret matches AND not in strict production gate
-    const isSecuredBypass = adminBypassSecret && xBypass === adminBypassSecret && environment !== "production";
-    
-    if (isSecuredBypass) {
-      console.warn(`[AUDIT] Administrative bypass triggered for request by ${req.headers.get("user-agent") || "unknown agent"}`);
-    }
-
-    console.log(`[DEBUG] Auth check: jwt length=${jwt.length}, xServiceKey length=${xServiceKey.length}, cleanServiceKey length=${cleanServiceKey.length}`);
-    console.log(`[DEBUG] jwt match: ${jwt === cleanServiceKey}, xServiceKey match: ${xServiceKey === cleanServiceKey}`);
-    
-    const isServiceRole = ((jwt === cleanServiceKey || xServiceKey === cleanServiceKey) && cleanServiceKey.length > 0) || isSecuredBypass;
-    console.log(`[DEBUG] isServiceRole: ${isServiceRole}, isSecuredBypass: ${isSecuredBypass}`);
+    const isServiceRole = false;
+    console.log(`[DEBUG] Auth check: jwt length=${jwt.length}`);
     
     // Create base client early for auth check
     const baseClient = createClient(supabaseUrl, serviceRoleKey, {
       global: { headers: { Authorization: authHeader } },
     });
     
-    let user;
-    if (isServiceRole) {
-      console.log('[generate-user-plans] Service role access');
-      // For service role, we expect a user_id in the body or use a system-level target
-      user = { id: '6fd37fdd-34be-485e-80ea-42845e2f7689' }; // Jon's ID as default
-    } else {
-      if (!authHeader) {
-        return jsonResponse({ 
-          success: false, 
-          error: "Missing authorization header",
-          requestId,
-          step: 'auth_validation',
-          details: 'Authorization header is required'
-        }, 401);
-      }
-      const { data: authData, error: authErr } = await baseClient.auth.getUser(jwt);
-      if (authErr || !authData.user) {
-        return jsonResponse({ 
-          success: false, 
-          error: "Unauthorized",
-          requestId,
-          step: 'auth_validation',
-          details: authErr?.message || 'Invalid or expired authentication token'
-        }, 401);
-      }
-      user = authData.user;
+    if (!authHeader) {
+      return jsonResponse({ 
+        success: false, 
+        error: "Missing authorization header",
+        requestId,
+        step: 'auth_validation',
+        details: 'Authorization header is required'
+      }, 401);
     }
+    const { data: authData, error: authErr } = await baseClient.auth.getUser(jwt);
+    if (authErr || !authData.user) {
+      return jsonResponse({ 
+        success: false, 
+        error: "Unauthorized",
+        requestId,
+        step: 'auth_validation',
+        details: authErr?.message || 'Invalid or expired authentication token'
+      }, 401);
+    }
+    const user = authData.user;
 
     // proceed to body parsing
 
@@ -5321,6 +5542,7 @@ serve(async (req: Request) => {
               liftComfort: comfort,
               environment: env,
               sessionDurationMin: Number.isFinite(minutes) ? minutes : 60,
+              preferredSplitFamily: onboarding.preferred_split_family || null,
             };
           };
 
@@ -5633,15 +5855,41 @@ serve(async (req: Request) => {
 
         if (hasScientificPreferences) {
           // Build workout schedule for meal timing
+          const requestedTrainingDays = Array.isArray(nutritionContext.onboarding.training_days)
+            ? nutritionContext.onboarding.training_days.filter((day: string) => DAYS.includes(day))
+            : [];
+          const resolvedWorkoutTime =
+            nutritionContext.onboarding.training_time === "evening" ? "18:00" :
+            nutritionContext.onboarding.training_time === "afternoon" ? "15:00" :
+            nutritionContext.onboarding.training_time === "midday" ? "12:00" :
+            nutritionContext.onboarding.training_time === "mid_morning" ? "09:00" :
+            nutritionContext.onboarding.training_time === "early_morning" ? "06:00" :
+            null;
           const workoutSchedule = Array.from({ length: 7 }, (_, i) => ({
             day: i,
-            hasWorkout: i < (nutritionContext.onboarding.training_days_per_week || 3),
-            time: nutritionContext.onboarding.training_time === "evening" ? "18:00" :
-                  nutritionContext.onboarding.training_time === "afternoon" ? "15:00" :
-                  nutritionContext.onboarding.training_time === "midday" ? "12:00" :
-                  nutritionContext.onboarding.training_time === "early_morning" ? "06:00" :
-                  "07:00",
+            hasWorkout: !!resolvedWorkoutTime && (
+              requestedTrainingDays.length
+                ? requestedTrainingDays.includes(DAYS[i])
+                : i < (nutritionContext.onboarding.training_days_per_week || 3)
+            ),
+            time: resolvedWorkoutTime,
           }));
+
+          // Resolve how many meals per day the user wants — same logic as resolveNutritionMealSlots
+          const scientificMealFreqRec = recommendMealFrequency({
+            goalType: nutritionContext.onboarding.goal_type,
+            calories: nutritionContext.targets.calories,
+            proteinGrams: nutritionContext.targets.protein_g,
+          });
+          const scientificResolvedFreq = resolveMealFrequencyChoice(
+            nutritionContext.onboarding.meals_per_day,
+            scientificMealFreqRec,
+          );
+          const scientificMealsPerDay = clamp(
+            scientificResolvedFreq === "5_plus" ? 5 : Number(scientificResolvedFreq),
+            2,
+            5,
+          );
 
           try {
             nutritionResult = await generateScientificMealPlan(
@@ -5653,13 +5901,14 @@ serve(async (req: Request) => {
               nutritionHorizon,
               currentNutritionPlanContext?.planId || null,
               workoutSchedule,
+              scientificMealsPerDay,
             );
           } catch (scientificErr: any) {
             // Scientific meal engine failed — fall back to the legacy plan generator
             // so plan generation succeeds rather than producing a 500 for the user.
             console.error("[generate-user-plans] Scientific meal engine failed, falling back to legacy:", scientificErr.message);
             warnings.push(`Meal preferences could not be applied (${scientificErr.message}). A standard nutrition plan was generated instead.`);
-            const nutritionMealSlots = resolveNutritionMealSlots(nutritionRegeneration, currentNutritionPlanContext);
+            const nutritionMealSlots = resolveNutritionMealSlots(nutritionContext, nutritionRegeneration, currentNutritionPlanContext);
             nutritionResult = await storeNutritionPlan(
               supabase,
               userId,
@@ -5678,7 +5927,7 @@ serve(async (req: Request) => {
           }
         } else {
           // Fallback to legacy meal generation
-          const nutritionMealSlots = resolveNutritionMealSlots(nutritionRegeneration, currentNutritionPlanContext);
+          const nutritionMealSlots = resolveNutritionMealSlots(nutritionContext, nutritionRegeneration, currentNutritionPlanContext);
           nutritionResult = await storeNutritionPlan(
             supabase,
             userId,

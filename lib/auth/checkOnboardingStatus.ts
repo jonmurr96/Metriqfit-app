@@ -1,12 +1,11 @@
 import { supabase } from '../supabase';
+import {
+  deriveOnboardingStatus,
+  type OnboardingAnswersStatusRow,
+  type OnboardingStatus,
+} from './onboardingStatus';
 
-export interface OnboardingStatus {
-  hasCompletedOnboarding: boolean;
-  hasTargets: boolean;
-  hasPlans: boolean;
-  hasCompletedPaywall: boolean;
-  lastOnboardingStep: string | null;
-}
+export type { OnboardingStatus } from './onboardingStatus';
 
 /**
  * Checks if a user has completed all onboarding steps
@@ -16,10 +15,10 @@ export interface OnboardingStatus {
 export async function checkOnboardingStatus(
   userId: string
 ): Promise<OnboardingStatus> {
-  const [answersRes, targetsRes, plansRes] = await Promise.all([
+  const [answersRes, targetsRes, plansRes, subscriptionsRes, reviewStatesRes] = await Promise.all([
     supabase
       .from('onboarding_answers')
-      .select('completed_at, paywall_completed_at, last_onboarding_step')
+      .select('completed_at')
       .eq('user_id', userId)
       .maybeSingle(),
     supabase
@@ -33,15 +32,29 @@ export async function checkOnboardingStatus(
       .eq('user_id', userId)
       .eq('is_active', true)
       .maybeSingle(),
+    supabase
+      .from('subscriptions')
+      .select('id, plan_type')
+      .eq('user_id', userId)
+      .in('status', ['active', 'trial', 'grace_period'])
+      .limit(1),
+    supabase
+      .from('onboarding_plan_review_states')
+      .select('id')
+      .eq('user_id', userId)
+      .not('selected_at', 'is', null)
+      .limit(1),
   ]);
 
-  const answers = answersRes.data as any;
+  const hasPaidSubscription = !subscriptionsRes.error
+    && Boolean(subscriptionsRes.data?.some((subscription: any) => subscription.plan_type !== 'free'));
+  const hasPricingDecision = !reviewStatesRes.error && Boolean(reviewStatesRes.data?.length);
 
-  return {
-    hasCompletedOnboarding: !answersRes.error && !!answers?.completed_at,
+  return deriveOnboardingStatus({
+    answers: !answersRes.error ? (answersRes.data as OnboardingAnswersStatusRow | null) : null,
+    answersError: answersRes.error,
     hasTargets: !targetsRes.error && !!targetsRes.data,
     hasPlans: !plansRes.error && !!plansRes.data,
-    hasCompletedPaywall: !answersRes.error && !!answers?.paywall_completed_at,
-    lastOnboardingStep: !answersRes.error ? (answers?.last_onboarding_step ?? null) : null,
-  };
+    hasPaywallCompletion: hasPricingDecision || hasPaidSubscription,
+  });
 }

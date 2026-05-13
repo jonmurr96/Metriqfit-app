@@ -55,6 +55,9 @@ export const FloatingLabelInput = forwardRef<TextInput, FloatingLabelInputProps>
     const shadowOpacity = isFocused ? 0.3 : 0;
 
     const effectiveSecureTextEntry = isPassword ? !showPassword : secureTextEntry;
+    const effectiveTextContentType = isPassword
+      ? inputProps.textContentType ?? 'none'
+      : inputProps.textContentType;
 
     return (
       <View style={styles.container}>
@@ -107,7 +110,7 @@ export const FloatingLabelInput = forwardRef<TextInput, FloatingLabelInputProps>
             onFocus={handleFocus}
             onBlur={handleBlur}
             secureTextEntry={effectiveSecureTextEntry}
-            textContentType={isPassword ? 'none' : inputProps.textContentType}
+            textContentType={effectiveTextContentType}
             placeholderTextColor="rgba(255, 255, 255, 0.2)"
             style={[
               styles.input,

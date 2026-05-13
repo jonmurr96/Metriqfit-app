@@ -82,7 +82,7 @@ export default function SubscriptionScreen() {
             helper: billingPeriod === 'annual' ? 'Best value for daily AI coaching' : 'AI-first coaching with no limits',
             badge: 'Best for results',
             trialLabel: highlightedPackages.elite?.trial_days ? `${highlightedPackages.elite.trial_days}-day free trial` : '7-day free trial',
-            features: ['Unlimited AI coach, scans, and plan regenerations', 'Menu scan, recipe import, grocery planner, pantry', 'Prep auto-adjust and highest-touch personalization'],
+            features: ['Unlimited AI coach, scans, and plan regenerations', 'Menu scan, recipe import, and advanced nutrition tools', 'Prep auto-adjust and highest-touch personalization'],
             packageId: highlightedPackages.elite?.id || (billingPeriod === 'annual' ? 'elite_annual' : 'elite_monthly'),
         },
     ];

@@ -122,5 +122,84 @@ export const QUICK_ADD_ACTIONS = [
   },
 ] as const;
 
-export type QuickAddAction = typeof QUICK_ADD_ACTIONS[number];
+export const PROGRESS_QUICK_ADD_ACTIONS = [
+  {
+    id: 'log_weight',
+    label: 'Log Weight',
+    description: 'Record your current weight',
+    icon: 'scale-outline',
+    route: '/log-weight-sheet',
+    isModal: true,
+    requiredTier: 'free',
+  },
+  {
+    id: 'progress_checkin',
+    label: 'Progress Check-in',
+    description: 'Add body metrics and photos',
+    icon: 'body-outline',
+    route: '/check-in',
+    isModal: false,
+    requiredTier: 'free',
+  },
+  {
+    id: 'progress_photos',
+    label: 'Body Photos',
+    description: 'Review or compare check-ins',
+    icon: 'camera-outline',
+    route: '/(tabs)/progress/photos',
+    requiredTier: 'free',
+  },
+  {
+    id: 'start_workout',
+    label: 'Start Workout',
+    description: 'Begin or resume workout',
+    icon: 'barbell',
+    route: '/(tabs)/workout',
+    requiredTier: 'free',
+  },
+  {
+    id: 'quick_add_food',
+    label: 'Log Food',
+    description: 'Search and add a meal',
+    icon: 'restaurant-outline',
+    route: '/(tabs)/nutrition/food-search',
+    requiredTier: 'free',
+  },
+  {
+    id: 'scan_meal_photo',
+    label: 'Scan Meal',
+    description: 'AI-powered food recognition',
+    icon: 'camera-outline',
+    route: '/(tabs)/nutrition/food-camera',
+    requiredTier: 'free',
+  },
+  {
+    id: 'log_water',
+    label: 'Log Water',
+    description: 'Track hydration',
+    icon: 'water-outline',
+    route: '/log-water-sheet',
+    isModal: true,
+    requiredTier: 'free',
+  },
+  {
+    id: 'log_steps',
+    label: 'Log Steps',
+    description: 'Record daily movement',
+    icon: 'walk-outline',
+    route: '/log-steps-sheet',
+    isModal: true,
+    requiredTier: 'free',
+  },
+  {
+    id: 'weekly_review',
+    label: 'Weekly Review',
+    description: 'Open the weekly scorecard',
+    icon: 'calendar-outline',
+    route: '/(tabs)/progress/weekly-review',
+    requiredTier: 'free',
+  },
+] as const;
+
+export type QuickAddAction = typeof QUICK_ADD_ACTIONS[number] | typeof PROGRESS_QUICK_ADD_ACTIONS[number];
 export type QuickAddActionId = QuickAddAction['id'];

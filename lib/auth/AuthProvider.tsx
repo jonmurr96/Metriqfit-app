@@ -46,11 +46,6 @@ const oauthAvailability = {
   apple: parseBooleanEnv(process.env.EXPO_PUBLIC_AUTH_APPLE_ENABLED, false),
 };
 
-type SignUpResult = {
-  data: { user: User | null; session: Session | null } | null;
-  error: AuthError | null;
-};
-
 const makeAuthError = (message: string, status = 500): AuthError =>
   ({
     message,
@@ -178,65 +173,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     };
   }, [user?.id]);
 
-  const signUpWithDatabaseFallback = useCallback(async (email: string, password: string): Promise<SignUpResult> => {
-    const { data: rpcData, error: rpcError } = await supabase.rpc('admin_create_email_user', {
-      p_email: email,
-      p_password: password,
-    });
-
-    if (rpcError) {
-      return {
-        data: null,
-        error: makeAuthError(rpcError.message || 'Account creation is temporarily unavailable. Please try again in a moment.'),
-      };
-    }
-
-    const payload = (rpcData ?? {}) as { ok?: boolean; error?: string };
-
-    if (!payload.ok) {
-      if (payload.error === 'User already exists') {
-        const { data: existingUserData, error: existingUserError } = await supabase.auth.signInWithPassword({
-          email,
-          password,
-        });
-
-        if (!existingUserError) {
-          return {
-            data: existingUserData,
-            error: null,
-          };
-        }
-
-        return {
-          data: null,
-          error: makeAuthError('User already registered', 400),
-        };
-      }
-
-      return {
-        data: null,
-        error: makeAuthError(payload.error || 'Failed to create account'),
-      };
-    }
-
-    const { data: signInData, error: signInError } = await supabase.auth.signInWithPassword({
-      email,
-      password,
-    });
-
-    if (signInError) {
-      return {
-        data: null,
-        error: signInError,
-      };
-    }
-
-    return {
-      data: signInData,
-      error: null,
-    };
-  }, []);
-
   const signUp = useCallback(async (email: string, password: string) => {
     if (!isSupabaseConfigured) {
       return {
@@ -255,22 +191,28 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         return { data, error };
       }
 
-      console.warn('[Auth] Falling back to admin_create_email_user after signUp failure', {
+      console.warn('[Auth] Supabase signUp failed with a recoverable backend error', {
         email,
         status: error.status,
         message: error.message,
       });
 
-      return signUpWithDatabaseFallback(email, password);
+      return {
+        data: null,
+        error: makeAuthError('Account creation is temporarily unavailable. Please try again in a moment.', error.status || 500),
+      };
     } catch (err: any) {
       if (isRecoverableSignUpError(err)) {
-        console.warn('[Auth] Falling back to admin_create_email_user after thrown signUp error', {
+        console.warn('[Auth] Supabase signUp threw a recoverable backend error', {
           email,
           status: err?.status,
           message: err?.message,
         });
 
-        return signUpWithDatabaseFallback(email, password);
+        return {
+          data: null,
+          error: makeAuthError('Account creation is temporarily unavailable. Please try again in a moment.', err?.status || 500),
+        };
       }
 
       return {
@@ -278,7 +220,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         error: makeAuthError(err.message || 'Failed to sign up'),
       };
     }
-  }, [signUpWithDatabaseFallback]);
+  }, []);
 
   const signIn = useCallback(async (email: string, password: string) => {
     if (!isSupabaseConfigured) {

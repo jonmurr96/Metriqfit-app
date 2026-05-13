@@ -16,6 +16,11 @@ import {
   type NotificationPreferences,
 } from '../lib/preferences';
 import { DEFAULT_MEAL_TIMES, type MealTimes } from '../services/mealTimesService';
+import { calculateTargets, type GoalType, type TargetInput } from '../lib/targets/calculateTargets';
+import { nutritionDashboardKeys } from './useNutritionDashboard';
+import { progressBodyKeys } from './useProgressBody';
+import { progressMetricKeys } from './useProgressMetrics';
+import { addSentryBreadcrumb, captureSentryIssue, withSentrySpan } from '../lib/sentry';
 
 // Types
 export interface Profile {
@@ -46,6 +51,9 @@ export interface UserTargets {
   fat_g: number;
   water_ml: number;
   fiber_g: number | null;
+  computation_method?: string;
+  day_type_targets_json?: Json | null;
+  target_diagnostics_json?: Json | null;
   created_at: string;
   updated_at: string;
 }
@@ -108,6 +116,105 @@ function toProfile(row: Database['public']['Tables']['profiles']['Row']): Profil
   };
 }
 
+const GOAL_TYPES = new Set<GoalType>([
+  'lose_weight',
+  'build_muscle',
+  'get_fitter',
+  'gain_weight',
+  'maintain_weight',
+  'recomp',
+  'increase_endurance',
+  'general_fitness',
+]);
+
+function numberFromAnswer(value: unknown): number | null {
+  if (typeof value === 'number' && Number.isFinite(value)) return value;
+  if (typeof value === 'string') {
+    const parsed = Number.parseFloat(value);
+    return Number.isFinite(parsed) ? parsed : null;
+  }
+  return null;
+}
+
+function stringFromAnswer<T extends string>(value: unknown, allowed: readonly T[]): T | null {
+  return typeof value === 'string' && (allowed as readonly string[]).includes(value) ? value as T : null;
+}
+
+function inferGoalType(previousGoal: unknown, currentWeightLb: number, targetWeightLb: number): GoalType {
+  const previous = typeof previousGoal === 'string' && GOAL_TYPES.has(previousGoal as GoalType)
+    ? previousGoal as GoalType
+    : null;
+  const direction = targetWeightLb > currentWeightLb ? 'gain' : 'lose';
+
+  if (direction === 'gain') {
+    return previous === 'build_muscle' || previous === 'gain_weight' ? previous : 'gain_weight';
+  }
+
+  return previous === 'recomp' || previous === 'lose_weight' ? previous : 'lose_weight';
+}
+
+function buildTargetInputFromAnswers(answers: Record<string, unknown>): TargetInput | null {
+  const sex = stringFromAnswer(answers.sex, ['male', 'female'] as const);
+  const dob = typeof answers.dob === 'string' ? answers.dob : null;
+  const heightFt = numberFromAnswer(answers.height_ft);
+  const heightIn = numberFromAnswer(answers.height_in);
+  const currentWeightLb = numberFromAnswer(answers.current_weight_lb);
+  const goalType = stringFromAnswer(answers.goal_type, Array.from(GOAL_TYPES) as GoalType[]);
+  const activityLevel = stringFromAnswer(answers.activity_level, ['sedentary', 'lightly_active', 'moderately_active', 'very_active'] as const);
+  const trainingDays = numberFromAnswer(answers.training_days_per_week);
+  const minutesPerWorkout = typeof answers.minutes_per_workout === 'string' || typeof answers.minutes_per_workout === 'number'
+    ? String(answers.minutes_per_workout)
+    : null;
+  const experienceLevel = stringFromAnswer(answers.experience_level, ['beginner', 'intermediate', 'advanced'] as const);
+
+  if (!sex || !dob || heightFt == null || heightIn == null || currentWeightLb == null || !goalType || !activityLevel || trainingDays == null || !minutesPerWorkout || !experienceLevel) {
+    return null;
+  }
+
+  return {
+    sex,
+    dob,
+    height_ft: heightFt,
+    height_in: heightIn,
+    current_weight_lb: currentWeightLb,
+    goal_type: goalType,
+    activity_level: activityLevel,
+    training_days_per_week: trainingDays,
+    minutes_per_workout: minutesPerWorkout,
+    experience_level: experienceLevel,
+    avg_steps: numberFromAnswer(answers.avg_steps),
+    target_weight_lb: numberFromAnswer(answers.target_weight_lb),
+    target_date: typeof answers.target_date === 'string' ? answers.target_date : null,
+    dietary_preference: typeof answers.dietary_preference === 'string' ? answers.dietary_preference as TargetInput['dietary_preference'] : null,
+    carb_tolerance: typeof answers.carb_tolerance === 'string' ? answers.carb_tolerance as TargetInput['carb_tolerance'] : null,
+  };
+}
+
+async function upsertTargetsFromAnswers(userId: string, answers: Record<string, unknown>): Promise<void> {
+  const targetInput = buildTargetInputFromAnswers(answers);
+  if (!targetInput) {
+    console.warn('[updateWeightGoal] Skipping target recalculation because onboarding answers are incomplete.');
+    return;
+  }
+
+  const targets = calculateTargets(targetInput);
+  const { error } = await supabase
+    .from('user_targets')
+    .upsert({
+      user_id: userId,
+      calories: targets.calories,
+      protein_g: targets.protein_g,
+      carbs_g: targets.carbs_g,
+      fat_g: targets.fat_g,
+      fiber_g: targets.fiber_g,
+      water_ml: targets.water_ml,
+      computation_method: targets.computation_method,
+      updated_at: new Date().toISOString(),
+    } satisfies Database['public']['Tables']['user_targets']['Insert'], { onConflict: 'user_id' });
+
+  if (error) throw error;
+}
+
 /**
  * Get user profile
  */
@@ -166,6 +273,65 @@ export async function getOnboardingAnswers(userId: string): Promise<OnboardingAn
 }
 
 /**
+ * Set a new weight goal and reset the goal baseline to the user's current weight.
+ */
+export async function updateWeightGoal(
+  userId: string,
+  currentWeightLb: number,
+  targetWeightLb: number,
+): Promise<OnboardingAnswersRecord> {
+  return withSentrySpan('Update weight goal', 'user.weight_goal.update', async () => {
+    addSentryBreadcrumb('Weight goal update started', 'user.weight_goal', {
+      userId,
+      currentWeightLb,
+      targetWeightLb,
+    });
+
+    const existing = await getOnboardingAnswers(userId);
+    const previousAnswers = existing?.answers && typeof existing.answers === 'object'
+      ? existing.answers as Record<string, unknown>
+      : {};
+    const nextAnswers = {
+      ...previousAnswers,
+      current_weight_lb: currentWeightLb,
+      goal_type: inferGoalType(previousAnswers.goal_type, currentWeightLb, targetWeightLb),
+      target_weight_enabled: true,
+      target_weight_lb: targetWeightLb,
+      target_date: null,
+    };
+
+    await upsertTargetsFromAnswers(userId, nextAnswers);
+
+    const { data, error } = await supabase
+      .from('onboarding_answers')
+      .upsert({
+        user_id: userId,
+        answers: nextAnswers as Database['public']['Tables']['onboarding_answers']['Insert']['answers'],
+        completed_at: existing?.completed_at ?? new Date().toISOString(),
+        updated_at: new Date().toISOString(),
+      } satisfies Database['public']['Tables']['onboarding_answers']['Insert'], { onConflict: 'user_id' })
+      .select('*')
+      .single();
+
+    if (error) {
+      captureSentryIssue(error, {
+        category: 'backend_failure',
+        severity: 'error',
+        operation: 'user.weight_goal.onboarding_upsert',
+        userId,
+      });
+      throw error;
+    }
+    addSentryBreadcrumb('Weight goal update completed', 'user.weight_goal', {
+      userId,
+      currentWeightLb,
+      targetWeightLb,
+    });
+    return data as OnboardingAnswersRecord;
+  });
+}
+
+/**
  * Log a measurement
  */
 export async function logMeasurement(
@@ -181,35 +347,62 @@ export async function logMeasurement(
   },
   notes?: string
 ): Promise<Measurement> {
-  const { data, error } = await supabase
-    .from('user_measurements')
-    .insert({
-      user_id: userId,
-      weight_kg: weightKg,
-      body_fat_percentage: bodyFatPct,
-      waist_cm: measurements?.waist,
-      chest_cm: measurements?.chest,
-      arms_cm: measurements?.arms,
-      thighs_cm: measurements?.thighs,
-      hips_cm: measurements?.hips,
-      logged_at: new Date().toISOString(),
-      notes,
-    } satisfies Database['public']['Tables']['user_measurements']['Insert'])
-    .select()
-    .single();
+  return withSentrySpan('Log weight measurement', 'user.measurement.log', async () => {
+    addSentryBreadcrumb('Weight measurement logging started', 'user.measurement', {
+      userId,
+      weightKg,
+    });
 
-  if (error) throw error;
+    const { data, error } = await supabase
+      .from('user_measurements')
+      .insert({
+        user_id: userId,
+        weight_kg: weightKg,
+        body_fat_percentage: bodyFatPct,
+        waist_cm: measurements?.waist,
+        chest_cm: measurements?.chest,
+        arms_cm: measurements?.arms,
+        thighs_cm: measurements?.thighs,
+        hips_cm: measurements?.hips,
+        logged_at: new Date().toISOString(),
+        notes,
+      } satisfies Database['public']['Tables']['user_measurements']['Insert'])
+      .select()
+      .single();
 
-  // Also update current weight in profile
-  await supabase
-    .from('profiles')
-    .update({
-      current_weight_kg: weightKg,
-      updated_at: new Date().toISOString()
-    } satisfies Database['public']['Tables']['profiles']['Update'])
-    .eq('id', userId);
+    if (error) {
+      captureSentryIssue(error, {
+        category: 'backend_failure',
+        severity: 'error',
+        operation: 'user.measurement.insert',
+        userId,
+      });
+      throw error;
+    }
 
-  return data!;
+    const { error: profileError } = await supabase
+      .from('profiles')
+      .update({
+        current_weight_kg: weightKg,
+        updated_at: new Date().toISOString()
+      } satisfies Database['public']['Tables']['profiles']['Update'])
+      .eq('id', userId);
+
+    if (profileError) {
+      captureSentryIssue(profileError, {
+        category: 'backend_failure',
+        severity: 'error',
+        operation: 'user.measurement.profile_update',
+        userId,
+      });
+      throw profileError;
+    }
+    addSentryBreadcrumb('Weight measurement logged', 'user.measurement', {
+      userId,
+      weightKg,
+    });
+    return data!;
+  });
 }
 
 /**
@@ -303,27 +496,6 @@ export async function getUserStreak(userId: string): Promise<number> {
     }
   });
 
-  let streak = 0;
-  const checkDate = new Date();
-
-  // Check today
-  if (activityDates.has(checkDate.toDateString())) {
-    streak++;
-  } else {
-    // If no activity today, check if we had activity yesterday (streak still alive but not incremented for today yet? 
-    // Usually streak counts consecutive days up to yesterday + today if done.
-    // If I haven't done anything today, is my streak 0? checking logic from typical apps:
-    // If I worked out verify yesterday, streak is X. If I work out today, streak becomes X+1.
-    // However, for simplicity let's count backwards from today. If today is missing, check yesterday. 
-    // If yesterday is missing, streak is 0. 
-    // Actually typically current streak includes today if done, or ends yesterday.
-  }
-
-  // Let's count backwards from today (or yesterday if today is empty)
-  // But strictly, let's count backwards from yesterday, and add 1 if today is present?
-  // Or just iterate backwards from today.
-
-  // Simple iteration backwards
   let current = new Date();
   let streakCount = 0;
 
@@ -424,6 +596,49 @@ export function useUpdateProfile() {
 }
 
 /**
+ * Update weight goal mutation
+ */
+export function useUpdateWeightGoal() {
+  const { user } = useAuth();
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: ({
+      currentWeightLb,
+      targetWeightLb,
+    }: {
+      currentWeightLb: number;
+      targetWeightLb: number;
+    }) => updateWeightGoal(user!.id, currentWeightLb, targetWeightLb),
+    onSuccess: async () => {
+      await Promise.all([
+        queryClient.invalidateQueries({
+          queryKey: userKeys.onboarding(user!.id),
+        }),
+        queryClient.invalidateQueries({
+          queryKey: userKeys.profile(user!.id),
+        }),
+        queryClient.invalidateQueries({
+        queryKey: userKeys.targets(user!.id),
+        }),
+        queryClient.invalidateQueries({
+          queryKey: nutritionDashboardKeys.all,
+        }),
+        queryClient.invalidateQueries({
+          queryKey: ['plans'],
+        }),
+        queryClient.invalidateQueries({
+          queryKey: progressMetricKeys.all,
+        }),
+        queryClient.invalidateQueries({
+          queryKey: progressBodyKeys.all,
+        }),
+      ]);
+    },
+  });
+}
+
+/**
  * Log weight measurement mutation
  */
 export function useLogMeasurement() {
@@ -448,13 +663,31 @@ export function useLogMeasurement() {
       };
       notes?: string;
     }) => logMeasurement(user!.id, weightKg, bodyFatPct, measurements, notes),
-    onSuccess: () => {
-      queryClient.invalidateQueries({
-        queryKey: userKeys.measurements(user!.id),
-      });
-      queryClient.invalidateQueries({
-        queryKey: userKeys.profile(user!.id),
-      });
+    onSuccess: async (_measurement, variables) => {
+      queryClient.setQueryData<Profile | null>(userKeys.profile(user!.id), (current) => (
+        current
+          ? {
+              ...current,
+              current_weight_kg: variables.weightKg,
+              updated_at: new Date().toISOString(),
+            }
+          : current
+      ));
+
+      await Promise.all([
+        queryClient.invalidateQueries({
+          queryKey: userKeys.measurements(user!.id),
+        }),
+        queryClient.invalidateQueries({
+          queryKey: userKeys.profile(user!.id),
+        }),
+        queryClient.invalidateQueries({
+          queryKey: progressMetricKeys.all,
+        }),
+        queryClient.invalidateQueries({
+          queryKey: progressBodyKeys.all,
+        }),
+      ]);
     },
   });
 }

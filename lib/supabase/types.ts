@@ -2099,6 +2099,8 @@ export interface Database {
           fiber_g: number | null
           water_ml: number
           computation_method: string
+          day_type_targets_json: Json | null
+          target_diagnostics_json: Json | null
           created_at: string
           updated_at: string
         }
@@ -2112,6 +2114,8 @@ export interface Database {
           fiber_g?: number | null
           water_ml?: number
           computation_method?: string
+          day_type_targets_json?: Json | null
+          target_diagnostics_json?: Json | null
           created_at?: string
           updated_at?: string
         }
@@ -2125,6 +2129,8 @@ export interface Database {
           fiber_g?: number | null
           water_ml?: number
           computation_method?: string
+          day_type_targets_json?: Json | null
+          target_diagnostics_json?: Json | null
           created_at?: string
           updated_at?: string
         }

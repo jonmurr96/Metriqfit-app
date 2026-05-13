@@ -355,6 +355,16 @@ function classifyIntent(message: string): IntentClassification {
     };
   }
 
+  if (/\b(log|add|track|save|record|set|change|switch|update|turn on|turn off|enable|disable|delete|remove|mark|complete|apply)\b/.test(lower)) {
+    return {
+      mode: "app_mutation",
+      confidence: 0.84,
+      requiresWeb: false,
+      requiresApproval: /\b(plan|target|macro|delete|remove|prep|exercise|workout)\b/.test(lower),
+      requiresClarification: /\b(log (my )?(meal|breakfast|lunch|dinner|snack)|change (my )?plan|add .*exercise)\b/.test(lower),
+    };
+  }
+
   if (/\b(remember|i prefer|i like|i avoid|i can't|i cannot|allergic|injur|i will|i'm going to|i am going to)\b/.test(lower)) {
     return {
       mode: "memory_update",
@@ -372,16 +382,6 @@ function classifyIntent(message: string): IntentClassification {
       requiresWeb: true,
       requiresApproval: false,
       requiresClarification: false,
-    };
-  }
-
-  if (/\b(log|add|track|save|set|change|switch|update|turn on|turn off|enable|disable|delete|remove|mark|complete|apply)\b/.test(lower)) {
-    return {
-      mode: "app_mutation",
-      confidence: 0.82,
-      requiresWeb: false,
-      requiresApproval: /\b(plan|target|macro|delete|remove|prep)\b/.test(lower),
-      requiresClarification: /\b(log (my )?(meal|breakfast|lunch|dinner|snack)|change (my )?plan)\b/.test(lower),
     };
   }
 
@@ -421,7 +421,7 @@ function classifyIntent(message: string): IntentClassification {
 
 function parseWaterLogAction(message: string): DetectedAction | null {
   const lower = message.toLowerCase();
-  if (!/\b(water|hydrate|hydration)\b/.test(lower) || !/\b(log|add|track)\b/.test(lower)) {
+  if (!/\b(water|hydrate|hydration)\b/.test(lower) || !/\b(log|add|track|record|drank|drink|save)\b/.test(lower)) {
     return null;
   }
 
@@ -451,27 +451,37 @@ function parseWaterLogAction(message: string): DetectedAction | null {
 
 function parseWeightLogAction(message: string, grounding: GroundingData): DetectedAction | null {
   const lower = message.toLowerCase();
-  if (!/\b(weight|weigh|scale)\b/.test(lower) || !/\b(log|add|track|record)\b/.test(lower)) {
+  if (!/\b(weight|weigh|scale)\b/.test(lower) || !/\b(log|add|track|record|set|change|update|save)\b/.test(lower)) {
     return null;
   }
 
-  const match = lower.match(/(\d+(?:\.\d+)?)\s*(lb|lbs|pounds?|kg|kgs|kilograms?)/);
+  const match = lower.match(/(\d+(?:\.\d+)?)\s*(lb|lbs|pounds?|kg|kgs|kilograms?)?\b/);
   if (!match) return null;
 
   const value = Number(match[1]);
-  const unit = match[2];
+  if (!Number.isFinite(value) || value <= 0) return null;
+
+  const explicitUnit = match[2];
+  const inferredUnit = grounding.profile?.unit_system === "metric" ? "kg" : "lb";
+  const unit = explicitUnit || inferredUnit;
   const weightKg = /^kg/.test(unit) || /^kilogram/.test(unit) ? value : value * 0.45359237;
+  if (weightKg < 25 || weightKg > 320) return null;
+  const displayWeight = grounding.profile?.unit_system === "metric"
+    ? `${round(weightKg, 1)}kg`
+    : `${round(weightKg / 0.45359237, 1)}lb`;
 
   return {
     toolName: "log_weight",
     riskLevel: "low",
     mutationLevel: "low",
     title: "Weight logged",
-    summary: `Log ${grounding.profile?.unit_system === "metric" ? `${round(weightKg, 1)}kg` : `${round(weightKg / 0.45359237, 1)}lb`} as a new measurement.`,
-    input: { weight_kg: round(weightKg, 2), original_text: message },
+    summary: `Log ${displayWeight} as a new current-weight measurement.`,
+    input: { weight_kg: round(weightKg, 2), display_weight: displayWeight, inferred_unit: explicitUnit ? null : inferredUnit, original_text: message },
     canAutoApply: true,
     affectedArea: "Weight log",
-    rationale: "This is a low-risk, explicit measurement entry.",
+    rationale: explicitUnit
+      ? "This is a low-risk, explicit measurement entry."
+      : `No unit was provided, so I used the user's ${inferredUnit === "kg" ? "metric" : "imperial"} unit preference.`,
   };
 }
 
@@ -482,21 +492,23 @@ async function parseFoodLogAction(
   const lower = message.toLowerCase();
   if (!/\b(log|add|track|save)\b/.test(lower)) return null;
   if (!/\b(breakfast|lunch|dinner|snack)\b/.test(lower)) return null;
-  if (!/\b(g|gram|grams)\b/.test(lower)) return null;
+  if (!/\b(g|gram|grams|oz|ounce|ounces)\b/.test(lower)) return null;
 
   const slotMatch = lower.match(/\b(breakfast|lunch|dinner|snack)\b/);
-  const gramsMatch = lower.match(/(\d+(?:\.\d+)?)\s*(g|gram|grams)\b/);
-  if (!slotMatch || !gramsMatch) return null;
+  const amountMatch = lower.match(/(\d+(?:\.\d+)?)\s*(g|gram|grams|oz|ounce|ounces)\b/);
+  if (!slotMatch || !amountMatch) return null;
 
   const slot = slotMatch[1] as "breakfast" | "lunch" | "dinner" | "snack";
-  const grams = Number(gramsMatch[1]);
+  const amount = Number(amountMatch[1]);
+  const unit = amountMatch[2];
+  const grams = /^oz|^ounce/.test(unit) ? Math.round(amount * 28.3495) : amount;
   if (!Number.isFinite(grams) || grams <= 0) return null;
 
   const cleaned = lower
     .replace(/\b(log|add|track|save)\b/g, " ")
     .replace(/\b(my|for|to|today|please)\b/g, " ")
     .replace(/\b(breakfast|lunch|dinner|snack)\b/g, " ")
-    .replace(/(\d+(?:\.\d+)?)\s*(g|gram|grams)\b/g, " ")
+    .replace(/(\d+(?:\.\d+)?)\s*(g|gram|grams|oz|ounce|ounces)\b/g, " ")
     .replace(/[^\w\s]/g, " ")
     .replace(/\s+/g, " ")
     .trim();
@@ -534,6 +546,8 @@ async function parseFoodLogAction(
       food_name: String(target.name),
       meal_slot: slot,
       grams,
+      original_amount: amount,
+      original_unit: unit,
     },
     canAutoApply: true,
     affectedArea: "Meal log",
@@ -797,8 +811,188 @@ async function parseWorkoutPlanAction(
   };
 }
 
+function workoutDaySearchToken(lower: string) {
+  const dayMatch = lower.match(/\b(push|pull|legs?|leg day|upper|lower|chest|back|shoulders?|arms?|glutes?|hamstrings?|quads?)\b/);
+  if (!dayMatch) return null;
+  const token = dayMatch[1];
+  if (token === "leg") return "legs";
+  if (token === "leg day") return "legs";
+  return token;
+}
+
+function cleanExerciseSearchTerm(message: string) {
+  const lower = message.toLowerCase();
+  return lower
+    .replace(/\b(can you|please|could you|would you|i want you to|help me)\b/g, " ")
+    .replace(/\b(add|insert|put|include)\b/g, " ")
+    .replace(/\b(an?|the|my|to|into|in|on|for)\b/g, " ")
+    .replace(/\b(workout|training|exercise|movement|plan|program|session|day|today|tomorrow|next)\b/g, " ")
+    .replace(/\b(push|pull|legs?|leg day|upper|lower|chest|back|shoulders?|arms?|glutes?|hamstrings?|quads?)\b/g, " ")
+    .replace(/\b\d+\s*(sets?|reps?)\b/g, " ")
+    .replace(/[^\w\s]/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+async function findWorkoutPlanDay(
+  supabase: ReturnType<typeof createClient>,
+  userId: string,
+  lower: string,
+) {
+  const { data: plan } = await (supabase as any)
+    .from("user_workout_plans")
+    .select("id")
+    .eq("user_id", userId)
+    .eq("is_active", true)
+    .order("updated_at", { ascending: false })
+    .limit(1)
+    .maybeSingle();
+
+  if (!plan?.id) return null;
+
+  if (/\b(today|tomorrow|next workout|next session)\b/.test(lower)) {
+    const targetDate = /\btomorrow\b/.test(lower)
+      ? new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString().split("T")[0]
+      : new Date().toISOString().split("T")[0];
+
+    let scheduleQuery = (supabase as any)
+      .from("user_workout_plan_schedule")
+      .select("id, plan_day_id, scheduled_date, plan_day:user_workout_plan_days(id, name, focus, day_number)")
+      .eq("user_id", userId)
+      .eq("plan_id", plan.id)
+      .eq("status", "planned")
+      .eq("session_type", "workout")
+      .gte("scheduled_date", targetDate)
+      .order("scheduled_date", { ascending: true })
+      .limit(1);
+
+    if (/\btomorrow\b/.test(lower)) {
+      scheduleQuery = scheduleQuery.eq("scheduled_date", targetDate);
+    }
+
+    const { data: schedule } = await scheduleQuery.maybeSingle();
+    if (schedule?.plan_day_id) {
+      const planDay = Array.isArray(schedule.plan_day) ? schedule.plan_day[0] : schedule.plan_day;
+      return {
+        id: schedule.plan_day_id,
+        name: planDay?.name || "scheduled workout",
+        focus: planDay?.focus || null,
+        day_number: planDay?.day_number ?? null,
+        scheduled_date: schedule.scheduled_date,
+      };
+    }
+  }
+
+  const dayToken = workoutDaySearchToken(lower);
+  if (!dayToken) return null;
+
+  const search = `%${dayToken}%`;
+  const { data: days } = await (supabase as any)
+    .from("user_workout_plan_days")
+    .select("id, name, focus, day_number")
+    .eq("plan_id", plan.id)
+    .or(`name.ilike.${search},focus.ilike.${search}`)
+    .order("day_number", { ascending: true })
+    .limit(3);
+
+  if (!Array.isArray(days) || days.length === 0) return null;
+  return days[0];
+}
+
+async function findExerciseByMessage(
+  supabase: ReturnType<typeof createClient>,
+  message: string,
+) {
+  const cleaned = cleanExerciseSearchTerm(message);
+  if (!cleaned || cleaned.length < 3) return null;
+
+  const searchTerms = [cleaned];
+  if (/\bcurls?\b/.test(cleaned)) searchTerms.push("curl");
+  if (/\bpush\s*ups?\b/.test(cleaned)) searchTerms.push("push");
+  if (/\bpull\s*ups?\b/.test(cleaned)) searchTerms.push("pull");
+  if (/\bbench\b/.test(cleaned)) searchTerms.push("bench");
+
+  for (const term of searchTerms) {
+    const search = `%${term}%`;
+    const { data: exercises } = await (supabase as any)
+      .from("exercises")
+      .select("id, name, category, primary_muscle, target_muscle")
+      .ilike("name", search)
+      .eq("is_reference_only", false)
+      .order("name", { ascending: true })
+      .limit(5);
+
+    if (Array.isArray(exercises) && exercises.length > 0) {
+      const exact = exercises.find((exercise: Record<string, unknown>) => String(exercise.name || "").toLowerCase() === term);
+      return exact || exercises[0];
+    }
+  }
+
+  return null;
+}
+
+async function parseWorkoutExerciseAddAction(
+  supabase: ReturnType<typeof createClient>,
+  userId: string,
+  message: string,
+): Promise<DetectedAction | null> {
+  const lower = message.toLowerCase();
+  if (!/\b(add|insert|put|include)\b/.test(lower)) return null;
+  if (!/\b(exercise|movement|workout|training|plan|program|day|session)\b/.test(lower)) return null;
+
+  const [planDay, exercise] = await Promise.all([
+    findWorkoutPlanDay(supabase, userId, lower),
+    findExerciseByMessage(supabase, message),
+  ]);
+
+  if (!planDay?.id || !exercise?.id) return null;
+
+  const setsMatch = lower.match(/(\d+)\s*sets?/);
+  const repsMatch = lower.match(/(\d+)(?:\s*-\s*(\d+))?\s*reps?/);
+  const sets = setsMatch ? Number(setsMatch[1]) : 3;
+  const repsMin = repsMatch ? Number(repsMatch[1]) : 8;
+  const repsMax = repsMatch ? Number(repsMatch[2] || repsMatch[1]) : 12;
+
+  return {
+    toolName: "update_workout_plan",
+    riskLevel: "medium",
+    mutationLevel: "medium",
+    title: "Exercise add",
+    summary: `Add ${String(exercise.name)} to ${String(planDay.name || "your workout day")}.`,
+    input: {
+      operation: "add_exercise",
+      plan_day_id: String(planDay.id),
+      plan_day_name: String(planDay.name || "Workout day"),
+      exercise_id: String(exercise.id),
+      exercise_name: String(exercise.name),
+      sets_target: Number.isFinite(sets) && sets > 0 ? sets : 3,
+      reps_min: Number.isFinite(repsMin) && repsMin > 0 ? repsMin : 8,
+      reps_max: Number.isFinite(repsMax) && repsMax > 0 ? repsMax : 12,
+      rest_seconds: 90,
+      original_text: message,
+    },
+    approveLabel: "Add exercise",
+    rejectLabel: "Keep plan",
+    canAutoApply: false,
+    affectedArea: "Workout plan",
+    rationale: "Adding exercises changes plan structure, so it should be reviewed before applying.",
+  };
+}
+
 function parseClarificationRequest(message: string) {
   const lower = message.toLowerCase();
+  if (/\b(add|insert|put|include)\b/.test(lower) && /\b(exercise|movement|workout|training|plan|program|day|session)\b/.test(lower)) {
+    return buildClarificationAttachment(
+      "I need the exercise and target day",
+      "I can add an exercise to your plan, but I need the exercise name and where it should go, like push day, pull day, leg day, today, or tomorrow.",
+      [
+        { label: "Add to push day", prompt: "Add dumbbell lateral raises to my push day." },
+        { label: "Add to pull day", prompt: "Add dumbbell curls to my pull day." },
+        { label: "Add tomorrow", prompt: "Add calf raises to tomorrow's workout." },
+      ],
+    );
+  }
+
   if (/\b(log|add|track)\b/.test(lower) && /\b(breakfast|lunch|dinner|snack|meal|food)\b/.test(lower)) {
     return buildClarificationAttachment(
       "I need one more detail",
@@ -839,6 +1033,7 @@ async function detectAction(
     parseUnitSettingAction(message),
     parsePrepSettingsAction(message),
     parseMealPlanTargetAction(supabase, userId, message),
+    parseWorkoutExerciseAddAction(supabase, userId, message),
     parseWorkoutPlanAction(supabase, userId, message),
   ];
 
@@ -1220,9 +1415,19 @@ async function callOpenAIWebSearch(
 function buildDeterministicFallback(message: string, grounding: GroundingData, intent: IntentClassification) {
   const lower = message.toLowerCase().trim();
   const name = grounding.profile?.first_name?.trim();
+  const proteinRemaining = grounding.targets
+    ? max0(grounding.targets.protein_g - grounding.todayNutrition.protein)
+    : null;
+  const caloriesRemaining = grounding.targets
+    ? max0(grounding.targets.calories - grounding.todayNutrition.calories)
+    : null;
 
   if (/^\s*(hi|hello|hey|yo|what's up|good morning|good afternoon|good evening)[!.?\s]*$/i.test(message)) {
     return `${name ? `Hey ${name}.` : "Hey."} I'm here and ready. Ask me anything general, or ask about your plan, today's numbers, a change you want to make, or something current that needs live search.`;
+  }
+
+  if (intent.mode === "unsafe_or_restricted") {
+    return "I can't help with dangerous dieting, self-harm, steroid use, or medical treatment decisions. I can help with safer training, nutrition structure, recovery, and when to involve a qualified clinician.";
   }
 
   if (/\bhow many calories\b/.test(lower) && /\bprotein\b/.test(lower)) {
@@ -1241,9 +1446,56 @@ function buildDeterministicFallback(message: string, grounding: GroundingData, i
     return "Alcohol has 7 calories per gram.";
   }
 
+  if (/\b(best|good|clean|healthy|ideal|top)\b/.test(lower) && /\bprotein|proteins\b/.test(lower)) {
+    return [
+      "The best protein is the one that gives you a lot of high-quality protein for the calories and fits your diet consistently.",
+      "",
+      "Top picks: chicken or turkey breast, fish, eggs or egg whites, lean beef, Greek yogurt or cottage cheese, whey/casein protein, tofu, tempeh, edamame, and lentils or beans if you are plant-based.",
+      "",
+      "For muscle and body composition, aim for roughly 25-45g protein per meal, prioritize complete proteins or varied plant proteins, and choose lower-fat options when calories are tight.",
+      proteinRemaining && proteinRemaining > 0
+        ? `Based on your current targets, you still have about ${proteinRemaining}g protein left today. A simple option would be chicken breast, Greek yogurt, tuna, egg whites, whey, tofu, or tempeh depending on what you prefer.`
+        : null,
+    ].filter(Boolean).join("\n");
+  }
+
+  if (/\b(protein gap|hit (my )?protein|more protein|close.*protein)\b/.test(lower)) {
+    if (proteinRemaining !== null) {
+      if (proteinRemaining <= 0) {
+        return "You are already at or above your protein target today. Keep the rest of the day balanced and avoid forcing extra protein unless you are genuinely hungry.";
+      }
+
+      return [
+        `You have about ${proteinRemaining}g protein left today${caloriesRemaining !== null ? ` with about ${caloriesRemaining} kcal left` : ""}.`,
+        "",
+        "Clean ways to close it: Greek yogurt, whey or casein, chicken breast, tuna, turkey, egg whites, cottage cheese, tofu, tempeh, or lean beef.",
+        proteinRemaining <= 30
+          ? "Since the gap is small, one protein shake, a Greek yogurt, or a lean single-serving protein should cover it."
+          : "Since the gap is bigger, split it across two feedings so digestion and meal quality stay better.",
+      ].join("\n");
+    }
+
+    return "Clean ways to add protein: Greek yogurt, whey or casein, chicken breast, tuna, turkey, egg whites, cottage cheese, tofu, tempeh, lean beef, or edamame. Use the option that fits your calories and preferences best.";
+  }
+
+  if (/\b(what should i eat|what can i eat|meal idea|food idea|hit my macros|hit macros)\b/.test(lower)) {
+    if (grounding.targets) {
+      const carbsRemaining = max0(grounding.targets.carbs_g - grounding.todayNutrition.carbs);
+      const fatRemaining = max0(grounding.targets.fat_g - grounding.todayNutrition.fat);
+      return [
+        `For today, you have about ${caloriesRemaining} kcal, ${proteinRemaining}g protein, ${carbsRemaining}g carbs, and ${fatRemaining}g fat remaining.`,
+        "",
+        "A solid macro-balanced meal: lean protein plus a carb plus a small fat source. Example: chicken or tofu, rice or potatoes, vegetables, and olive oil or avocado.",
+        "If protein is the main gap, choose a leaner protein first and add carbs/fats only as needed.",
+      ].join("\n");
+    }
+
+    return "A reliable meal structure is lean protein plus a carb plus vegetables plus a small fat source. Examples: chicken/rice/vegetables, Greek yogurt/fruit, eggs/potatoes, tuna/rice cakes, or tofu/rice/vegetables.";
+  }
+
   if (intent.mode === "coaching_qa" || intent.mode === "app_read") {
     if (grounding.targets) {
-      return `You have ${max0(grounding.targets.calories - grounding.todayNutrition.calories)} kcal and ${max0(grounding.targets.protein_g - grounding.todayNutrition.protein)}g protein left today. ${grounding.todayWorkout.completed ? "Today's workout is already logged." : "No workout is logged yet today."}`;
+      return `You have ${caloriesRemaining} kcal and ${proteinRemaining}g protein left today. ${grounding.todayWorkout.completed ? "Today's workout is already logged." : "No workout is logged yet today."}`;
     }
     return "I can help, but I don't have your full targets available yet. If you log today's meal or open your targets, I can ground the next answer better.";
   }
@@ -1252,7 +1504,7 @@ function buildDeterministicFallback(message: string, grounding: GroundingData, i
     return "I couldn't reach live web search right now. Retry in a moment and I'll pull fresh context instead of guessing.";
   }
 
-  return "I can answer that, but I couldn't reach live reasoning right now. Retry in a moment, or ask me about your app data and I'll stay grounded in what MetriqFit has stored.";
+  return "I couldn't reach live reasoning right now, but I can still help with basic fitness and nutrition guidance. Try asking a specific nutrition, training, recovery, or app-data question and I'll answer from the built-in coach logic until the live model is available again.";
 }
 
 async function getOrCreateThread(
@@ -1798,6 +2050,75 @@ async function executeTool(
   }
 
   if (action.toolName === "update_workout_plan") {
+    if (action.input.operation === "add_exercise") {
+      const planDayId = String(action.input.plan_day_id || "");
+      const exerciseId = String(action.input.exercise_id || "");
+      const exerciseName = String(action.input.exercise_name || "exercise");
+
+      if (!planDayId || !exerciseId) {
+        throw new Error("Missing workout day or exercise for plan update");
+      }
+
+      const { data: lastExercise, error: orderError } = await (supabase as any)
+        .from("user_workout_plan_exercises")
+        .select("order_index")
+        .eq("plan_day_id", planDayId)
+        .order("order_index", { ascending: false })
+        .limit(1)
+        .maybeSingle();
+
+      if (orderError) throw orderError;
+
+      const nextOrderIndex = Number(lastExercise?.order_index || 0) + 1;
+      const setsTarget = Number(action.input.sets_target || 3);
+      const repsMin = Number(action.input.reps_min || 8);
+      const repsMax = Number(action.input.reps_max || 12);
+      const restSeconds = Number(action.input.rest_seconds || 90);
+
+      const { data, error } = await (supabase as any)
+        .from("user_workout_plan_exercises")
+        .insert({
+          plan_day_id: planDayId,
+          exercise_id: exerciseId,
+          order_index: nextOrderIndex,
+          sets_target: Number.isFinite(setsTarget) ? setsTarget : 3,
+          reps_min: Number.isFinite(repsMin) ? repsMin : 8,
+          reps_max: Number.isFinite(repsMax) ? repsMax : 12,
+          rest_seconds: Number.isFinite(restSeconds) ? restSeconds : 90,
+          is_user_modified: true,
+          original_exercise_id: exerciseId,
+          user_notes: "Added by AI Coach after user approval.",
+        })
+        .select("id")
+        .single();
+
+      if (error || !data?.id) {
+        throw new Error(error?.message || "Failed to add exercise to workout plan");
+      }
+
+      return {
+        success: true,
+        content: `Added ${exerciseName} to ${String(action.input.plan_day_name || "your workout day")}.`,
+        user_safe_summary: `Added ${exerciseName} to ${String(action.input.plan_day_name || "your workout day")}.`,
+        mutation_level: "medium",
+        tool_name: action.toolName,
+        receipt_payload: {
+          operation: "add_exercise",
+          plan_exercise_id: data.id,
+          plan_day_id: planDayId,
+          exercise_id: exerciseId,
+          exercise_name: exerciseName,
+        },
+        memory_item: {
+          memoryType: "intervention",
+          title: "Exercise added to plan",
+          body: action.summary,
+          scope: "workout",
+          originType: "tool",
+        },
+      };
+    }
+
     await (supabase as any)
       .from("user_workout_plan_schedule")
       .update({

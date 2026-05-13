@@ -19,6 +19,14 @@ yarn-error.log
 .env.local
 .env.*.local
 
+# Secrets / service accounts
+*firebase-adminsdk*.json
+*service-account*.json
+*service_account*.json
+google-services-admin*.json
+google-services-key.json
+*.pem
+
 # OS
 .DS_Store
 Thumbs.db
@@ -48,3 +56,9 @@ Thumbs.db
 assets/exercises/*.gif
 !assets/exercises/README.md
 !assets/exercises/exercises.csv
+
+# Claude Code internal state
+.claude/
+
+# Package tarballs
+*.tgz

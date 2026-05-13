@@ -1,5 +1,6 @@
 export { TimeFrameTabs } from './TimeFrameTabs';
 export { GoalForecastCard } from './GoalForecastCard';
+export { GoalProgressHero } from './GoalProgressHero';
 export { SmartInsightsCarousel } from './SmartInsightsCarousel';
 export { MacroConsistencyCard } from './MacroConsistencyCard';
 export { PRHighlightCard } from './PRHighlightCard';

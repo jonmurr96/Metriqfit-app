@@ -1,36 +1,79 @@
 # Supabase CLI function configuration.
-# These functions perform explicit in-function auth checks via `supabase.auth.getUser()`
-# and currently require gateway JWT verification disabled for compatibility in this project.
+# User-facing functions should use gateway JWT verification plus in-function
+# authorization checks. Admin batch functions remain secret-gated because they
+# are not called with a user's Supabase session.
 
 [functions.import-recipe-url]
-verify_jwt = false
+verify_jwt = true
 
 [functions.menu-scan-rank]
-verify_jwt = false
+verify_jwt = true
+
+[functions.search-food-catalog]
+verify_jwt = true
+
+[functions.upsert-external-food-item]
+verify_jwt = true
+
+[functions.confirm-serving]
+verify_jwt = true
+
+[functions.analyze-food-photo]
+verify_jwt = true
+
+[functions.ai-coach-message]
+verify_jwt = true
+
+[functions.award-xp]
+verify_jwt = true
+
+[functions.update-streak]
+verify_jwt = true
+
+[functions.check-achievements]
+verify_jwt = true
 
 [functions.build-meals-from-constraints]
-verify_jwt = false
+verify_jwt = true
 
 [functions.apply-meal-plan-batch-change]
-verify_jwt = false
+verify_jwt = true
+
+[functions.apply-meal-plan-change]
+verify_jwt = true
 
 [functions.generate-user-plans]
-verify_jwt = false
+verify_jwt = true
+
+[functions.barcode-lookup]
+verify_jwt = true
 
 [functions.import-workout-plan]
-verify_jwt = false
+verify_jwt = true
 
 [functions.adapt-workout-plan]
-verify_jwt = false
+verify_jwt = true
 
 [functions.migrate-workout-plans-v2]
 verify_jwt = false
 
 [functions.reschedule-workout-day]
-verify_jwt = false
+verify_jwt = true
 
 [functions.compute-plan-consistency]
-verify_jwt = false
+verify_jwt = true
+
+[functions.prep-coach-checkin-adjust]
+verify_jwt = true
+
+[functions.repair-workout-plan-coherence]
+verify_jwt = true
+
+[functions.delete-account]
+verify_jwt = true
+
+[functions.sync-revenuecat-subscription]
+verify_jwt = true
 
 [functions.remediate-workout-mappings]
 verify_jwt = false

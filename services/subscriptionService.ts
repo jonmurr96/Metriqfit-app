@@ -3,7 +3,7 @@
  * Handles RevenueCat integration for Free / Premium / Elite subscriptions.
  *
  * Modes:
- * - Mock test mode (default): writes subscriptions directly, no billing charge.
+ * - Mock test mode: disabled for entitlement writes; paid access must be verified server-side.
  * - RevenueCat sandbox mode (native only): real SDK purchases on iOS/Android sandbox.
  */
 
@@ -22,14 +22,12 @@ import {
   SUBSCRIPTION_PACKAGES,
   getFeatureLimit as getTierFeatureLimit,
   getPlanLabel,
-  getPlanTypeFromPackageId,
   getRequiredTierForFeature,
   getSubscriptionTier,
   getTierLabel,
   getTrialConfigForPlan,
   getUpgradeTierForFeature,
   hasFeatureAccess,
-  inferPlanTypeFromProductId,
   type FeatureGateKey,
   type LimitedFeatureKey,
   type SubscriptionPlanType,
@@ -251,23 +249,12 @@ async function getEntitlementStatusFromDatabase(userId: string): Promise<Entitle
   return buildEntitlementFromSubscription(subscription);
 }
 
-async function upsertSubscriptionRow(userId: string, payload: {
-  planType: SubscriptionPlanType;
-  status: SubscriptionStatus;
-  expiresAt?: string | null;
-  trialEndsAt?: string | null;
-  productId?: string | null;
-  revenuecatCustomerId?: string | null;
-}) {
-  const { error } = await (supabase as any).rpc('upsert_subscription', {
-    p_user_id: userId,
-    p_plan_type: payload.planType,
-    p_status: payload.status,
-    p_expires_at: payload.expiresAt ?? null,
-    p_trial_ends_at: payload.trialEndsAt ?? null,
-    p_revenuecat_customer_id: payload.revenuecatCustomerId ?? null,
-    p_platform: Platform.OS,
-    p_product_id: payload.productId ?? null,
+async function syncRevenueCatSubscriptionOnServer(userId: string): Promise<void> {
+  const { error } = await supabase.functions.invoke('sync-revenuecat-subscription', {
+    body: {
+      user_id: userId,
+      platform: Platform.OS,
+    },
   });
 
   if (error) throw error;
@@ -352,40 +339,9 @@ function shouldUseRevenueCatNative(): boolean {
 
 async function syncRevenueCatSnapshotToDatabase(
   userId: string,
-  snapshot: {
-    tier: SubscriptionTier;
-    isElite: boolean;
-    isTrialing: boolean;
-    expiresAt?: string;
-    trialEndsAt?: string;
-    activeProductId?: string;
-    customerId?: string;
-  },
+  _snapshot: unknown,
 ): Promise<void> {
-  if (snapshot.tier === 'free') {
-    await upsertSubscriptionRow(userId, {
-      planType: 'free',
-      status: 'active',
-      expiresAt: null,
-      trialEndsAt: null,
-      productId: null,
-      revenuecatCustomerId: snapshot.customerId || null,
-    });
-    return;
-  }
-
-  await upsertSubscriptionRow(userId, {
-    planType: snapshot.activeProductId
-      ? inferPlanTypeFromProductId(snapshot.activeProductId)
-      : snapshot.tier === 'premium'
-        ? 'premium_monthly'
-        : 'elite_monthly',
-    status: snapshot.isTrialing ? 'trial' : 'active',
-    expiresAt: snapshot.expiresAt || null,
-    trialEndsAt: snapshot.trialEndsAt || null,
-    productId: snapshot.activeProductId || null,
-    revenuecatCustomerId: snapshot.customerId || null,
-  });
+  await syncRevenueCatSubscriptionOnServer(userId);
 }
 
 /**
@@ -432,8 +388,8 @@ export function getBillingIntegrationStatus(): BillingIntegrationStatus {
   if (isBillingTestModeEnabled()) {
     return {
       mode: 'test_mock',
-      canPurchase: true,
-      reason: 'Test billing mode is enabled. Elite selection writes subscription state without charging.',
+      canPurchase: false,
+      reason: 'Mock billing cannot grant entitlements. Use RevenueCat sandbox/Test Store or a verified server webhook.',
       isReleaseSafe: !isProductionBillingEnvironment(),
     };
   }
@@ -569,57 +525,12 @@ async function purchaseMockPackage(
   userId: string,
   packageId: string,
 ): Promise<{ success: boolean; error?: string }> {
-  const pkg = FALLBACK_PACKAGES.find((candidate) => candidate.id === packageId);
-  if (!pkg) {
-    return { success: false, error: 'Package not found' };
-  }
-
-  let expiresAt: string | undefined;
-  if (pkg.period === 'weekly') {
-    const date = new Date();
-    date.setDate(date.getDate() + 7);
-    expiresAt = date.toISOString();
-  } else if (pkg.period === 'monthly') {
-    const date = new Date();
-    date.setMonth(date.getMonth() + 1);
-    expiresAt = date.toISOString();
-  } else if (pkg.period === 'annual') {
-    const date = new Date();
-    date.setFullYear(date.getFullYear() + 1);
-    expiresAt = date.toISOString();
-  }
-
-  let trialEndsAt: string | undefined;
-  if (pkg.trial_days) {
-    const date = new Date();
-    date.setDate(date.getDate() + pkg.trial_days);
-    trialEndsAt = date.toISOString();
-  }
-
-  try {
-    await upsertSubscriptionRow(userId, {
-      planType: getPlanTypeFromPackageId(pkg.id),
-      status: pkg.trial_days ? 'trial' : 'active',
-      expiresAt,
-      trialEndsAt,
-      productId: pkg.product_id,
-    });
-
-    const entitlement = await checkEntitlementStatus(userId);
-    if (entitlement.planType !== getPlanTypeFromPackageId(pkg.id) && entitlement.tier !== pkg.tier) {
-      return {
-        success: false,
-        error: 'Subscription write completed, but entitlement could not be confirmed.',
-      };
-    }
-
-    return { success: true };
-  } catch (error) {
-    return {
-      success: false,
-      error: error instanceof Error ? error.message : 'Purchase failed',
-    };
-  }
+  void userId;
+  void packageId;
+  return {
+    success: false,
+    error: 'Mock billing cannot grant entitlements. Use RevenueCat sandbox/Test Store or a verified server webhook.',
+  };
 }
 
 /**
@@ -685,18 +596,7 @@ export async function purchasePackage(
       };
     }
 
-    const resolvedPlanType = snapshot.activeProductId
-      ? inferPlanTypeFromProductId(snapshot.activeProductId)
-      : getPlanTypeFromPackageId(packageId);
-
-    await upsertSubscriptionRow(userId, {
-      planType: resolvedPlanType,
-      status: snapshot.isTrialing ? 'trial' : 'active',
-      expiresAt: snapshot.expiresAt || null,
-      trialEndsAt: snapshot.trialEndsAt || null,
-      productId: snapshot.activeProductId || targetPackage.product_id,
-      revenuecatCustomerId: snapshot.customerId || null,
-    });
+    await syncRevenueCatSnapshotToDatabase(userId, snapshot);
 
     return { success: true };
   } catch (error) {
@@ -712,16 +612,9 @@ export async function purchasePackage(
  * Does not overwrite existing paid subscriptions.
  */
 export async function ensureFreeSubscription(userId: string): Promise<void> {
-  const existing = await getSubscription(userId);
-  if (existing) return;
-
-  await upsertSubscriptionRow(userId, {
-    planType: 'free',
-    status: 'active',
-    expiresAt: null,
-    trialEndsAt: null,
-    productId: null,
-  });
+  void userId;
+  // Free access is the default when no verified subscription row exists.
+  // The client must not write subscription rows directly.
 }
 
 /**

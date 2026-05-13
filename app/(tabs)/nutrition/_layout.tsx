@@ -22,9 +22,6 @@ export default function NutritionLayout() {
       <Stack.Screen name="plan-meal-editor" />
       <Stack.Screen name="recipe-import" />
       <Stack.Screen name="menu-scan" />
-      <Stack.Screen name="grocery-planner" />
-      <Stack.Screen name="pantry/index" />
-      <Stack.Screen name="pantry/item" />
       <Stack.Screen name="tools/index" />
       <Stack.Screen name="tools/macro-budgeter" />
       <Stack.Screen name="tools/supplement-guide" />

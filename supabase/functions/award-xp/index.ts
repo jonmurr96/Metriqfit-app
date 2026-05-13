@@ -2,7 +2,7 @@ import { serve } from "https://deno.land/std@0.224.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.45.4";
 
 interface RequestBody {
-  userId: string;
+  userId?: string;
   eventType: string;
   metadata?: Record<string, unknown>;
 }
@@ -70,23 +70,52 @@ function getLevelFromXP(totalXP: number): { level: number; levelName: string; ti
   return { level, levelName, tierName, xpForNextLevel, xpNeeded };
 }
 
+function isElitePlan(planType: unknown) {
+  return String(planType || "").toLowerCase().startsWith("elite");
+}
+
 serve(async (req) => {
   if (req.method === "OPTIONS") {
     return new Response(null, { headers: { "Access-Control-Allow-Origin": "*", "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type" } });
   }
 
   try {
+    const authHeader = req.headers.get("Authorization") || "";
+    if (!authHeader) {
+      return new Response(
+        JSON.stringify({ error: "Missing authorization header" }),
+        { status: 401, headers: { "Content-Type": "application/json" } },
+      );
+    }
+
     const supabase = createClient(
       Deno.env.get("SUPABASE_URL") ?? "",
-      Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? ""
+      Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? "",
+      { global: { headers: { Authorization: authHeader } } },
     );
 
-    const body: RequestBody = await req.json();
-    const { userId, eventType, metadata = {} } = body;
-
-    if (!userId || !eventType) {
+    const { data: authData, error: authError } = await supabase.auth.getUser();
+    if (authError || !authData?.user) {
       return new Response(
-        JSON.stringify({ error: "Missing userId or eventType" }),
+        JSON.stringify({ error: "Unauthorized" }),
+        { status: 401, headers: { "Content-Type": "application/json" } },
+      );
+    }
+
+    const body: RequestBody = await req.json();
+    const { eventType, metadata = {} } = body;
+    const userId = body.userId || authData.user.id;
+
+    if (userId !== authData.user.id) {
+      return new Response(
+        JSON.stringify({ error: "User mismatch" }),
+        { status: 403, headers: { "Content-Type": "application/json" } },
+      );
+    }
+
+    if (!eventType) {
+      return new Response(
+        JSON.stringify({ error: "Missing eventType" }),
         { status: 400, headers: { "Content-Type": "application/json" } }
       );
     }
@@ -103,12 +132,19 @@ serve(async (req) => {
     // Check if user is Elite subscriber
     const { data: subscription } = await supabase
       .from("subscriptions")
-      .select("tier")
+      .select("plan_type, status, expires_at, trial_ends_at")
       .eq("user_id", userId)
-      .eq("is_active", true)
+      .in("status", ["active", "trial", "grace_period"])
+      .order("updated_at", { ascending: false })
+      .limit(1)
       .single();
 
-    const isElite = subscription?.tier === "elite";
+    const now = Date.now();
+    const expiresAt = subscription?.expires_at ? new Date(String(subscription.expires_at)).getTime() : null;
+    const trialEndsAt = subscription?.trial_ends_at ? new Date(String(subscription.trial_ends_at)).getTime() : null;
+    const isTrialing = subscription?.status === "trial" && trialEndsAt !== null && trialEndsAt > now;
+    const isCurrent = Boolean(subscription && (subscription.status === "active" || subscription.status === "grace_period" || isTrialing) && (expiresAt === null || expiresAt > now || isTrialing));
+    const isElite = isCurrent && isElitePlan(subscription?.plan_type);
 
     // Calculate base XP
     let xpAmount = config.baseXP;
@@ -247,8 +283,9 @@ serve(async (req) => {
     );
   } catch (error) {
     console.error("Error in award-xp function:", error);
+    const message = error instanceof Error ? error.message : String(error);
     return new Response(
-      JSON.stringify({ error: error.message }),
+      JSON.stringify({ error: message }),
       { status: 500, headers: { "Content-Type": "application/json" } }
     );
   }

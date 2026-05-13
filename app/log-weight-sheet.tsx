@@ -1,4 +1,4 @@
-import { StyleSheet, View, Text, Pressable, TextInput, ActivityIndicator } from 'react-native';
+import { StyleSheet, View, Text, Pressable, TextInput, ActivityIndicator, Keyboard } from 'react-native';
 import { useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useState } from 'react';
@@ -118,6 +118,9 @@ export default function LogWeightSheet() {
               value={weight}
               onChangeText={setWeight}
               keyboardType="decimal-pad"
+              returnKeyType="done"
+              onSubmitEditing={Keyboard.dismiss}
+              blurOnSubmit
               maxLength={6}
               autoFocus
             />
@@ -199,6 +202,9 @@ export default function LogWeightSheet() {
                   placeholder="-"
                   placeholderTextColor={c.textSubtle}
                   keyboardType="numeric"
+                  returnKeyType="done"
+                  onSubmitEditing={Keyboard.dismiss}
+                  blurOnSubmit
                   onChangeText={(val) => setMeasurements(prev => ({ ...prev, [part.toLowerCase()]: val }))}
                 />
               </View>

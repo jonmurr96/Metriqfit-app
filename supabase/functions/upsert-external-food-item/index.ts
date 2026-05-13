@@ -15,6 +15,25 @@ function jsonResponse(body: unknown, status = 200) {
   });
 }
 
+async function requireUser(request: Request, supabaseUrl: string) {
+  const anonKey = Deno.env.get("SUPABASE_ANON_KEY") ?? Deno.env.get("ANON_KEY");
+  const authHeader = request.headers.get("Authorization") ?? "";
+  if (!anonKey || !authHeader) {
+    return { user: null, error: "Unauthorized" };
+  }
+
+  const userClient = createClient(supabaseUrl, anonKey, {
+    global: { headers: { Authorization: authHeader } },
+    auth: { persistSession: false },
+  });
+  const { data, error } = await userClient.auth.getUser();
+  if (error || !data.user) {
+    return { user: null, error: "Unauthorized" };
+  }
+
+  return { user: data.user, error: null };
+}
+
 function num(value: unknown, fallback?: number) {
   const parsed = typeof value === "string" ? Number(value) : value as number;
   if (Number.isFinite(parsed)) {
@@ -33,7 +52,7 @@ function isMissingColumnError(error: unknown, columnName: string) {
 }
 
 async function findFirstMatchingFoodId(
-  supabase: ReturnType<typeof createClient>,
+  supabase: any,
   filters: {
     barcode?: string | null;
     provider?: "usda_fdc" | "openfoodfacts";
@@ -102,6 +121,11 @@ serve(async (request) => {
       throw new Error("Supabase service role is not configured");
     }
 
+    const auth = await requireUser(request, supabaseUrl);
+    if (!auth.user) {
+      return jsonResponse({ ok: false, error: auth.error }, 401);
+    }
+
     const supabase = createClient(supabaseUrl, serviceRoleKey);
     const body = await request.json();
     const provider = body?.provider;
@@ -158,7 +182,7 @@ serve(async (request) => {
       source: provider,
       image_url: typeof body?.imageUrl === "string" ? body.imageUrl.trim() || null : null,
       is_verified: false,
-      created_by_user_id: null,
+      created_by_user_id: auth.user.id,
       external_source_id: `${provider}:${externalId}`,
     };
 

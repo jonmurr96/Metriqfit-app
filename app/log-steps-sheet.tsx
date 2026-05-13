@@ -1,5 +1,5 @@
 
-import { StyleSheet, View, Text, Pressable, TextInput, ActivityIndicator } from 'react-native';
+import { StyleSheet, View, Text, Pressable, TextInput, ActivityIndicator, Keyboard } from 'react-native';
 import { useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useState } from 'react';
@@ -109,6 +109,9 @@ export default function LogStepsSheet() {
               value={steps}
               onChangeText={setSteps}
               keyboardType="number-pad"
+              returnKeyType="done"
+              onSubmitEditing={Keyboard.dismiss}
+              blurOnSubmit
               maxLength={6}
               autoFocus
             />

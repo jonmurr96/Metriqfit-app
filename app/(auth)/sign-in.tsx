@@ -143,7 +143,8 @@ export default function SignInScreen() {
           isPassword
           autoCapitalize="none"
           autoCorrect={false}
-          autoComplete="password"
+          autoComplete="current-password"
+          textContentType="password"
           returnKeyType="go"
           onSubmitEditing={handleEmailPasswordSignIn}
           editable={!loading}

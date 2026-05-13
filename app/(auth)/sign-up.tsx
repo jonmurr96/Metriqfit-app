@@ -178,8 +178,8 @@ export default function SignUpScreen() {
         hint={passwordHint}
         autoCapitalize="none"
         autoCorrect={false}
-        autoComplete="off"
-        textContentType="nickname"
+        autoComplete="new-password"
+        textContentType="newPassword"
         returnKeyType="next"
         onSubmitEditing={() => confirmRef.current?.focus()}
         editable={!loading}
@@ -198,8 +198,8 @@ export default function SignUpScreen() {
         error={confirmError}
         autoCapitalize="none"
         autoCorrect={false}
-        autoComplete="off"
-        textContentType="nickname"
+        autoComplete="new-password"
+        textContentType="newPassword"
         returnKeyType="done"
         onSubmitEditing={handleSignUp}
         editable={!loading}

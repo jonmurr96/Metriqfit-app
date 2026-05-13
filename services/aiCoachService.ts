@@ -18,6 +18,7 @@ import { getWorkoutAdaptationRecommendations } from './workoutAdaptationService'
 import { checkEntitlementStatus, getFeatureLimit } from './subscriptionService';
 import { type SubscriptionTier } from '../lib/subscription/plans';
 import { invokeFunction } from '../lib/supabase/invokeFunction';
+import { captureSentryIssue } from '../lib/sentry';
 
 // ============================================================================
 // Types
@@ -252,10 +253,10 @@ export interface AICoachClarificationPromptAttachment {
   type: 'clarification_prompt';
   title: string;
   prompt: string;
-  options?: Array<{
+  options?: {
     label: string;
     prompt: string;
-  }>;
+  }[];
 }
 
 export interface AICoachWebResultSummaryAttachment {
@@ -263,10 +264,10 @@ export interface AICoachWebResultSummaryAttachment {
   title: string;
   summary: string;
   query?: string | null;
-  sources?: Array<{
+  sources?: {
     title: string;
     url: string;
-  }>;
+  }[];
 }
 
 export interface AICoachStatusReceiptAttachment {
@@ -1030,6 +1031,35 @@ function mapChatMessageRow(row: any): ChatMessage {
   } as ChatMessage;
 }
 
+interface AICoachMessageFunctionResponse {
+  id?: string | null;
+  user_id?: string | null;
+  thread_id?: string | null;
+  role?: ChatMessage['role'] | null;
+  content?: string | null;
+  context_snapshot?: Json | null;
+  attachments?: Json | null;
+  tokens_input?: number | null;
+  tokens_output?: number | null;
+  model?: string | null;
+  intent_mode?: string | null;
+  intent_confidence?: number | null;
+  intent_classification?: {
+    mode?: string | null;
+    confidence?: number | null;
+    requiresApproval?: boolean | null;
+  } | null;
+  tool_calls?: Json | null;
+  tool_calls_json?: Json | null;
+  web_used?: boolean | null;
+  approval_required?: boolean | null;
+  proposal_id?: string | null;
+  receipt_id?: string | null;
+  action_proposals?: { id?: string | null }[] | null;
+  tool_receipts?: { id?: string | null }[] | null;
+  created_at?: string | null;
+}
+
 export async function getConversationThreads(
   userId: string,
   limit = 200,
@@ -1167,8 +1197,8 @@ export async function sendMessage(
   };
 
   const invokeCoachMessage = () =>
-    invokeFunction(() =>
-      supabase.functions.invoke('ai-coach-message', {
+    invokeFunction<AICoachMessageFunctionResponse>(() =>
+      supabase.functions.invoke<AICoachMessageFunctionResponse>('ai-coach-message', {
         body: {
           user_id: userId,
           message,
@@ -1191,8 +1221,28 @@ export async function sendMessage(
     ({ data, parsedError, rawError } = await invokeCoachMessage());
   }
 
-  if (rawError) throw new Error(parsedError?.error || parsedError?.message || rawError?.message || 'Failed to send AI Coach message');
-  if (!data?.id || !data?.content) throw new Error('AI Coach returned an invalid response');
+  if (rawError) {
+    captureSentryIssue(rawError, {
+      category: 'backend_failure',
+      severity: 'error',
+      operation: 'ai.coach.send',
+      userId,
+      threadId: options?.threadId ?? null,
+      status: rawError?.context?.status ?? null,
+    });
+    throw new Error(parsedError?.error || parsedError?.message || rawError?.message || 'Failed to send AI Coach message');
+  }
+  if (!data?.id || !data?.content) {
+    const invalidResponseError = new Error('AI Coach returned an invalid response');
+    captureSentryIssue(invalidResponseError, {
+      category: 'unexpected_runtime_error',
+      severity: 'error',
+      operation: 'ai.coach.send',
+      userId,
+      threadId: options?.threadId ?? null,
+    });
+    throw invalidResponseError;
+  }
 
   return mapChatMessageRow({
     id: data.id,
@@ -1221,8 +1271,8 @@ export async function sendMessage(
 }
 
 export async function approveActionProposal(proposalId: string, userId: string): Promise<ChatMessage> {
-  const { data, parsedError, rawError } = await invokeFunction(() =>
-    supabase.functions.invoke('ai-coach-message', {
+  const { data, parsedError, rawError } = await invokeFunction<AICoachMessageFunctionResponse>(() =>
+    supabase.functions.invoke<AICoachMessageFunctionResponse>('ai-coach-message', {
       body: {
         user_id: userId,
         approved_proposal_id: proposalId,
@@ -1232,8 +1282,28 @@ export async function approveActionProposal(proposalId: string, userId: string):
     })
   );
 
-  if (rawError) throw new Error(parsedError?.error || parsedError?.message || rawError?.message || 'Failed to approve coach action');
-  if (!data?.id || !data?.content) throw new Error('AI Coach returned an invalid approval response');
+  if (rawError) {
+    captureSentryIssue(rawError, {
+      category: 'backend_failure',
+      severity: 'error',
+      operation: 'ai.coach.approve_action',
+      userId,
+      proposalId,
+      status: rawError?.context?.status ?? null,
+    });
+    throw new Error(parsedError?.error || parsedError?.message || rawError?.message || 'Failed to approve coach action');
+  }
+  if (!data?.id || !data?.content) {
+    const invalidApprovalError = new Error('AI Coach returned an invalid approval response');
+    captureSentryIssue(invalidApprovalError, {
+      category: 'unexpected_runtime_error',
+      severity: 'error',
+      operation: 'ai.coach.approve_action',
+      userId,
+      proposalId,
+    });
+    throw invalidApprovalError;
+  }
   return mapChatMessageRow({
     ...data,
     user_id: data.user_id || '',
@@ -1242,8 +1312,8 @@ export async function approveActionProposal(proposalId: string, userId: string):
 }
 
 export async function rejectActionProposal(proposalId: string, userId: string): Promise<ChatMessage> {
-  const { data, parsedError, rawError } = await invokeFunction(() =>
-    supabase.functions.invoke('ai-coach-message', {
+  const { data, parsedError, rawError } = await invokeFunction<AICoachMessageFunctionResponse>(() =>
+    supabase.functions.invoke<AICoachMessageFunctionResponse>('ai-coach-message', {
       body: {
         user_id: userId,
         rejected_proposal_id: proposalId,
@@ -1252,8 +1322,28 @@ export async function rejectActionProposal(proposalId: string, userId: string): 
     })
   );
 
-  if (rawError) throw new Error(parsedError?.error || parsedError?.message || rawError?.message || 'Failed to reject coach action');
-  if (!data?.id || !data?.content) throw new Error('AI Coach returned an invalid rejection response');
+  if (rawError) {
+    captureSentryIssue(rawError, {
+      category: 'backend_failure',
+      severity: 'error',
+      operation: 'ai.coach.reject_action',
+      userId,
+      proposalId,
+      status: rawError?.context?.status ?? null,
+    });
+    throw new Error(parsedError?.error || parsedError?.message || rawError?.message || 'Failed to reject coach action');
+  }
+  if (!data?.id || !data?.content) {
+    const invalidRejectionError = new Error('AI Coach returned an invalid rejection response');
+    captureSentryIssue(invalidRejectionError, {
+      category: 'unexpected_runtime_error',
+      severity: 'error',
+      operation: 'ai.coach.reject_action',
+      userId,
+      proposalId,
+    });
+    throw invalidRejectionError;
+  }
   return mapChatMessageRow({
     ...data,
     user_id: data.user_id || '',

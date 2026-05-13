@@ -38,6 +38,94 @@ interface DeletionLog {
   error?: string;
 }
 
+const PROGRESS_PHOTO_BUCKET = "progress-photos";
+const STORAGE_REMOVE_BATCH_SIZE = 100;
+const IGNORABLE_DELETE_ERROR_CODES = new Set(["42P01", "42703"]);
+
+type UserOwnedDeleteTarget = {
+  table: string;
+  column?: string;
+};
+
+const ADDITIONAL_USER_OWNED_DELETE_TARGETS: UserOwnedDeleteTarget[] = [
+  { table: "analytics_events" },
+  { table: "ai_coach_tool_receipts" },
+  { table: "ai_coach_action_proposals" },
+  { table: "ai_coach_memory_items" },
+  { table: "ai_coach_threads" },
+  { table: "food_favorites" },
+  { table: "recipe_import_events" },
+  { table: "menu_scan_sessions" },
+  { table: "pantry_transactions" },
+  { table: "pantry_items" },
+  { table: "grocery_lists" },
+  { table: "prep_coach_adjustment_events" },
+  { table: "prep_coach_cycles" },
+  { table: "workout_import_jobs" },
+  { table: "workout_adaptation_events" },
+  { table: "workout_adaptation_recommendations" },
+  { table: "workout_readiness_daily" },
+  { table: "user_progression_suggestions" },
+  { table: "user_achievements" },
+  { table: "user_streak_freezes" },
+  { table: "user_streaks" },
+  { table: "user_xp_events" },
+  { table: "user_xp_levels" },
+  { table: "subscription_events" },
+  { table: "promo_code_redemptions" },
+  { table: "onboarding_plan_review_states" },
+  { table: "recipes" },
+  { table: "food_items", column: "created_by_user_id" },
+];
+
+async function removeStoragePaths(
+  adminClient: any,
+  bucket: string,
+  paths: string[],
+) {
+  let removed = 0;
+  for (let index = 0; index < paths.length; index += STORAGE_REMOVE_BATCH_SIZE) {
+    const batch = paths.slice(index, index + STORAGE_REMOVE_BATCH_SIZE);
+    if (!batch.length) continue;
+
+    const { data, error } = await adminClient.storage.from(bucket).remove(batch);
+    if (error) throw error;
+    removed += data?.length || batch.length;
+  }
+  return removed;
+}
+
+async function deleteUserOwnedRows(
+  adminClient: any,
+  target: UserOwnedDeleteTarget,
+  userId: string,
+): Promise<DeletionLog> {
+  const column = target.column || "user_id";
+  const { count, error } = await adminClient
+    .from(target.table)
+    .delete({ count: "exact" })
+    .eq(column, userId);
+
+  if (!error) {
+    return { table: target.table, deleted: count || 0 };
+  }
+
+  const code = typeof error?.code === "string" ? error.code : "";
+  if (IGNORABLE_DELETE_ERROR_CODES.has(code)) {
+    return {
+      table: target.table,
+      deleted: 0,
+      error: `Skipped: ${error.message}`,
+    };
+  }
+
+  return {
+    table: target.table,
+    deleted: 0,
+    error: error.message || "Delete failed",
+  };
+}
+
 serve(async (req) => {
   // Handle CORS preflight
   if (req.method === "OPTIONS") {
@@ -140,6 +228,53 @@ serve(async (req) => {
     // Step 2: Delete user data manually for tables without CASCADE
     // Most tables have ON DELETE CASCADE, but we'll be explicit
     // =========================================
+
+    // Delete private progress photo objects before removing metadata/auth rows.
+    const { data: progressPhotoRows, error: progressPhotosFetchErr } = await adminClient
+      .from("progress_photos")
+      .select("storage_path")
+      .eq("user_id", userId);
+
+    if (progressPhotosFetchErr) {
+      return jsonResponse({
+        success: false,
+        error: "Failed to load progress photo paths: " + progressPhotosFetchErr.message,
+        partial_deletion: true,
+        deletion_logs: deletionLogs,
+      }, 500);
+    }
+
+    const progressPhotoPaths = (progressPhotoRows || [])
+      .map((row: { storage_path?: string | null }) => row.storage_path)
+      .filter((value): value is string => typeof value === "string" && value.length > 0);
+
+    try {
+      const removedObjects = await removeStoragePaths(adminClient, PROGRESS_PHOTO_BUCKET, progressPhotoPaths);
+      deletionLogs.push({ table: "storage.progress-photos", deleted: removedObjects });
+    } catch (storageErr) {
+      console.error("Progress photo storage deletion error:", storageErr);
+      return jsonResponse({
+        success: false,
+        error: "Failed to delete progress photo files: " + ((storageErr as Error)?.message || "storage error"),
+        partial_deletion: true,
+        deletion_logs: deletionLogs,
+      }, 500);
+    }
+
+    const { count: progressPhotosCount, error: progressPhotosErr } = await adminClient
+      .from("progress_photos")
+      .delete({ count: "exact" })
+      .eq("user_id", userId);
+
+    deletionLogs.push({
+      table: "progress_photos",
+      deleted: progressPhotosCount || 0,
+      error: progressPhotosErr?.message,
+    });
+
+    for (const target of ADDITIONAL_USER_OWNED_DELETE_TARGETS) {
+      deletionLogs.push(await deleteUserOwnedRows(adminClient, target, userId));
+    }
 
     // Delete AI coach feedback (references ai_coach_messages)
     const { count: feedbackCount, error: feedbackErr } = await adminClient

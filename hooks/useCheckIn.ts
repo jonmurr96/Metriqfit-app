@@ -1,6 +1,11 @@
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { useAuth } from '../lib/auth';
 import { applyCheckInUpdates, previewCheckIn, type CheckInPreviewResult } from '../services/checkInService';
+import { nutritionDashboardKeys } from './useNutritionDashboard';
+import { progressBodyKeys } from './useProgressBody';
+import { progressMetricKeys } from './useProgressMetrics';
+import { userKeys } from './useUser';
+import { waterKeys } from './useWater';
 
 export function usePreviewCheckIn() {
   const { user } = useAuth();
@@ -29,9 +34,14 @@ export function usePreviewCheckIn() {
         energy,
       }),
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['user'] });
-      queryClient.invalidateQueries({ queryKey: ['nutrition'] });
+      queryClient.invalidateQueries({ queryKey: userKeys.all });
+      queryClient.invalidateQueries({ queryKey: userKeys.profile(user!.id) });
+      queryClient.invalidateQueries({ queryKey: userKeys.targets(user!.id) });
+      queryClient.invalidateQueries({ queryKey: nutritionDashboardKeys.all });
+      queryClient.invalidateQueries({ queryKey: waterKeys.all });
       queryClient.invalidateQueries({ queryKey: ['plans'] });
+      queryClient.invalidateQueries({ queryKey: progressMetricKeys.all });
+      queryClient.invalidateQueries({ queryKey: progressBodyKeys.all });
     },
   });
 }
@@ -43,10 +53,14 @@ export function useApplyCheckInUpdates() {
   return useMutation({
     mutationFn: (preview: CheckInPreviewResult) => applyCheckInUpdates(user!.id, preview),
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['user'] });
-      queryClient.invalidateQueries({ queryKey: ['nutrition'] });
+      queryClient.invalidateQueries({ queryKey: userKeys.all });
+      queryClient.invalidateQueries({ queryKey: userKeys.profile(user!.id) });
+      queryClient.invalidateQueries({ queryKey: userKeys.targets(user!.id) });
+      queryClient.invalidateQueries({ queryKey: nutritionDashboardKeys.all });
+      queryClient.invalidateQueries({ queryKey: waterKeys.all });
       queryClient.invalidateQueries({ queryKey: ['plans'] });
-      queryClient.invalidateQueries({ queryKey: ['water'] });
+      queryClient.invalidateQueries({ queryKey: progressMetricKeys.all });
+      queryClient.invalidateQueries({ queryKey: progressBodyKeys.all });
     },
   });
 }

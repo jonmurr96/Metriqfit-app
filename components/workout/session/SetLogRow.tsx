@@ -1,5 +1,5 @@
 import React, { useMemo, useState } from 'react';
-import { Pressable, Text, TextInput, View } from 'react-native';
+import { Keyboard, Pressable, Text, TextInput, View } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 
 import type { ActiveSetRowViewModel } from '../../../lib/workout/logging-state';
@@ -202,6 +202,9 @@ export function SetLogRow(props: SetLogRowProps) {
               placeholder="0"
               placeholderTextColor={c.textSubtle}
               keyboardType="numeric"
+              returnKeyType="done"
+              onSubmitEditing={Keyboard.dismiss}
+              blurOnSubmit
               style={{
                 flex: 1,
                 minHeight: 42,
@@ -225,6 +228,9 @@ export function SetLogRow(props: SetLogRowProps) {
             placeholder="0"
             placeholderTextColor={c.textSubtle}
             keyboardType="numeric"
+            returnKeyType="done"
+            onSubmitEditing={Keyboard.dismiss}
+            blurOnSubmit
             style={{
               minHeight: 42,
               borderRadius: r.lg,
@@ -319,6 +325,9 @@ export function SetLogRow(props: SetLogRowProps) {
               placeholder="-"
               placeholderTextColor={c.textSubtle}
               keyboardType="numeric"
+              returnKeyType="done"
+              onSubmitEditing={Keyboard.dismiss}
+              blurOnSubmit
               style={{
                 minHeight: 40,
                 borderRadius: r.lg,

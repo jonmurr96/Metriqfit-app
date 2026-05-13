@@ -26,6 +26,8 @@ export const metriqfitTheme = {
     surface: "#0A1128" as Hex,   // dark navy surface
     surface2: "#152040" as Hex,  // secondary surfaces
     surface3: "#1E3060" as Hex,  // hover/tertiary states
+    surfaceSubtle: "rgba(255, 255, 255, 0.06)",
+    surfaceActive: "rgba(34, 211, 238, 0.12)",
 
     // Text - High Contrast Premium
     text: "#FFFFFF" as Hex,
@@ -35,6 +37,7 @@ export const metriqfitTheme = {
     // Brand accents - Vibrant neon glow per design.md
     primary: "#22D3EE" as Hex,   // vibrant cyan-400 (main accent)
     primaryDark: "#0891B2" as Hex, // cyan-600 (pressed state)
+    primaryActive: "#0891B2" as Hex,
     accent: "#22D3EE" as Hex,    // blue-500 (secondary) -> Cyan to match primary
     accent2: "#22D3EE" as Hex,   // violet-500 (tertiary) -> Cyan to match primary
 
@@ -208,6 +211,7 @@ export const metriqfitTheme = {
       family: "Sora_400Regular",
       familyMedium: "Sora_500Medium",
       familySemibold: "Sora_600SemiBold",
+      familyBold: "Sora_600SemiBold",
       lineHeightMultiplier: 1.35,
     },
     mono: {
@@ -223,6 +227,7 @@ export const metriqfitTheme = {
       md: 15,
       lg: 17,
       xl: 20,
+      xxl: 32,
       h3: 24,
       h2: 28,
       h1: 34,
@@ -236,6 +241,7 @@ export const metriqfitTheme = {
     lg: 24,
     xl: 32,
     pill: 999,
+    full: 999,
   },
 
   spacing: {

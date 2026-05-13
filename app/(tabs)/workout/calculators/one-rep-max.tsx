@@ -1,5 +1,5 @@
 import React from 'react';
-import { View, StyleSheet, Pressable } from 'react-native';
+import { View, StyleSheet, Pressable, KeyboardAvoidingView, TouchableWithoutFeedback, Keyboard, Platform } from 'react-native';
 import { useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { OneRepMaxCalculator } from '../../../../components/workout/OneRepMaxCalculator';
@@ -15,25 +15,32 @@ export default function OneRepMaxCalculatorScreen() {
     return (
         <View style={{ flex: 1, backgroundColor: c.bg }}>
             <PremiumBackground variant="subtle">
-                <View style={[styles.container, { paddingTop: insets.top }]}>
-                    {/* Close Button Header */}
-                    <View style={styles.header}>
-                        <Pressable
-                            onPress={() => router.back()}
-                            style={styles.closeButton}
-                            hitSlop={20}
-                        >
-                            <TabBarIcon name="close-circle" size={32} color={c.text} />
-                        </Pressable>
-                    </View>
+                <KeyboardAvoidingView
+                    style={{ flex: 1 }}
+                    behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+                >
+                    <TouchableWithoutFeedback onPress={Keyboard.dismiss} accessible={false}>
+                        <View style={[styles.container, { paddingTop: insets.top }]}>
+                            {/* Close Button Header */}
+                            <View style={styles.header}>
+                                <Pressable
+                                    onPress={() => router.back()}
+                                    style={styles.closeButton}
+                                    hitSlop={20}
+                                >
+                                    <TabBarIcon name="close-circle" size={32} color={c.text} />
+                                </Pressable>
+                            </View>
 
-                    <View style={styles.content}>
-                        <OneRepMaxCalculator
-                            onClose={() => router.back()}
-                            animated={false}
-                        />
-                    </View>
-                </View>
+                            <View style={styles.content}>
+                                <OneRepMaxCalculator
+                                    onClose={() => router.back()}
+                                    animated={false}
+                                />
+                            </View>
+                        </View>
+                    </TouchableWithoutFeedback>
+                </KeyboardAvoidingView>
             </PremiumBackground>
         </View>
     );

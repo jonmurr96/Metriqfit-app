@@ -299,7 +299,7 @@ function formatFamily(name: string): string {
 function fallbackDishName(
   protein: FoodWithMetadata,
   carb: FoodWithMetadata,
-  fat: FoodWithMetadata,
+  _fat: FoodWithMetadata,
   slot: MealSlot
 ): string {
   const pName = protein.name.split("(")[0].trim();
@@ -307,16 +307,27 @@ function fallbackDishName(
   const pLower = pName.toLowerCase();
   const isPowder = pLower.includes("whey") || pLower.includes("protein powder");
 
-  // Simple patterns
   if (slot.slot === "breakfast") {
     if (isPowder) return `Protein Shake with ${cName}`;
-    return `${pName} with ${cName}`;
+    return `${pName} & ${cName} Breakfast`;
   }
-  if (slot.slot === "snack" || slot.slot === "pre-workout" || slot.slot === "post-workout") {
-    if (isPowder) return `${pName} & ${cName}`;
-    return `${pName} & ${cName}`;
+  if (slot.slot === "pre-workout") {
+    if (isPowder) return `Pre-Workout Shake with ${cName}`;
+    return `${pName} & ${cName} Pre-Workout`;
   }
-  // lunch / dinner
+  if (slot.slot === "post-workout") {
+    if (isPowder) return `Recovery Shake with ${cName}`;
+    return `${pName} & ${cName} Recovery`;
+  }
+  if (slot.slot === "snack") {
+    if (isPowder) return `${pName} Snack with ${cName}`;
+    return `${pName} & ${cName} Snack`;
+  }
+  if (slot.slot === "evening") {
+    if (isPowder) return `Evening Shake with ${cName}`;
+    return `${pName} & ${cName} Evening Snack`;
+  }
+  // lunch / dinner — allow "Plate" or "Bowl" suffix
   if (isPowder) return `${pName} & ${cName}`;
   const rand = (pName.length + cName.length) % 3;
   if (rand === 0) return `${pName} with ${cName}`;
@@ -342,6 +353,9 @@ function fallbackDescription(
   if (slot.slot === "post-workout") {
     return `Recovery-focused meal with ${pName} and ${cName}, finished with ${fName}.`;
   }
+  if (slot.slot === "snack" || slot.slot === "evening") {
+    return `A lighter ${slot.slot} of ${pName} and ${cName} with ${fName}.`;
+  }
   return `${pName} paired with ${cName} and a drizzle of ${fName}.`;
 }
 
@@ -362,18 +376,23 @@ export function assembleMeal(
     };
   }
 
-  // Try slot-agnostic fallback within same protein+carb
-  const genericKey = `${protein.variety_family}:${carb.variety_family}:dinner`;
-  const genericTemplate = TEMPLATE_REGISTRY[genericKey];
-  if (genericTemplate) {
-    return {
-      name: genericTemplate.dish_name,
-      description: genericTemplate.description,
-      assembly_type: genericTemplate.assembly_type,
-    };
+  // Try slot-agnostic fallback — only for lunch/dinner-equivalent slots.
+  // Never borrow a dinner template name for snack, evening, pre/post-workout or breakfast
+  // as this produces "Chicken & Rice Dinner Plate" in a snack slot.
+  const isMainMealSlot = slot.slot === "lunch" || slot.slot === "dinner";
+  if (isMainMealSlot) {
+    const genericKey = `${protein.variety_family}:${carb.variety_family}:dinner`;
+    const genericTemplate = TEMPLATE_REGISTRY[genericKey];
+    if (genericTemplate) {
+      return {
+        name: genericTemplate.dish_name,
+        description: genericTemplate.description,
+        assembly_type: genericTemplate.assembly_type,
+      };
+    }
   }
 
-  // Pure fallback
+  // Pure fallback — generate a name appropriate to the slot
   const assemblyType = guessAssemblyType(protein, carb, fat, slot);
   return {
     name: fallbackDishName(protein, carb, fat, slot),
@@ -414,13 +433,35 @@ export function calculatePairingPenalty(
   const c = carb.name.toLowerCase();
   const f = fat.name.toLowerCase();
 
+  // Detect savory proteins (beef, steak, pork, chicken, turkey, fish, shrimp)
+  const isSavoryMeatProtein =
+    p.includes("beef") || p.includes("steak") || p.includes("sirloin") || p.includes("pork") ||
+    p.includes("chicken") || p.includes("turkey") || p.includes("shrimp") || p.includes("tilapia") ||
+    p.includes("cod") || p.includes("tuna") || p.includes("salmon");
+  // Detect grain/starchy carbs (pasta, rice, oats, bread, quinoa, potato)
+  const isSavoryGrainCarb =
+    c.includes("pasta") || c.includes("rice") || c.includes("bread") ||
+    c.includes("quinoa") || c.includes("potato") || c.includes("tortilla");
+  // Detect raw-nut fat sources (walnuts, almonds, cashews, pecans, pistachios, peanuts)
+  const isRawNutFat =
+    f.includes("walnut") || f.includes("almond") || f.includes("cashew") ||
+    f.includes("pecan") || f.includes("pistachio") || f.includes("peanut") ||
+    f.includes("macadamia") || f.includes("brazil nut");
+
+  // Raw nuts served alongside a savory meat + grain dish is culinarily incoherent.
+  // A fat like olive oil, butter, or avocado is appropriate; raw nuts as a side are not.
+  if (isSavoryMeatProtein && isSavoryGrainCarb && isRawNutFat) {
+    penalty += 0.55;
+  }
+
   // whey + pasta is weird in any context
   if ((p.includes("whey") || p.includes("protein powder")) && c.includes("pasta")) {
     penalty += 0.5;
   }
 
-  // salmon + oats at dinner
-  if ((p.includes("salmon") || p.includes("fish")) && c.includes("oats") && (slot.slot === "dinner" || slot.slot === "lunch")) {
+  // salmon / fish + oats at dinner or lunch
+  if ((p.includes("salmon") || p.includes("fish") || p.includes("tilapia") || p.includes("cod")) &&
+      c.includes("oats") && (slot.slot === "dinner" || slot.slot === "lunch")) {
     penalty += 0.35;
   }
 
@@ -432,6 +473,17 @@ export function calculatePairingPenalty(
   // eggs + rice at dinner (moderate)
   if (p.includes("egg") && c.includes("rice") && slot.slot === "dinner") {
     penalty += 0.2;
+  }
+
+  // rice cakes used in a savory lunch/dinner context (rice cakes belong in snack/breakfast)
+  if (c.includes("rice cake") && (slot.slot === "lunch" || slot.slot === "dinner")) {
+    penalty += 0.4;
+  }
+
+  // savory protein + sweet fruit context (blueberries/strawberries in a "savory" bowl)
+  if (isSavoryMeatProtein && slot.slot === "breakfast") {
+    // Breakfast with a savory meat is fine, but adding a sweet fruit fat source is odd.
+    // This is handled by the produce layer; no additional penalty here.
   }
 
   return penalty;

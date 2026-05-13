@@ -7,6 +7,7 @@ import {
 } from '../../../components/progress';
 import { GlassCard } from '../../../components/premium/GlassCard';
 import { useProgressPhotoCompare } from '../../../hooks/useProgressBody';
+import { useProfile } from '../../../hooks/useUser';
 import {
   trackProgressBodyCtaTapped,
   trackProgressPhotoComparePairChanged,
@@ -32,6 +33,7 @@ export default function PhotoCompareScreen() {
   const [afterCheckpointId, setAfterCheckpointId] = useState<string | null>(
     typeof params.after === 'string' ? params.after : null,
   );
+  const { data: profile } = useProfile();
 
   const { data: snapshot, isLoading } = useProgressPhotoCompare(
     angle,
@@ -54,15 +56,26 @@ export default function PhotoCompareScreen() {
 
   return (
     <ProgressSectionShell
-      title="Compare Photos"
+      title="Compare"
       primarySection="body"
       secondarySection="body"
       secondaryItem="compare"
+      showPrimaryNav={false}
+      showSecondaryNav={false}
     >
       <ScrollView
         contentContainerStyle={{ paddingHorizontal: s.lg, paddingBottom: 90, gap: s.lg }}
         showsVerticalScrollIndicator={false}
       >
+        <GlassCard style={{ padding: 18 }}>
+          <Text style={{ color: c.text, fontFamily: ty.heading.familySemibold, fontSize: ty.sizes.md }}>
+            Compare two check-in dates
+          </Text>
+          <Text style={{ color: c.textMuted, fontFamily: ty.body.family, fontSize: ty.sizes.sm, marginTop: s.sm, lineHeight: 20 }}>
+            Pick the same angle across two checkpoints for a cleaner visual read on body composition changes.
+          </Text>
+        </GlassCard>
+
         {snapshot ? (
           <PhotoCompareView
             snapshot={snapshot}
@@ -75,6 +88,7 @@ export default function PhotoCompareScreen() {
             }}
             onBeforeChange={(checkpointId) => setBeforeCheckpointId(checkpointId)}
             onAfterChange={(checkpointId) => setAfterCheckpointId(checkpointId)}
+            unitSystem={profile?.unit_system}
           />
         ) : null}
 

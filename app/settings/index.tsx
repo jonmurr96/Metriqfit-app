@@ -15,6 +15,7 @@ import { getAppVersionInfo } from '../../lib/appConfig';
 import { formatTime12h } from '../../hooks/useMealTimes';
 import { getPreferredAppearanceLabel } from '../../lib/preferences';
 import { getTierIconName, getTierLabel } from '../../lib/subscription/plans';
+import { captureSentryTestEvent } from '../../lib/sentry';
 
 export default function SettingsScreen() {
     const { c, s, ty } = useTokens();
@@ -91,6 +92,18 @@ export default function SettingsScreen() {
                     }
                 }
             ]
+        );
+    };
+
+    const handleSentryTest = () => {
+        captureSentryTestEvent({
+            appEnv: versionInfo.environment,
+            release: versionInfo.display,
+            surface: 'settings',
+        });
+        Alert.alert(
+            'Sentry test sent',
+            'A controlled test event was captured with redacted sensitive fields.'
         );
     };
 
@@ -215,6 +228,20 @@ export default function SettingsScreen() {
                         onPress={handleLogout}
                     />
                 </GlassCard>
+
+                {__DEV__ && (
+                    <>
+                        {renderSectionHeader('OBSERVABILITY')}
+                        <GlassCard intensity="light" style={{ padding: 0, marginBottom: s.xl, overflow: 'hidden' }}>
+                            <SettingsItem
+                                icon="bug-outline"
+                                label="Send Sentry Test Event"
+                                value="Dev only"
+                                onPress={handleSentryTest}
+                            />
+                        </GlassCard>
+                    </>
+                )}
 
                 <Text style={[styles.versionText, { color: c.textSubtle, fontFamily: ty.mono.family }]}>
                     {versionInfo.display}

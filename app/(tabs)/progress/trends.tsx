@@ -17,8 +17,10 @@ import {
 } from '../../../lib/analytics';
 import { useFeatureAccess } from '../../../hooks/useSubscription';
 import { useTokens } from '../../../lib/theme';
+import { useProfile } from '../../../hooks/useUser';
 import { useProgressTrends } from '../../../hooks/useProgressMetrics';
 import type { ProgressRangeOption } from '../../../services/progressMetricsService';
+import { convertWeightSeries, formatWeightDeltaKg } from '../../../lib/progress/weight-units';
 
 const RANGE_OPTIONS: ProgressRangeOption[] = ['7D', '14D', '1M', '3M', '6M', '12M'];
 
@@ -34,6 +36,11 @@ export default function TrendsScreen() {
   const analyticsAccess = useFeatureAccess('advanced_analytics');
 
   const { data: snapshot, isLoading } = useProgressTrends(range);
+  const { data: profile } = useProfile();
+  const weightSeries = useMemo(
+    () => convertWeightSeries(snapshot?.weightSeries || [], profile?.unit_system),
+    [profile?.unit_system, snapshot?.weightSeries],
+  );
 
   useEffect(() => {
     trackProgressViewed({ source: 'progress_trends', range });
@@ -85,6 +92,8 @@ export default function TrendsScreen() {
         primarySection="performance"
         secondarySection="performance"
         secondaryItem="trends"
+        showPrimaryNav={false}
+        showSecondaryNav={false}
       >
         <View style={{ paddingHorizontal: s.lg, paddingTop: s.lg }}>
           <SubscriptionFeatureGate
@@ -103,6 +112,8 @@ export default function TrendsScreen() {
       primarySection="performance"
       secondarySection="performance"
       secondaryItem="trends"
+      showPrimaryNav={false}
+      showSecondaryNav={false}
     >
       <ScrollView
         contentContainerStyle={{ paddingHorizontal: s.lg, paddingBottom: 80 }}
@@ -113,6 +124,15 @@ export default function TrendsScreen() {
           selected={range}
           onChange={handleRangeChange}
         />
+
+        <GlassCard style={{ padding: 18, marginTop: s.lg }}>
+          <Text style={{ color: c.text, fontFamily: ty.heading.familySemibold, fontSize: ty.sizes.md }}>
+            All key trends
+          </Text>
+          <Text style={{ color: c.textMuted, fontFamily: ty.body.family, fontSize: ty.sizes.sm, marginTop: s.sm, lineHeight: 20 }}>
+            Training, nutrition adherence, body weight, and measurement confidence are grouped here for the selected range.
+          </Text>
+        </GlassCard>
 
         {snapshot ? (
           <>
@@ -181,8 +201,8 @@ export default function TrendsScreen() {
               <View style={{ marginTop: s.md }}>
                 <WeeklyTrendChart
                   title="Body Weight"
-                  data={snapshot.weightSeries}
-                  targetValue={Math.max(1, Math.round(snapshot.weightSeries.reduce((sum, point) => sum + point.value, 0) / Math.max(1, snapshot.weightSeries.length)))}
+                  data={weightSeries}
+                  targetValue={Math.max(1, Math.round(weightSeries.reduce((sum, point) => sum + point.value, 0) / Math.max(1, weightSeries.length)))}
                   changePercent={Math.abs(snapshot.bodySummary.weightChangePercent)}
                   changeDirection={snapshot.bodySummary.weightChangePercent >= 0 ? 'up' : 'down'}
                   emptyBehavior="zero"
@@ -193,7 +213,7 @@ export default function TrendsScreen() {
                   Body summary
                 </Text>
                 <Text style={{ color: c.textMuted, fontFamily: ty.body.family, fontSize: ty.sizes.sm, marginTop: s.xs }}>
-                  Weight {snapshot.bodySummary.weightDeltaKg > 0 ? '+' : ''}{snapshot.bodySummary.weightDeltaKg} kg · Body-fat {snapshot.bodySummary.bodyFatChange == null ? 'not enough data' : formatDirection(snapshot.bodySummary.bodyFatChange)}
+                  Weight {formatWeightDeltaKg(snapshot.bodySummary.weightDeltaKg, profile?.unit_system)} · Body-fat {snapshot.bodySummary.bodyFatChange == null ? 'not enough data' : formatDirection(snapshot.bodySummary.bodyFatChange)}
                 </Text>
                 <Text style={{ color: c.textMuted, fontFamily: ty.body.family, fontSize: ty.sizes.sm, marginTop: s.xs }}>
                   Waist {snapshot.bodySummary.circumferenceDelta.waistCm == null ? '—' : `${snapshot.bodySummary.circumferenceDelta.waistCm > 0 ? '+' : ''}${snapshot.bodySummary.circumferenceDelta.waistCm} cm`} · Hips {snapshot.bodySummary.circumferenceDelta.hipsCm == null ? '—' : `${snapshot.bodySummary.circumferenceDelta.hipsCm > 0 ? '+' : ''}${snapshot.bodySummary.circumferenceDelta.hipsCm} cm`}

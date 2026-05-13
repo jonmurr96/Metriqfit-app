@@ -73,7 +73,7 @@ export function normalizeOnboardingAnswers(input: Partial<OnboardingData>): Norm
     .map((item) => REFUSAL_SYNONYMS[item] || item);
   const refused_foods = refusedRaw.includes('none')
     ? []
-    : refusedRaw.filter((item) => item !== 'none');
+    : dedupe(refusedRaw.filter((item) => item !== 'none'));
 
   const techniqueRaw = normalizeList(input.technique_preferences as unknown as string[]);
   const technique_preferences = techniqueRaw.includes('none')

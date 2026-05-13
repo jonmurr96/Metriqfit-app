@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { View, TextInput, Pressable, Text, StyleSheet, Keyboard, Platform } from 'react-native';
+import { View, TextInput, Pressable, Text, StyleSheet, Keyboard } from 'react-native';
 import { MotiView } from 'moti';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useTokens } from '../../lib/theme';
@@ -15,9 +15,6 @@ interface ChatInputBarProps {
   bottomOffset?: number;
 }
 
-/**
- * Chat input bar with unified ring + glow design.
- */
 export function ChatInputBar({
   onSend,
   onQuickActionsPress,
@@ -27,7 +24,7 @@ export function ChatInputBar({
   quickActionLabel = 'Open coach actions',
   bottomOffset = 0,
 }: ChatInputBarProps) {
-  const { c, s, ty, r, glass } = useTokens();
+  const { c, s, ty, r } = useTokens();
   const insets = useSafeAreaInsets();
   const [message, setMessage] = useState('');
   const hasMessage = message.trim().length > 0;
@@ -45,37 +42,24 @@ export function ChatInputBar({
       style={[
         styles.container,
         {
-          backgroundColor: glass.background,
+          backgroundColor: c.bg,
           borderTopWidth: 1,
-          borderTopColor: `${c.primary}30`,
+          borderTopColor: c.border,
           paddingHorizontal: s.lg,
-          paddingTop: s.md,
+          paddingTop: s.sm,
           paddingBottom: (insets.bottom > 0 ? insets.bottom : s.md) + bottomOffset,
         },
-        Platform.OS === 'web' && {
-          backdropFilter: 'blur(12px)',
-        } as any,
       ]}
     >
-      {/* Ring input wrapper */}
       <View
         style={[
           styles.inputWrapper,
           {
-            backgroundColor: 'transparent',
-            borderRadius: r.lg,
-            borderWidth: 2,
-            borderColor: hasMessage ? c.primary : `${c.primary}40`,
+            backgroundColor: c.surface,
+            borderRadius: 22,
+            borderWidth: 1,
+            borderColor: hasMessage ? `${c.primary}55` : c.border,
           },
-          hasMessage && {
-            shadowColor: c.primary,
-            shadowOffset: { width: 0, height: 0 },
-            shadowOpacity: 0.3,
-            shadowRadius: 8,
-          },
-          hasMessage && Platform.OS === 'web' && {
-            boxShadow: `0 0 12px ${c.primary}40`,
-          } as any,
         ]}
       >
         {onQuickActionsPress ? (
@@ -86,16 +70,16 @@ export function ChatInputBar({
             style={({ pressed }) => [
               styles.quickActionButton,
               {
-                borderRadius: r.md,
+                borderRadius: r.pill,
                 borderWidth: 1,
-                borderColor: `${c.primary}40`,
-                backgroundColor: pressed ? c.surface2 : 'transparent',
+                borderColor: c.border,
+                backgroundColor: pressed ? c.surface2 : c.bg,
               },
             ]}
           >
             <TabBarIcon
-              name="sparkles"
-              color={c.primary}
+              name="add"
+              color={c.textMuted}
               size={18}
             />
           </Pressable>
@@ -124,36 +108,24 @@ export function ChatInputBar({
           }}
           transition={{ type: 'spring' as const, damping: 15, stiffness: 200 } as any}
         >
-          {/* Ring send button with glow */}
           <Pressable
             accessibilityRole="button"
             accessibilityLabel={hasMessage ? 'Send message to coach' : 'Enter a message to enable send'}
             style={({ pressed }) => [
               styles.sendButton,
               {
-                backgroundColor: hasMessage ? c.primary : 'transparent',
-                borderWidth: hasMessage ? 0 : 2,
-                borderColor: `${c.primary}40`,
-                borderRadius: r.md,
+                backgroundColor: hasMessage ? c.primary : c.surface2,
+                borderRadius: r.pill,
                 transform: [{ scale: pressed && hasMessage ? 0.9 : 1 }],
               },
-              hasMessage && {
-                shadowColor: c.primary,
-                shadowOffset: { width: 0, height: 0 },
-                shadowOpacity: 0.5,
-                shadowRadius: 8,
-              },
-              hasMessage && Platform.OS === 'web' && {
-                boxShadow: `0 0 16px ${c.primary}60`,
-              } as any,
             ]}
             onPress={handleSend}
             disabled={!hasMessage || disabled}
           >
             <TabBarIcon
-              name="chevron-forward"
+              name="arrow-up"
               color={hasMessage ? c.bg : c.textSubtle}
-              size={20}
+              size={18}
             />
           </Pressable>
         </MotiView>
@@ -188,19 +160,20 @@ const styles = StyleSheet.create({
   inputWrapper: {
     flexDirection: 'row',
     alignItems: 'flex-end',
-    paddingHorizontal: 12,
-    paddingVertical: 8,
+    paddingHorizontal: 10,
+    paddingVertical: 9,
     gap: 8,
   },
   quickActionButton: {
-    width: 40,
-    height: 40,
+    width: 38,
+    height: 38,
     alignItems: 'center',
     justifyContent: 'center',
   },
   input: {
     flex: 1,
-    maxHeight: 100,
+    minHeight: 38,
+    maxHeight: 112,
     paddingVertical: 8,
     paddingRight: 8,
   },
@@ -213,7 +186,7 @@ const styles = StyleSheet.create({
   footer: {
     flexDirection: 'row',
     justifyContent: 'space-between',
-    marginTop: 8,
+    marginTop: 7,
     paddingHorizontal: 4,
   },
 });

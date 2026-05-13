@@ -246,6 +246,10 @@ function buildIngredientFrequency(days) {
         const name = meal.items[key].food.name;
         freq[name] = (freq[name] || 0) + 1;
       }
+      if (meal.items.produce) {
+        const name = meal.items.produce.food.name;
+        freq[name] = (freq[name] || 0) + 1;
+      }
     }
   }
   return Object.entries(freq).sort((a, b) => b[1] - a[1]);

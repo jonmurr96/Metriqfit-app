@@ -9,6 +9,7 @@ const corsHeaders = {
 
 const MAX_HTML_BYTES = 1_500_000;
 const FETCH_TIMEOUT_MS = 10_000;
+const MAX_REDIRECTS = 3;
 
 function jsonResponse(body: unknown, status = 200) {
   return new Response(JSON.stringify(body), {
@@ -29,10 +30,17 @@ function normalizeUrl(url: string) {
 
 function isPrivateIp(hostname: string) {
   if (/^127\./.test(hostname)) return true;
+  if (/^169\.254\./.test(hostname)) return true;
   if (/^10\./.test(hostname)) return true;
   if (/^192\.168\./.test(hostname)) return true;
   if (/^172\.(1[6-9]|2\d|3[0-1])\./.test(hostname)) return true;
+  if (/^100\.(6[4-9]|[7-9]\d|1[01]\d|12[0-7])\./.test(hostname)) return true;
   if (hostname === "0.0.0.0" || hostname === "::1") return true;
+  if (hostname.includes(":")) {
+    const normalized = hostname.replace(/^\[|\]$/g, "").toLowerCase();
+    if (normalized === "::1" || normalized === "::" || normalized.startsWith("fe80:")) return true;
+    if (/^f[cd][0-9a-f]{2}:/.test(normalized)) return true;
+  }
   return false;
 }
 
@@ -49,7 +57,12 @@ function validateSourceUrl(url: string) {
   }
 
   const host = parsed.hostname.toLowerCase();
-  if (["localhost", "localhost.localdomain"].includes(host)) {
+  if (
+    ["localhost", "localhost.localdomain", "metadata.google.internal"].includes(host)
+    || host.endsWith(".localhost")
+    || host.endsWith(".local")
+    || host.endsWith(".internal")
+  ) {
     throw new Error("Localhost URLs are not allowed");
   }
 
@@ -58,6 +71,77 @@ function validateSourceUrl(url: string) {
   }
 
   return parsed;
+}
+
+async function readTextWithLimit(response: Response) {
+  const contentLength = Number(response.headers.get("content-length") || "0");
+  if (contentLength && contentLength > MAX_HTML_BYTES) {
+    throw new Error("Recipe page too large to process");
+  }
+
+  if (!response.body) {
+    const text = await response.text();
+    if (new TextEncoder().encode(text).length > MAX_HTML_BYTES) {
+      throw new Error("Recipe page too large to process");
+    }
+    return text;
+  }
+
+  const reader = response.body.getReader();
+  const chunks: Uint8Array[] = [];
+  let received = 0;
+
+  while (true) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    if (!value) continue;
+    received += value.byteLength;
+    if (received > MAX_HTML_BYTES) {
+      await reader.cancel();
+      throw new Error("Recipe page too large to process");
+    }
+    chunks.push(value);
+  }
+
+  const merged = new Uint8Array(received);
+  let offset = 0;
+  for (const chunk of chunks) {
+    merged.set(chunk, offset);
+    offset += chunk.byteLength;
+  }
+
+  return new TextDecoder().decode(merged);
+}
+
+async function fetchRecipeHtml(sourceUrl: string, signal: AbortSignal) {
+  let current = validateSourceUrl(sourceUrl);
+
+  for (let redirectCount = 0; redirectCount <= MAX_REDIRECTS; redirectCount += 1) {
+    const response = await fetch(current.toString(), {
+      method: "GET",
+      redirect: "manual",
+      signal,
+      headers: {
+        "User-Agent": "MetriqFitRecipeImporter/1.0",
+        Accept: "text/html,application/xhtml+xml",
+      },
+    });
+
+    if ([301, 302, 303, 307, 308].includes(response.status)) {
+      const location = response.headers.get("location");
+      if (!location) throw new Error("Recipe page redirected without a Location header");
+      current = validateSourceUrl(new URL(location, current).toString());
+      continue;
+    }
+
+    if (!response.ok) {
+      throw new Error(`Failed to fetch recipe page (${response.status})`);
+    }
+
+    return readTextWithLimit(response);
+  }
+
+  throw new Error("Recipe page redirected too many times");
 }
 
 async function sha256Hex(input: string) {
@@ -98,6 +182,16 @@ type ParsedIngredient = {
   unit: string | null;
   name: string;
   grams_estimate: number;
+};
+
+type ExtractedRecipe = {
+  parserPath: "jsonld" | "html_heuristic" | "ai_fallback";
+  name: string;
+  description: string | null;
+  servings: string | null;
+  ingredients: ParsedIngredient[];
+  instructions: string[];
+  warnings: string[];
 };
 
 function unitToGrams(unit: string | null, quantity: number | null) {
@@ -156,7 +250,7 @@ function parseIngredientLine(line: string): ParsedIngredient {
   };
 }
 
-function extractRecipeFromJsonLd(html: string) {
+function extractRecipeFromJsonLd(html: string): ExtractedRecipe | null {
   const blocks = extractJsonLdBlocks(html);
   const parsedDocs: any[] = [];
 
@@ -211,7 +305,7 @@ function extractRecipeFromJsonLd(html: string) {
   };
 }
 
-function extractRecipeHeuristic(html: string) {
+function extractRecipeHeuristic(html: string): ExtractedRecipe {
   const titleMatch = html.match(/<title[^>]*>([\s\S]*?)<\/title>/i);
   const title = sanitizeText(titleMatch?.[1] || "Imported Recipe");
 
@@ -248,7 +342,7 @@ function extractRecipeHeuristic(html: string) {
   };
 }
 
-async function aiFallbackParse(openAiKey: string, html: string) {
+async function aiFallbackParse(openAiKey: string, html: string): Promise<ExtractedRecipe> {
   const snippet = html.slice(0, 14000);
 
   const response = await fetch("https://api.openai.com/v1/chat/completions", {
@@ -303,7 +397,7 @@ async function aiFallbackParse(openAiKey: string, html: string) {
 }
 
 async function mapIngredientsToFoods(
-  supabase: ReturnType<typeof createClient>,
+  supabase: any,
   ingredients: ParsedIngredient[],
 ) {
   const mapped = [] as Array<ParsedIngredient & {
@@ -324,15 +418,15 @@ async function mapIngredientsToFoods(
 
     mapped.push({
       ...ingredient,
-      matched_food_item_id: food?.id || null,
-      matched_food_name: food?.name || null,
+      matched_food_item_id: typeof food?.id === "string" ? food.id : null,
+      matched_food_name: typeof food?.name === "string" ? food.name : null,
     });
   }
 
   return mapped;
 }
 
-async function isEliteUser(supabase: ReturnType<typeof createClient>, userId: string) {
+async function isEliteUser(supabase: any, userId: string) {
   const { data: sub } = await supabase
     .from("subscriptions")
     .select("plan_type, status, expires_at")
@@ -341,11 +435,12 @@ async function isEliteUser(supabase: ReturnType<typeof createClient>, userId: st
     .limit(1)
     .maybeSingle();
 
-  if (!sub) return false;
-  if (!["elite_monthly", "elite_annual", "elite_lifetime"].includes(sub.plan_type)) return false;
-  if (sub.plan_type === "elite_lifetime") return true;
-  if (!["active", "trial", "grace_period"].includes(sub.status)) return false;
-  if (sub.expires_at) return new Date(sub.expires_at) > new Date();
+  const row = sub as { plan_type?: string; status?: string; expires_at?: string | null } | null;
+  if (!row) return false;
+  if (!["elite_monthly", "elite_annual", "elite_lifetime"].includes(String(row.plan_type))) return false;
+  if (row.plan_type === "elite_lifetime") return true;
+  if (!["active", "trial", "grace_period"].includes(String(row.status))) return false;
+  if (row.expires_at) return new Date(row.expires_at) > new Date();
   return true;
 }
 
@@ -390,7 +485,7 @@ serve(async (req) => {
     }
 
     const parsedUrl = validateSourceUrl(sourceUrl);
-    const normalized = normalizeUrl(sourceUrl);
+    const normalized = normalizeUrl(parsedUrl.toString());
     const normalizedHash = await sha256Hex(normalized);
 
     const controller = new AbortController();
@@ -398,26 +493,7 @@ serve(async (req) => {
 
     let html = "";
     try {
-      const response = await fetch(normalized, {
-        method: "GET",
-        redirect: "follow",
-        signal: controller.signal,
-        headers: {
-          "User-Agent": "MetriqFitRecipeImporter/1.0",
-          Accept: "text/html,application/xhtml+xml",
-        },
-      });
-
-      if (!response.ok) {
-        return jsonResponse({ success: false, error: `Failed to fetch recipe page (${response.status})` }, 400);
-      }
-
-      const contentLength = Number(response.headers.get("content-length") || "0");
-      if (contentLength && contentLength > MAX_HTML_BYTES) {
-        return jsonResponse({ success: false, error: "Recipe page too large to process" }, 413);
-      }
-
-      html = await response.text();
+      html = await fetchRecipeHtml(normalized, controller.signal);
     } finally {
       clearTimeout(timeout);
     }

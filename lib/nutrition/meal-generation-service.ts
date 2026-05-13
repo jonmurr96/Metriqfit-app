@@ -14,7 +14,6 @@ import {
   type MealGenerationConfig as IntelligentConfig,
   type GeneratedDayPlan,
   type GeneratedMeal,
-  formatMealForDisplay,
   getProteinDiversity,
   type GoalType,
 } from './intelligent-meal-generator';
@@ -36,13 +35,16 @@ import type {
 import {
   generateDayMealPlan as legacyGenerateDayPlan,
   type MealGenerationConfig as LegacyConfig,
-  type MealPlanDay,
 } from './meal-generator';
 import {
-  matchRecipesToMealSlots,
+  matchRecipes,
   type Recipe,
-  type MatchedRecipe,
+  type RecipeMatchResult,
 } from './recipe-matcher';
+import {
+  recommendMealFrequency,
+  resolveMealFrequencyChoice,
+} from './meal-frequency';
 
 export interface GeneratedMealPlan {
   weekPlan: {
@@ -56,7 +58,7 @@ export interface GeneratedMealPlan {
       fat: number;
     };
     // Legacy recipe matching (optional)
-    recipes?: MatchedRecipe[];
+    recipes?: RecipeMatchResult[];
   }[];
   targets: EnhancedTargetOutput;
   summary: {
@@ -136,6 +138,12 @@ export function createLegacyConfig(
   onboarding: OnboardingData,
   targets: EnhancedTargetOutput
 ): LegacyConfig {
+  const mealFrequencyRecommendation = recommendMealFrequency({
+    goalType: onboarding.goal_type,
+    calories: targets.trainingDay.calories,
+    proteinGrams: targets.trainingDay.protein_g,
+  });
+
   return {
     preferredProteins: onboarding.preferred_proteins || [],
     wakeTime: onboarding.wake_time || '7_8am',
@@ -145,7 +153,7 @@ export function createLegacyConfig(
     trainingDaysPerWeek: onboarding.training_days_per_week || 3,
     carbTolerance: onboarding.carb_tolerance || 'energized_satiated',
     cookingLevel: onboarding.cooking_level || 'basic',
-    mealsPerDay: onboarding.meals_per_day || '3',
+    mealsPerDay: resolveMealFrequencyChoice(onboarding.meals_per_day, mealFrequencyRecommendation),
     dailyTargets: {
       trainingDay: {
         calories: targets.trainingDay.calories,
@@ -177,16 +185,16 @@ export function generateWeeklyMealPlan(
 ): GeneratedMealPlan {
   // Calculate targets
   const targets = calculateEnhancedTargets({
-    sex: onboarding.sex,
-    dob: onboarding.dob,
-    height_ft: onboarding.height_ft,
-    height_in: onboarding.height_in,
-    current_weight_lb: onboarding.current_weight_lb,
-    goal_type: onboarding.goal_type,
-    activity_level: onboarding.activity_level,
+    sex: onboarding.sex!,
+    dob: onboarding.dob!,
+    height_ft: onboarding.height_ft!,
+    height_in: onboarding.height_in!,
+    current_weight_lb: onboarding.current_weight_lb!,
+    goal_type: onboarding.goal_type!,
+    activity_level: onboarding.activity_level!,
     training_days_per_week: onboarding.training_days_per_week || 3,
     minutes_per_workout: onboarding.minutes_per_workout || '60',
-    experience_level: onboarding.experience_level,
+    experience_level: onboarding.experience_level!,
     carb_tolerance: onboarding.carb_tolerance || 'energized_satiated',
     avg_steps: onboarding.avg_steps,
     target_weight_lb: onboarding.target_weight_lb,
@@ -247,16 +255,16 @@ export function generateSingleDayMeals(
   isTrainingDay: boolean
 ): GeneratedDayPlan {
   const targets = calculateEnhancedTargets({
-    sex: onboarding.sex,
-    dob: onboarding.dob,
-    height_ft: onboarding.height_ft,
-    height_in: onboarding.height_in,
-    current_weight_lb: onboarding.current_weight_lb,
-    goal_type: onboarding.goal_type,
-    activity_level: onboarding.activity_level,
+    sex: onboarding.sex!,
+    dob: onboarding.dob!,
+    height_ft: onboarding.height_ft!,
+    height_in: onboarding.height_in!,
+    current_weight_lb: onboarding.current_weight_lb!,
+    goal_type: onboarding.goal_type!,
+    activity_level: onboarding.activity_level!,
     training_days_per_week: onboarding.training_days_per_week || 3,
     minutes_per_workout: onboarding.minutes_per_workout || '60',
-    experience_level: onboarding.experience_level,
+    experience_level: onboarding.experience_level!,
     carb_tolerance: onboarding.carb_tolerance || 'energized_satiated',
     avg_steps: onboarding.avg_steps,
   });
@@ -276,16 +284,16 @@ export function generateLegacyWeeklyMealPlan(
   trainingDays: string[] = ['mon', 'tue', 'thu', 'fri']
 ): GeneratedMealPlan {
   const targets = calculateEnhancedTargets({
-    sex: onboarding.sex,
-    dob: onboarding.dob,
-    height_ft: onboarding.height_ft,
-    height_in: onboarding.height_in,
-    current_weight_lb: onboarding.current_weight_lb,
-    goal_type: onboarding.goal_type,
-    activity_level: onboarding.activity_level,
+    sex: onboarding.sex!,
+    dob: onboarding.dob!,
+    height_ft: onboarding.height_ft!,
+    height_in: onboarding.height_in!,
+    current_weight_lb: onboarding.current_weight_lb!,
+    goal_type: onboarding.goal_type!,
+    activity_level: onboarding.activity_level!,
     training_days_per_week: onboarding.training_days_per_week || 3,
     minutes_per_workout: onboarding.minutes_per_workout || '60',
-    experience_level: onboarding.experience_level,
+    experience_level: onboarding.experience_level!,
     carb_tolerance: onboarding.carb_tolerance || 'energized_satiated',
     avg_steps: onboarding.avg_steps,
     target_weight_lb: onboarding.target_weight_lb,
@@ -299,13 +307,14 @@ export function generateLegacyWeeklyMealPlan(
     const isTrainingDay = trainingDays.includes(day);
     const dayPlan = legacyGenerateDayPlan(config, isTrainingDay);
 
-    const matchedRecipes = matchRecipesToMealSlots(
-      dayPlan.meals,
-      recipes,
-      config.preferredProteins,
-      config.cookingLevel,
-      config.carbTolerance
-    );
+    const matchedRecipes = matchRecipes(recipes, {
+      dietaryPreference: 'anything',
+      allergies: [],
+      refusedFoods: [],
+      preferredProteins: config.preferredProteins,
+      carbTolerance: config.carbTolerance,
+      cookingLevel: config.cookingLevel,
+    });
 
     // Convert legacy meals to new format
     const meals: GeneratedMeal[] = dayPlan.meals.map((m, i) => ({
@@ -314,9 +323,19 @@ export function generateLegacyWeeklyMealPlan(
       time: m.time,
       isTrainingRelated: m.foodFocus.includes('pre-workout') || m.foodFocus.includes('post-workout'),
       foods: [], // Legacy doesn't have food portions
-      targetMacros: m.targetMacros,
-      actualMacros: m.targetMacros, // Legacy uses target as actual
-      notes: m.foodFocus ? [m.foodFocus] : [],
+      targetMacros: {
+        calories: m.targetCalories,
+        protein: m.targetProtein,
+        carbs: m.targetCarbs,
+        fat: m.targetFat,
+      },
+      actualMacros: {
+        calories: m.targetCalories,
+        protein: m.targetProtein,
+        carbs: m.targetCarbs,
+        fat: m.targetFat,
+      }, // Legacy uses target as actual
+      notes: m.foodFocus || [],
     }));
 
     return {
@@ -442,10 +461,11 @@ export function validateNutritionOnboarding(onboarding: OnboardingData): {
 } {
   const required = [
     { field: 'dietary_preference', label: 'Dietary preference' },
-    { field: 'allergies', label: 'Allergies' },
+    { field: 'allergies_exclusions', label: 'Food allergies' },
     { field: 'preferred_proteins', label: 'Protein preferences' },
     { field: 'wake_time', label: 'Wake time' },
     { field: 'first_meal_delay', label: 'First meal timing' },
+    { field: 'last_meal_before_bed', label: 'Last meal timing' },
     { field: 'training_time', label: 'Training time' },
     { field: 'meals_per_day', label: 'Meals per day' },
   ];

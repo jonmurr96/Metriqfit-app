@@ -2,7 +2,7 @@ import { serve } from "https://deno.land/std@0.224.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.45.4";
 
 interface RequestBody {
-  userId: string;
+  userId?: string;
   streakType: "fitness" | "workout" | "nutrition" | "hydration" | "weigh_in";
   activityDate: string; // ISO date string (YYYY-MM-DD)
   useFreezeToken?: boolean;
@@ -49,15 +49,40 @@ serve(async (req) => {
   }
 
   try {
+    const authHeader = req.headers.get("Authorization") || "";
+    if (!authHeader) {
+      return new Response(
+        JSON.stringify({ error: "Missing authorization header" }),
+        { status: 401, headers: { "Content-Type": "application/json" } },
+      );
+    }
+
     const supabase = createClient(
       Deno.env.get("SUPABASE_URL") ?? "",
-      Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? ""
+      Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? "",
+      { global: { headers: { Authorization: authHeader } } },
     );
 
-    const body: RequestBody = await req.json();
-    const { userId, streakType, activityDate, useFreezeToken = false } = body;
+    const { data: authData, error: authError } = await supabase.auth.getUser();
+    if (authError || !authData?.user) {
+      return new Response(
+        JSON.stringify({ error: "Unauthorized" }),
+        { status: 401, headers: { "Content-Type": "application/json" } },
+      );
+    }
 
-    if (!userId || !streakType || !activityDate) {
+    const body: RequestBody = await req.json();
+    const { streakType, activityDate, useFreezeToken = false } = body;
+    const userId = body.userId || authData.user.id;
+
+    if (userId !== authData.user.id) {
+      return new Response(
+        JSON.stringify({ error: "User mismatch" }),
+        { status: 403, headers: { "Content-Type": "application/json" } },
+      );
+    }
+
+    if (!streakType || !activityDate) {
       return new Response(
         JSON.stringify({ error: "Missing required fields" }),
         { status: 400, headers: { "Content-Type": "application/json" } }
@@ -183,8 +208,9 @@ serve(async (req) => {
     });
   } catch (error) {
     console.error("Error in update-streak function:", error);
+    const message = error instanceof Error ? error.message : String(error);
     return new Response(
-      JSON.stringify({ error: error.message }),
+      JSON.stringify({ error: message }),
       { status: 500, headers: { "Content-Type": "application/json" } }
     );
   }

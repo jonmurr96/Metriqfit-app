@@ -113,8 +113,7 @@ export default function NutritionHomeScreen() {
     { label: 'Yesterday', icon: 'copy-outline', onPress: handleCopyYesterday },
     { label: 'Import', icon: 'link-outline', onPress: () => router.push('/(tabs)/nutrition/recipe-import') },
     { label: 'Menu AI', icon: 'restaurant-outline', onPress: () => router.push('/(tabs)/nutrition/menu-scan') },
-    { label: 'Grocery', icon: 'basket-outline', onPress: () => router.push('/(tabs)/nutrition/grocery-planner') },
-    { label: 'Pantry', icon: 'archive-outline', onPress: () => router.push('/(tabs)/nutrition/pantry') },
+    { label: 'Budget', icon: 'calculator-outline', onPress: () => router.push('/(tabs)/nutrition/tools/macro-budgeter') },
   ];
 
   const slotTimeMap = React.useMemo(

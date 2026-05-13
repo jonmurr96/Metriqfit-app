@@ -69,10 +69,21 @@ export function NutritionMealPreview({ dayDetails }: NutritionMealPreviewProps) 
         return (
           <View key={meal.id} style={[styles.mealCard, { borderColor: c.border, backgroundColor: c.bg, borderRadius: r.md }]}> 
             <View style={styles.mealHeader}>
-              <Text style={{ color: c.text, fontFamily: ty.body.familySemibold, fontSize: 13 }}>
+              <Text
+                style={[
+                  styles.mealTitle,
+                  { color: c.text, fontFamily: ty.body.familySemibold },
+                ]}
+                numberOfLines={2}
+              >
                 {slotLabel(meal.meal_slot)}: {selected?.name || meal.name}
               </Text>
-              <Text style={{ color: c.primary, fontFamily: ty.body.familySemibold, fontSize: 12 }}>
+              <Text
+                style={[
+                  styles.mealCalories,
+                  { color: c.primary, fontFamily: ty.body.familySemibold },
+                ]}
+              >
                 {Math.round(calories)} kcal
               </Text>
             </View>
@@ -121,14 +132,26 @@ const styles = StyleSheet.create({
   },
   mealCard: {
     borderWidth: 1,
-    padding: 10,
+    padding: 12,
   },
   mealHeader: {
     flexDirection: 'row',
-    alignItems: 'center',
+    alignItems: 'flex-start',
     justifyContent: 'space-between',
-    marginBottom: 4,
+    marginBottom: 6,
     gap: 8,
+  },
+  mealTitle: {
+    flex: 1,
+    fontSize: 13,
+    lineHeight: 17,
+    paddingRight: 6,
+  },
+  mealCalories: {
+    flexShrink: 0,
+    fontSize: 12,
+    lineHeight: 17,
+    textAlign: 'right',
   },
   emptyCard: {
     borderWidth: 1,

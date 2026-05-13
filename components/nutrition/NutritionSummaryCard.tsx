@@ -194,7 +194,7 @@ export function NutritionSummaryCard({
           <View style={styles.macroRow}>
             <View style={styles.macroHeader}>
               <Text style={[styles.macroLabel, { color: c.macros.protein, fontFamily: ty.body.familySemibold, fontSize: 10 }]}>
-                PRO
+                PROTEIN
               </Text>
               <Text style={[styles.macroValue, { color: c.macros.protein, fontFamily: ty.body.familySemibold, fontSize: 10 }]}>
                 {protein}g

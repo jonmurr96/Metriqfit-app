@@ -63,9 +63,11 @@ import {
   type AICoachAttachment,
   type AICoachConversationMessage,
   type AICoachConversationSummary,
+  type AICoachDashboardState,
   type AICoachIntervention,
   type AICoachActionProposal,
   type AICoachThreadItem,
+  type SuggestedPrompt,
 } from '../../../services/aiCoachService';
 
 function timestampLabel(input: string) {
@@ -172,6 +174,127 @@ function attachmentIntervention(attachment: AICoachAttachment, messageId: string
   }
 
   return null;
+}
+
+function formatContextNumber(value: number) {
+  if (!Number.isFinite(value)) return '--';
+  return Math.round(value).toLocaleString();
+}
+
+function CoachEmptyState({
+  dashboard,
+  prompts,
+  onSelectPrompt,
+}: {
+  dashboard: AICoachDashboardState | null;
+  prompts: SuggestedPrompt[];
+  onSelectPrompt: (prompt: SuggestedPrompt) => void;
+}) {
+  const { c, s, ty, r } = useTokens();
+  const stats = dashboard
+    ? [
+        { label: 'Calories left', value: `${formatContextNumber(dashboard.context.caloriesRemaining)}` },
+        { label: 'Protein left', value: `${formatContextNumber(dashboard.context.proteinRemaining)}g` },
+        { label: 'Hydration', value: `${formatContextNumber(dashboard.context.hydrationPercent)}%` },
+      ]
+    : [];
+
+  return (
+    <View style={[styles.emptyState, { paddingHorizontal: s.lg }]}>
+      <View style={[styles.emptyIcon, { borderColor: c.border, backgroundColor: c.surface }]}>
+        <TabBarIcon name="sparkles" color={c.primary} size={24} />
+      </View>
+      <Text
+        style={{
+          color: c.text,
+          fontFamily: ty.heading.familySemibold,
+          fontSize: 28,
+          textAlign: 'center',
+          marginTop: s.lg,
+        }}
+      >
+        How can I help today?
+      </Text>
+      <Text
+        style={{
+          color: c.textMuted,
+          fontFamily: ty.body.family,
+          fontSize: ty.sizes.sm,
+          lineHeight: 21,
+          textAlign: 'center',
+          marginTop: s.sm,
+          maxWidth: 330,
+        }}
+      >
+        Ask about training, nutrition, recovery, or the next move. The coach uses your current app context.
+      </Text>
+
+      {stats.length ? (
+        <View style={[styles.contextStrip, { gap: s.sm, marginTop: s.xl }]}>
+          {stats.map((stat) => (
+            <View
+              key={stat.label}
+              style={[
+                styles.contextPill,
+                {
+                  borderRadius: r.lg,
+                  borderColor: c.border,
+                  backgroundColor: c.surface,
+                  padding: s.md,
+                },
+              ]}
+            >
+              <Text style={{ color: c.text, fontFamily: ty.body.familySemibold, fontSize: ty.sizes.sm }}>
+                {stat.value}
+              </Text>
+              <Text style={{ color: c.textMuted, fontFamily: ty.body.family, fontSize: 11, marginTop: 3 }}>
+                {stat.label}
+              </Text>
+            </View>
+          ))}
+        </View>
+      ) : null}
+
+      {prompts.length ? (
+        <View style={[styles.emptyPromptGrid, { gap: s.sm, marginTop: s.xl }]}>
+          {prompts.slice(0, 4).map((prompt) => (
+            <Pressable
+              key={prompt.id}
+              accessibilityRole="button"
+              accessibilityLabel={prompt.label}
+              onPress={() => onSelectPrompt(prompt)}
+              style={({ pressed }) => [
+                styles.emptyPromptCard,
+                {
+                  borderRadius: r.lg,
+                  borderWidth: 1,
+                  borderColor: pressed ? `${c.primary}66` : c.border,
+                  backgroundColor: pressed ? c.surface2 : c.surface,
+                  padding: s.md,
+                },
+              ]}
+            >
+              <View style={[styles.emptyPromptIcon, { borderRadius: r.pill, backgroundColor: c.surface2 }]}>
+                <TabBarIcon name={prompt.icon as any} color={c.textMuted} size={16} />
+              </View>
+              <Text
+                numberOfLines={3}
+                style={{
+                  color: c.text,
+                  fontFamily: ty.body.familySemibold,
+                  fontSize: ty.sizes.sm,
+                  lineHeight: 19,
+                  marginTop: s.sm,
+                }}
+              >
+                {prompt.label}
+              </Text>
+            </Pressable>
+          ))}
+        </View>
+      ) : null}
+    </View>
+  );
 }
 
 export default function AICoachScreen() {
@@ -598,8 +721,8 @@ export default function AICoachScreen() {
           style={[
             styles.header,
             {
-              paddingTop: insets.top + s.lg,
-              paddingHorizontal: s.xl,
+              paddingTop: insets.top + s.md,
+              paddingHorizontal: s.lg,
               paddingBottom: s.sm,
             },
           ]}
@@ -607,54 +730,44 @@ export default function AICoachScreen() {
           <View style={styles.headerCopy}>
             <Text
               style={{
-                color: c.textMuted,
-                fontFamily: ty.body.familySemibold,
-                fontSize: ty.sizes.xs,
-                letterSpacing: 1.4,
-                marginBottom: s.xs,
-              }}
-            >
-              PRECISION COACH
-            </Text>
-            <Text
-              style={{
                 color: c.text,
-                fontFamily: ty.heading.family,
-                fontSize: ty.sizes.h2,
-                letterSpacing: -0.4,
+                fontFamily: ty.heading.familySemibold,
+                fontSize: ty.sizes.xl,
               }}
             >
               AI Coach
             </Text>
+            <Text
+              numberOfLines={1}
+              style={{
+                color: c.textMuted,
+                fontFamily: ty.body.family,
+                fontSize: ty.sizes.xs,
+                marginTop: 4,
+              }}
+            >
+              {chat.rateLimit?.messagesLimit === -1 ? 'Unlimited messages' : `${chat.remainingMessages} messages left today`}
+            </Text>
           </View>
 
           <View style={styles.headerRight}>
-            <View
-              style={[
-                styles.usageBadge,
-                {
-                  borderRadius: r.pill,
-                  borderWidth: 1,
-                  borderColor: `${c.primary}44`,
-                  backgroundColor: 'rgba(8, 14, 32, 0.52)',
-                },
-              ]}
-            >
-              <TabBarIcon name="sparkles" color={c.primary} size={14} />
-              <Text
-                numberOfLines={1}
-                style={{
-                  color: c.primary,
-                  fontFamily: ty.body.familySemibold,
-                  fontSize: 11,
-                  marginLeft: 6,
-                }}
-              >
-                {chat.rateLimit?.messagesLimit === -1 ? 'Unlimited' : `${chat.remainingMessages} left today`}
-              </Text>
-            </View>
-
             <View style={styles.headerActions}>
+              <Pressable
+                accessibilityRole="button"
+                accessibilityLabel="Open coach actions"
+                onPress={() => setIsActionsOpen(true)}
+                style={({ pressed }) => [
+                  styles.iconButton,
+                  {
+                    borderRadius: r.pill,
+                    borderWidth: 1,
+                    borderColor: c.border,
+                    backgroundColor: pressed ? c.surface2 : c.surface,
+                  },
+                ]}
+              >
+                <TabBarIcon name="sparkles-outline" color={c.textMuted} size={18} />
+              </Pressable>
               <Pressable
                 accessibilityRole="button"
                 accessibilityLabel="Open conversation history"
@@ -670,7 +783,7 @@ export default function AICoachScreen() {
                 style={({ pressed }) => [
                   styles.iconButton,
                   {
-                    borderRadius: r.md,
+                    borderRadius: r.pill,
                     borderWidth: 1,
                     borderColor: c.border,
                     backgroundColor: pressed ? c.surface2 : c.surface,
@@ -686,7 +799,7 @@ export default function AICoachScreen() {
                 style={({ pressed }) => [
                   styles.iconButton,
                   {
-                    borderRadius: r.md,
+                    borderRadius: r.pill,
                     borderWidth: 1,
                     borderColor: c.border,
                     backgroundColor: pressed ? c.surface2 : c.surface,
@@ -799,28 +912,26 @@ export default function AICoachScreen() {
           ref={scrollViewRef}
           style={styles.scrollView}
           contentContainerStyle={{
-            paddingTop: isStatusStripVisible ? s.xl : s.lg,
-            paddingBottom: 152,
+            paddingTop: messages.length ? (isStatusStripVisible ? s.xl : s.lg) : s.md,
+            paddingBottom: messages.length ? 152 : 184,
           }}
           showsVerticalScrollIndicator={false}
           keyboardShouldPersistTaps="handled"
         >
-          <View style={{ paddingHorizontal: s.lg, marginBottom: s.md }}>
-            <Text
-              style={{
-                color: c.textMuted,
-                fontFamily: ty.body.familySemibold,
-                fontSize: ty.sizes.xs,
-                letterSpacing: 1.4,
-              }}
-            >
-              LIVE COACH WINDOW
-            </Text>
-          </View>
+          {!messages.length && !isViewingHistory ? (
+            <CoachEmptyState
+              dashboard={dashboard}
+              prompts={promptSuggestions}
+              onSelectPrompt={(prompt) => handleSend(prompt.label)}
+            />
+          ) : null}
 
           <View style={styles.threadStack}>
             {threadItems.map((item, index) => {
               if (dismissedThreadItemIds.includes(item.id)) {
+                return null;
+              }
+              if (!messages.length && (item.id === 'starter-message' || item.id === 'starter-prompts')) {
                 return null;
               }
 
@@ -836,7 +947,7 @@ export default function AICoachScreen() {
                     />
 
                     {item.actions.length ? (
-                      <View style={{ paddingHorizontal: s.lg + 40, gap: s.sm, marginTop: s.sm }}>
+                      <View style={{ paddingHorizontal: s.lg, gap: s.sm, marginTop: s.sm }}>
                         {item.actions.map((attachment, attachmentIndex) => (
                           <Pressable
                             key={`${item.id}-${attachmentIndex}`}
@@ -1083,7 +1194,7 @@ export default function AICoachScreen() {
                   <View
                     key={item.id}
                     style={{
-                      marginHorizontal: s.lg + 40,
+                      marginHorizontal: s.lg,
                       borderRadius: r.lg,
                       borderWidth: 1,
                       borderColor: `${c.primary}20`,
@@ -1150,7 +1261,7 @@ export default function AICoachScreen() {
                   <View
                     key={item.id}
                     style={{
-                      marginHorizontal: s.lg + 40,
+                      marginHorizontal: s.lg,
                       borderRadius: r.lg,
                       borderWidth: 1,
                       borderColor: `${c.success}24`,
@@ -1217,7 +1328,7 @@ export default function AICoachScreen() {
                   <View
                     key={item.id}
                     style={{
-                      marginHorizontal: s.lg + 40,
+                      marginHorizontal: s.lg,
                       borderRadius: r.lg,
                       borderWidth: 1,
                       borderColor: `${c.success}24`,
@@ -1284,7 +1395,7 @@ export default function AICoachScreen() {
                   <View
                     key={item.id}
                     style={{
-                      marginHorizontal: s.lg + 40,
+                      marginHorizontal: s.lg,
                       borderRadius: r.lg,
                       borderWidth: 1,
                       borderColor: c.border,
@@ -1362,7 +1473,7 @@ export default function AICoachScreen() {
                   <View
                     key={item.id}
                     style={{
-                      marginHorizontal: s.lg + 40,
+                      marginHorizontal: s.lg,
                       borderRadius: r.lg,
                       borderWidth: 1,
                       borderColor: `${c.warning}24`,
@@ -1461,7 +1572,7 @@ export default function AICoachScreen() {
                   <View
                     key={item.id}
                     style={{
-                      marginHorizontal: s.lg + 40,
+                      marginHorizontal: s.lg,
                       borderRadius: r.lg,
                       borderWidth: 1,
                       borderColor: `${c.primary}24`,
@@ -1544,7 +1655,7 @@ export default function AICoachScreen() {
                   <View
                     key={item.id}
                     style={{
-                      marginHorizontal: s.lg + 40,
+                      marginHorizontal: s.lg,
                       borderRadius: r.lg,
                       borderWidth: 1,
                       borderColor: `${c.danger}24`,
@@ -1742,12 +1853,42 @@ const styles = StyleSheet.create({
     alignItems: 'flex-end',
     gap: 10,
   },
-  usageBadge: {
-    flexDirection: 'row',
+  emptyState: {
+    minHeight: 460,
     alignItems: 'center',
-    paddingHorizontal: 10,
-    paddingVertical: 7,
-    maxWidth: 150,
+    justifyContent: 'center',
+  },
+  emptyIcon: {
+    width: 58,
+    height: 58,
+    borderRadius: 29,
+    borderWidth: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  contextStrip: {
+    flexDirection: 'row',
+    width: '100%',
+  },
+  contextPill: {
+    flex: 1,
+    borderWidth: 1,
+    alignItems: 'center',
+  },
+  emptyPromptGrid: {
+    width: '100%',
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+  },
+  emptyPromptCard: {
+    width: '48.5%',
+    minHeight: 104,
+  },
+  emptyPromptIcon: {
+    width: 30,
+    height: 30,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   headerActions: {
     flexDirection: 'row',

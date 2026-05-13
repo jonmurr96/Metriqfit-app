@@ -1407,5 +1407,290 @@ export const coreTemplates = [
       }
     ]
   },
+  // ── EXPLICIT SPLIT PREFERENCE: Upper / Lower / Full (3-Day) ─────────────────
+  {
+    external_id: 'tmp_upper_lower_full_3day_v1',
+    name: 'Upper / Lower / Full 3-Day',
+    goal_bucket: GoalBucket.Hypertrophy,
+    training_style: TrainingStyle.UpperLower,
+    days_per_week: 3,
+    lift_comfort: LiftComfort.MachineDB,
+    environment: SessionEnvironment.Commercial,
+    experience_level: ExperienceLevel.Intermediate,
+    days: [
+      {
+        day_number: 1,
+        day_type: DayType.UpperHypertrophy,
+        slots: [
+          { order_index: 0, architectural_group: ReplacementGroup.Primary_Horizontal_Press,  is_required: true,  archetype: SlotArchetype.PrimeCompound,     progression_model: ProgressionModel.Double_Progression, sets: 3, reps_min: 8,  reps_max: 12, target_rpe: 8, rest_seconds: 120 },
+          { order_index: 1, architectural_group: ReplacementGroup.Primary_Vertical_Pull,     is_required: true,  archetype: SlotArchetype.PrimeCompound,     progression_model: ProgressionModel.Double_Progression, sets: 3, reps_min: 8,  reps_max: 12, target_rpe: 8, rest_seconds: 120 },
+          { order_index: 2, architectural_group: ReplacementGroup.Isolation_Lateral_Delt,    is_required: false, archetype: SlotArchetype.Isolation,         progression_model: ProgressionModel.Double_Progression, sets: 3, reps_min: 12, reps_max: 20, target_rpe: 9, rest_seconds: 60  },
+          { order_index: 3, architectural_group: ReplacementGroup.Isolation_Bicep_Flexion,   is_required: false, archetype: SlotArchetype.Isolation,         progression_model: ProgressionModel.Double_Progression, sets: 3, reps_min: 10, reps_max: 15, target_rpe: 9, rest_seconds: 60  },
+          { order_index: 4, architectural_group: ReplacementGroup.Trunk_Anti_Extension,      is_required: false, archetype: SlotArchetype.Isolation,         progression_model: ProgressionModel.Rep_Goal,           sets: 2, reps_min: 30, reps_max: 45, target_rpe: 8, rest_seconds: 60  },
+        ]
+      },
+      {
+        day_number: 2,
+        day_type: DayType.LowerHypertrophy,
+        slots: [
+          { order_index: 0, architectural_group: ReplacementGroup.Primary_Bilateral_Squat,   is_required: true,  archetype: SlotArchetype.PrimeCompound,     progression_model: ProgressionModel.Double_Progression, sets: 4, reps_min: 6,  reps_max: 10, target_rpe: 8, rest_seconds: 150 },
+          { order_index: 1, architectural_group: ReplacementGroup.Primary_Bilateral_Hinge,   is_required: true,  archetype: SlotArchetype.PrimeCompound,     progression_model: ProgressionModel.Double_Progression, sets: 3, reps_min: 6,  reps_max: 10, target_rpe: 8, rest_seconds: 150 },
+          { order_index: 2, architectural_group: ReplacementGroup.Unilateral_Squat_Lunge,    is_required: true,  archetype: SlotArchetype.SecondaryCompound, progression_model: ProgressionModel.Double_Progression, sets: 3, reps_min: 8,  reps_max: 12, target_rpe: 8, rest_seconds: 120 },
+          { order_index: 3, architectural_group: ReplacementGroup.Isolation_Hamstring_Curl,  is_required: false, archetype: SlotArchetype.Isolation,         progression_model: ProgressionModel.Double_Progression, sets: 3, reps_min: 12, reps_max: 15, target_rpe: 9, rest_seconds: 75  },
+          { order_index: 4, architectural_group: ReplacementGroup.Isolation_Calf_Raise,      is_required: false, archetype: SlotArchetype.Isolation,         progression_model: ProgressionModel.Double_Progression, sets: 3, reps_min: 15, reps_max: 25, target_rpe: 9, rest_seconds: 60  },
+        ]
+      },
+      {
+        day_number: 3,
+        day_type: DayType.FullBodyHypertrophy,
+        slots: [
+          { order_index: 0, architectural_group: ReplacementGroup.Primary_Vertical_Press,     is_required: true,  archetype: SlotArchetype.PrimeCompound,     progression_model: ProgressionModel.Double_Progression, sets: 3, reps_min: 8,  reps_max: 12, target_rpe: 8, rest_seconds: 120 },
+          { order_index: 1, architectural_group: ReplacementGroup.Primary_Horizontal_Pull,    is_required: true,  archetype: SlotArchetype.PrimeCompound,     progression_model: ProgressionModel.Double_Progression, sets: 3, reps_min: 8,  reps_max: 12, target_rpe: 8, rest_seconds: 120 },
+          { order_index: 2, architectural_group: ReplacementGroup.Unilateral_Hinge,           is_required: true,  archetype: SlotArchetype.SecondaryCompound, progression_model: ProgressionModel.Double_Progression, sets: 3, reps_min: 8,  reps_max: 12, target_rpe: 8, rest_seconds: 120 },
+          { order_index: 3, architectural_group: ReplacementGroup.Isolation_Tricep_Extension, is_required: false, archetype: SlotArchetype.Isolation,         progression_model: ProgressionModel.Double_Progression, sets: 3, reps_min: 10, reps_max: 15, target_rpe: 9, rest_seconds: 60  },
+          { order_index: 4, architectural_group: ReplacementGroup.Trunk_Flexion,              is_required: false, archetype: SlotArchetype.Isolation,         progression_model: ProgressionModel.Rep_Goal,           sets: 2, reps_min: 15, reps_max: 25, target_rpe: 8, rest_seconds: 60  },
+        ]
+      },
+    ]
+  },
+
+  // ── EXPLICIT SPLIT PREFERENCE: PPL 3-Day ─────────────────────────────────────
+  {
+    external_id: 'tmp_ppl_3day_v1',
+    name: 'Push / Pull / Legs 3-Day',
+    goal_bucket: GoalBucket.Hypertrophy,
+    training_style: TrainingStyle.PPL,
+    days_per_week: 3,
+    lift_comfort: LiftComfort.BarbellBasic,
+    environment: SessionEnvironment.Commercial,
+    experience_level: ExperienceLevel.Intermediate,
+    days: [
+      {
+        day_number: 1,
+        day_type: DayType.Push,
+        slots: [
+          { order_index: 0, architectural_group: ReplacementGroup.Primary_Horizontal_Press,  is_required: true,  archetype: SlotArchetype.PrimeCompound,     progression_model: ProgressionModel.Double_Progression, sets: 4, reps_min: 6,  reps_max: 10, target_rpe: 8, rest_seconds: 120 },
+          { order_index: 1, architectural_group: ReplacementGroup.Primary_Vertical_Press,    is_required: true,  archetype: SlotArchetype.SecondaryCompound, progression_model: ProgressionModel.Double_Progression, sets: 3, reps_min: 8,  reps_max: 12, target_rpe: 8, rest_seconds: 90  },
+          { order_index: 2, architectural_group: ReplacementGroup.Isolation_Chest_Fly,       is_required: false, archetype: SlotArchetype.Isolation,         progression_model: ProgressionModel.Double_Progression, sets: 3, reps_min: 12, reps_max: 15, target_rpe: 9, rest_seconds: 60  },
+          { order_index: 3, architectural_group: ReplacementGroup.Isolation_Lateral_Delt,    is_required: false, archetype: SlotArchetype.Isolation,         progression_model: ProgressionModel.Double_Progression, sets: 3, reps_min: 15, reps_max: 20, target_rpe: 9, rest_seconds: 60  },
+          { order_index: 4, architectural_group: ReplacementGroup.Isolation_Tricep_Extension,is_required: false, archetype: SlotArchetype.Isolation,         progression_model: ProgressionModel.Double_Progression, sets: 3, reps_min: 10, reps_max: 15, target_rpe: 9, rest_seconds: 60  },
+        ]
+      },
+      {
+        day_number: 2,
+        day_type: DayType.Pull,
+        slots: [
+          { order_index: 0, architectural_group: ReplacementGroup.Primary_Vertical_Pull,     is_required: true,  archetype: SlotArchetype.PrimeCompound,     progression_model: ProgressionModel.Double_Progression, sets: 4, reps_min: 6,  reps_max: 10, target_rpe: 8, rest_seconds: 120 },
+          { order_index: 1, architectural_group: ReplacementGroup.Primary_Horizontal_Pull,   is_required: true,  archetype: SlotArchetype.SecondaryCompound, progression_model: ProgressionModel.Double_Progression, sets: 3, reps_min: 8,  reps_max: 12, target_rpe: 8, rest_seconds: 90  },
+          { order_index: 2, architectural_group: ReplacementGroup.Isolation_Bicep_Flexion,   is_required: false, archetype: SlotArchetype.Isolation,         progression_model: ProgressionModel.Double_Progression, sets: 3, reps_min: 10, reps_max: 15, target_rpe: 9, rest_seconds: 60  },
+          { order_index: 3, architectural_group: ReplacementGroup.Isolation_Lateral_Delt,   is_required: false, archetype: SlotArchetype.Isolation,         progression_model: ProgressionModel.Double_Progression, sets: 3, reps_min: 12, reps_max: 20, target_rpe: 9, rest_seconds: 60  },
+        ]
+      },
+      {
+        day_number: 3,
+        day_type: DayType.Legs,
+        slots: [
+          { order_index: 0, architectural_group: ReplacementGroup.Primary_Bilateral_Squat,   is_required: true,  archetype: SlotArchetype.PrimeCompound,     progression_model: ProgressionModel.Double_Progression, sets: 4, reps_min: 6,  reps_max: 10, target_rpe: 8, rest_seconds: 150 },
+          { order_index: 1, architectural_group: ReplacementGroup.Primary_Bilateral_Hinge,   is_required: true,  archetype: SlotArchetype.SecondaryCompound, progression_model: ProgressionModel.Double_Progression, sets: 3, reps_min: 6,  reps_max: 10, target_rpe: 8, rest_seconds: 120 },
+          { order_index: 2, architectural_group: ReplacementGroup.Unilateral_Squat_Lunge,    is_required: true,  archetype: SlotArchetype.SecondaryCompound, progression_model: ProgressionModel.Double_Progression, sets: 3, reps_min: 8,  reps_max: 12, target_rpe: 8, rest_seconds: 90  },
+          { order_index: 3, architectural_group: ReplacementGroup.Isolation_Hamstring_Curl,  is_required: false, archetype: SlotArchetype.Isolation,         progression_model: ProgressionModel.Double_Progression, sets: 3, reps_min: 12, reps_max: 15, target_rpe: 9, rest_seconds: 75  },
+          { order_index: 4, architectural_group: ReplacementGroup.Isolation_Calf_Raise,      is_required: false, archetype: SlotArchetype.Isolation,         progression_model: ProgressionModel.Double_Progression, sets: 3, reps_min: 15, reps_max: 25, target_rpe: 9, rest_seconds: 60  },
+        ]
+      },
+    ]
+  },
+
+  // ── EXPLICIT SPLIT PREFERENCE: PPL 6-Day ─────────────────────────────────────
+  {
+    external_id: 'tmp_ppl_6day_v1',
+    name: 'Push / Pull / Legs 6-Day',
+    goal_bucket: GoalBucket.Hypertrophy,
+    training_style: TrainingStyle.PPL,
+    days_per_week: 6,
+    lift_comfort: LiftComfort.BarbellBasic,
+    environment: SessionEnvironment.Commercial,
+    experience_level: ExperienceLevel.Advanced,
+    days: [
+      {
+        day_number: 1,
+        day_type: DayType.Push,
+        slots: [
+          { order_index: 0, architectural_group: ReplacementGroup.Primary_Horizontal_Press,  is_required: true,  archetype: SlotArchetype.PrimeCompound,     progression_model: ProgressionModel.Double_Progression, sets: 4, reps_min: 6,  reps_max: 10, target_rpe: 8, rest_seconds: 120 },
+          { order_index: 1, architectural_group: ReplacementGroup.Primary_Vertical_Press,    is_required: true,  archetype: SlotArchetype.SecondaryCompound, progression_model: ProgressionModel.Double_Progression, sets: 3, reps_min: 8,  reps_max: 12, target_rpe: 8, rest_seconds: 90  },
+          { order_index: 2, architectural_group: ReplacementGroup.Isolation_Chest_Fly,       is_required: false, archetype: SlotArchetype.Isolation,         progression_model: ProgressionModel.Double_Progression, sets: 3, reps_min: 12, reps_max: 15, target_rpe: 9, rest_seconds: 60  },
+          { order_index: 3, architectural_group: ReplacementGroup.Isolation_Lateral_Delt,    is_required: false, archetype: SlotArchetype.Isolation,         progression_model: ProgressionModel.Double_Progression, sets: 3, reps_min: 15, reps_max: 20, target_rpe: 9, rest_seconds: 60  },
+          { order_index: 4, architectural_group: ReplacementGroup.Isolation_Tricep_Extension,is_required: false, archetype: SlotArchetype.Isolation,         progression_model: ProgressionModel.Double_Progression, sets: 3, reps_min: 10, reps_max: 15, target_rpe: 9, rest_seconds: 60  },
+        ]
+      },
+      {
+        day_number: 2,
+        day_type: DayType.Pull,
+        slots: [
+          { order_index: 0, architectural_group: ReplacementGroup.Primary_Vertical_Pull,     is_required: true,  archetype: SlotArchetype.PrimeCompound,     progression_model: ProgressionModel.Double_Progression, sets: 4, reps_min: 6,  reps_max: 10, target_rpe: 8, rest_seconds: 120 },
+          { order_index: 1, architectural_group: ReplacementGroup.Primary_Horizontal_Pull,   is_required: true,  archetype: SlotArchetype.SecondaryCompound, progression_model: ProgressionModel.Double_Progression, sets: 3, reps_min: 8,  reps_max: 12, target_rpe: 8, rest_seconds: 90  },
+          { order_index: 2, architectural_group: ReplacementGroup.Isolation_Bicep_Flexion,   is_required: false, archetype: SlotArchetype.Isolation,         progression_model: ProgressionModel.Double_Progression, sets: 3, reps_min: 10, reps_max: 15, target_rpe: 9, rest_seconds: 60  },
+          { order_index: 3, architectural_group: ReplacementGroup.Isolation_Lateral_Delt,   is_required: false, archetype: SlotArchetype.Isolation,         progression_model: ProgressionModel.Double_Progression, sets: 3, reps_min: 12, reps_max: 20, target_rpe: 9, rest_seconds: 60  },
+        ]
+      },
+      {
+        day_number: 3,
+        day_type: DayType.Legs,
+        slots: [
+          { order_index: 0, architectural_group: ReplacementGroup.Primary_Bilateral_Squat,   is_required: true,  archetype: SlotArchetype.PrimeCompound,     progression_model: ProgressionModel.Double_Progression, sets: 4, reps_min: 6,  reps_max: 10, target_rpe: 8, rest_seconds: 150 },
+          { order_index: 1, architectural_group: ReplacementGroup.Primary_Bilateral_Hinge,   is_required: true,  archetype: SlotArchetype.SecondaryCompound, progression_model: ProgressionModel.Double_Progression, sets: 3, reps_min: 6,  reps_max: 10, target_rpe: 8, rest_seconds: 120 },
+          { order_index: 2, architectural_group: ReplacementGroup.Unilateral_Squat_Lunge,    is_required: true,  archetype: SlotArchetype.SecondaryCompound, progression_model: ProgressionModel.Double_Progression, sets: 3, reps_min: 8,  reps_max: 12, target_rpe: 8, rest_seconds: 90  },
+          { order_index: 3, architectural_group: ReplacementGroup.Isolation_Hamstring_Curl,  is_required: false, archetype: SlotArchetype.Isolation,         progression_model: ProgressionModel.Double_Progression, sets: 3, reps_min: 12, reps_max: 15, target_rpe: 9, rest_seconds: 75  },
+          { order_index: 4, architectural_group: ReplacementGroup.Isolation_Calf_Raise,      is_required: false, archetype: SlotArchetype.Isolation,         progression_model: ProgressionModel.Double_Progression, sets: 3, reps_min: 15, reps_max: 25, target_rpe: 9, rest_seconds: 60  },
+        ]
+      },
+      {
+        day_number: 4,
+        day_type: DayType.Push,
+        slots: [
+          { order_index: 0, architectural_group: ReplacementGroup.Primary_Vertical_Press,    is_required: true,  archetype: SlotArchetype.PrimeCompound,     progression_model: ProgressionModel.Double_Progression, sets: 4, reps_min: 8,  reps_max: 12, target_rpe: 8, rest_seconds: 120 },
+          { order_index: 1, architectural_group: ReplacementGroup.Primary_Horizontal_Press,  is_required: true,  archetype: SlotArchetype.SecondaryCompound, progression_model: ProgressionModel.Double_Progression, sets: 3, reps_min: 10, reps_max: 12, target_rpe: 8, rest_seconds: 90  },
+          { order_index: 2, architectural_group: ReplacementGroup.Isolation_Chest_Fly,       is_required: false, archetype: SlotArchetype.Isolation,         progression_model: ProgressionModel.Double_Progression, sets: 3, reps_min: 12, reps_max: 15, target_rpe: 9, rest_seconds: 60  },
+          { order_index: 3, architectural_group: ReplacementGroup.Isolation_Lateral_Delt,    is_required: false, archetype: SlotArchetype.Isolation,         progression_model: ProgressionModel.Double_Progression, sets: 3, reps_min: 15, reps_max: 20, target_rpe: 9, rest_seconds: 60  },
+          { order_index: 4, architectural_group: ReplacementGroup.Isolation_Tricep_Extension,is_required: false, archetype: SlotArchetype.Isolation,         progression_model: ProgressionModel.Double_Progression, sets: 3, reps_min: 10, reps_max: 15, target_rpe: 9, rest_seconds: 60  },
+        ]
+      },
+      {
+        day_number: 5,
+        day_type: DayType.Pull,
+        slots: [
+          { order_index: 0, architectural_group: ReplacementGroup.Primary_Horizontal_Pull,   is_required: true,  archetype: SlotArchetype.PrimeCompound,     progression_model: ProgressionModel.Double_Progression, sets: 4, reps_min: 8,  reps_max: 12, target_rpe: 8, rest_seconds: 120 },
+          { order_index: 1, architectural_group: ReplacementGroup.Primary_Vertical_Pull,     is_required: true,  archetype: SlotArchetype.SecondaryCompound, progression_model: ProgressionModel.Double_Progression, sets: 3, reps_min: 8,  reps_max: 12, target_rpe: 8, rest_seconds: 90  },
+          { order_index: 2, architectural_group: ReplacementGroup.Isolation_Bicep_Flexion,   is_required: false, archetype: SlotArchetype.Isolation,         progression_model: ProgressionModel.Double_Progression, sets: 3, reps_min: 10, reps_max: 15, target_rpe: 9, rest_seconds: 60  },
+          { order_index: 3, architectural_group: ReplacementGroup.Isolation_Lateral_Delt,   is_required: false, archetype: SlotArchetype.Isolation,         progression_model: ProgressionModel.Double_Progression, sets: 3, reps_min: 12, reps_max: 20, target_rpe: 9, rest_seconds: 60  },
+        ]
+      },
+      {
+        day_number: 6,
+        day_type: DayType.Legs,
+        slots: [
+          { order_index: 0, architectural_group: ReplacementGroup.Primary_Bilateral_Hinge,   is_required: true,  archetype: SlotArchetype.PrimeCompound,     progression_model: ProgressionModel.Double_Progression, sets: 4, reps_min: 6,  reps_max: 10, target_rpe: 8, rest_seconds: 150 },
+          { order_index: 1, architectural_group: ReplacementGroup.Primary_Bilateral_Squat,   is_required: true,  archetype: SlotArchetype.SecondaryCompound, progression_model: ProgressionModel.Double_Progression, sets: 3, reps_min: 8,  reps_max: 12, target_rpe: 8, rest_seconds: 120 },
+          { order_index: 2, architectural_group: ReplacementGroup.Unilateral_Hinge,          is_required: true,  archetype: SlotArchetype.SecondaryCompound, progression_model: ProgressionModel.Double_Progression, sets: 3, reps_min: 8,  reps_max: 12, target_rpe: 8, rest_seconds: 90  },
+          { order_index: 3, architectural_group: ReplacementGroup.Isolation_Hamstring_Curl,  is_required: false, archetype: SlotArchetype.Isolation,         progression_model: ProgressionModel.Double_Progression, sets: 3, reps_min: 12, reps_max: 15, target_rpe: 9, rest_seconds: 75  },
+          { order_index: 4, architectural_group: ReplacementGroup.Isolation_Calf_Raise,      is_required: false, archetype: SlotArchetype.Isolation,         progression_model: ProgressionModel.Double_Progression, sets: 3, reps_min: 15, reps_max: 25, target_rpe: 9, rest_seconds: 60  },
+        ]
+      },
+    ]
+  },
+
+  // ── EXPLICIT SPLIT PREFERENCE: Bro Split 4-Day ───────────────────────────────
+  {
+    external_id: 'tmp_brosplit_4day_v1',
+    name: 'Bro Split 4-Day',
+    goal_bucket: GoalBucket.Hypertrophy,
+    training_style: TrainingStyle.BroSplit,
+    days_per_week: 4,
+    lift_comfort: LiftComfort.BarbellBasic,
+    environment: SessionEnvironment.Commercial,
+    experience_level: ExperienceLevel.Intermediate,
+    days: [
+      {
+        day_number: 1,
+        day_type: DayType.ChestAndTriceps,
+        slots: [
+          { order_index: 0, architectural_group: ReplacementGroup.Primary_Horizontal_Press,  is_required: true,  archetype: SlotArchetype.PrimeCompound,     progression_model: ProgressionModel.Double_Progression, sets: 4, reps_min: 6,  reps_max: 10, target_rpe: 8, rest_seconds: 120 },
+          { order_index: 1, architectural_group: ReplacementGroup.Isolation_Chest_Fly,       is_required: true,  archetype: SlotArchetype.Isolation,         progression_model: ProgressionModel.Double_Progression, sets: 3, reps_min: 10, reps_max: 15, target_rpe: 9, rest_seconds: 60  },
+          { order_index: 2, architectural_group: ReplacementGroup.Isolation_Tricep_Extension,is_required: true,  archetype: SlotArchetype.Isolation,         progression_model: ProgressionModel.Double_Progression, sets: 3, reps_min: 10, reps_max: 15, target_rpe: 9, rest_seconds: 60  },
+        ]
+      },
+      {
+        day_number: 2,
+        day_type: DayType.BackAndBiceps,
+        slots: [
+          { order_index: 0, architectural_group: ReplacementGroup.Primary_Vertical_Pull,     is_required: true,  archetype: SlotArchetype.PrimeCompound,     progression_model: ProgressionModel.Double_Progression, sets: 4, reps_min: 6,  reps_max: 10, target_rpe: 8, rest_seconds: 120 },
+          { order_index: 1, architectural_group: ReplacementGroup.Primary_Horizontal_Pull,   is_required: true,  archetype: SlotArchetype.SecondaryCompound, progression_model: ProgressionModel.Double_Progression, sets: 3, reps_min: 8,  reps_max: 12, target_rpe: 8, rest_seconds: 90  },
+          { order_index: 2, architectural_group: ReplacementGroup.Isolation_Bicep_Flexion,   is_required: true,  archetype: SlotArchetype.Isolation,         progression_model: ProgressionModel.Double_Progression, sets: 3, reps_min: 10, reps_max: 15, target_rpe: 9, rest_seconds: 60  },
+        ]
+      },
+      {
+        day_number: 3,
+        day_type: DayType.ShoulderDay,
+        slots: [
+          { order_index: 0, architectural_group: ReplacementGroup.Primary_Vertical_Press,    is_required: true,  archetype: SlotArchetype.PrimeCompound,     progression_model: ProgressionModel.Double_Progression, sets: 4, reps_min: 8,  reps_max: 12, target_rpe: 8, rest_seconds: 120 },
+          { order_index: 1, architectural_group: ReplacementGroup.Isolation_Lateral_Delt,    is_required: true,  archetype: SlotArchetype.Isolation,         progression_model: ProgressionModel.Double_Progression, sets: 3, reps_min: 12, reps_max: 20, target_rpe: 9, rest_seconds: 60  },
+          { order_index: 2, architectural_group: ReplacementGroup.Primary_Horizontal_Pull,   is_required: false, archetype: SlotArchetype.SecondaryCompound, progression_model: ProgressionModel.Double_Progression, sets: 3, reps_min: 10, reps_max: 15, target_rpe: 8, rest_seconds: 75  },
+        ]
+      },
+      {
+        day_number: 4,
+        day_type: DayType.Legs,
+        slots: [
+          { order_index: 0, architectural_group: ReplacementGroup.Primary_Bilateral_Squat,   is_required: true,  archetype: SlotArchetype.PrimeCompound,     progression_model: ProgressionModel.Double_Progression, sets: 4, reps_min: 6,  reps_max: 10, target_rpe: 8, rest_seconds: 150 },
+          { order_index: 1, architectural_group: ReplacementGroup.Primary_Bilateral_Hinge,   is_required: true,  archetype: SlotArchetype.SecondaryCompound, progression_model: ProgressionModel.Double_Progression, sets: 3, reps_min: 6,  reps_max: 10, target_rpe: 8, rest_seconds: 120 },
+          { order_index: 2, architectural_group: ReplacementGroup.Unilateral_Squat_Lunge,    is_required: true,  archetype: SlotArchetype.SecondaryCompound, progression_model: ProgressionModel.Double_Progression, sets: 3, reps_min: 8,  reps_max: 12, target_rpe: 8, rest_seconds: 90  },
+          { order_index: 3, architectural_group: ReplacementGroup.Isolation_Hamstring_Curl,  is_required: false, archetype: SlotArchetype.Isolation,         progression_model: ProgressionModel.Double_Progression, sets: 3, reps_min: 12, reps_max: 15, target_rpe: 9, rest_seconds: 75  },
+          { order_index: 4, architectural_group: ReplacementGroup.Isolation_Calf_Raise,      is_required: false, archetype: SlotArchetype.Isolation,         progression_model: ProgressionModel.Double_Progression, sets: 3, reps_min: 15, reps_max: 25, target_rpe: 9, rest_seconds: 60  },
+        ]
+      },
+    ]
+  },
+
+  // ── EXPLICIT SPLIT PREFERENCE: Bro Split 5-Day ───────────────────────────────
+  {
+    external_id: 'tmp_brosplit_5day_v1',
+    name: 'Bro Split 5-Day',
+    goal_bucket: GoalBucket.Hypertrophy,
+    training_style: TrainingStyle.BroSplit,
+    days_per_week: 5,
+    lift_comfort: LiftComfort.BarbellBasic,
+    environment: SessionEnvironment.Commercial,
+    experience_level: ExperienceLevel.Intermediate,
+    days: [
+      {
+        day_number: 1,
+        day_type: DayType.ChestAndTriceps,
+        slots: [
+          { order_index: 0, architectural_group: ReplacementGroup.Primary_Horizontal_Press,  is_required: true,  archetype: SlotArchetype.PrimeCompound,     progression_model: ProgressionModel.Double_Progression, sets: 4, reps_min: 6,  reps_max: 10, target_rpe: 8, rest_seconds: 120 },
+          { order_index: 1, architectural_group: ReplacementGroup.Isolation_Chest_Fly,       is_required: true,  archetype: SlotArchetype.Isolation,         progression_model: ProgressionModel.Double_Progression, sets: 3, reps_min: 10, reps_max: 15, target_rpe: 9, rest_seconds: 60  },
+          { order_index: 2, architectural_group: ReplacementGroup.Isolation_Tricep_Extension,is_required: true,  archetype: SlotArchetype.Isolation,         progression_model: ProgressionModel.Double_Progression, sets: 3, reps_min: 10, reps_max: 15, target_rpe: 9, rest_seconds: 60  },
+        ]
+      },
+      {
+        day_number: 2,
+        day_type: DayType.BackAndBiceps,
+        slots: [
+          { order_index: 0, architectural_group: ReplacementGroup.Primary_Vertical_Pull,     is_required: true,  archetype: SlotArchetype.PrimeCompound,     progression_model: ProgressionModel.Double_Progression, sets: 4, reps_min: 6,  reps_max: 10, target_rpe: 8, rest_seconds: 120 },
+          { order_index: 1, architectural_group: ReplacementGroup.Primary_Horizontal_Pull,   is_required: true,  archetype: SlotArchetype.SecondaryCompound, progression_model: ProgressionModel.Double_Progression, sets: 3, reps_min: 8,  reps_max: 12, target_rpe: 8, rest_seconds: 90  },
+          { order_index: 2, architectural_group: ReplacementGroup.Isolation_Bicep_Flexion,   is_required: true,  archetype: SlotArchetype.Isolation,         progression_model: ProgressionModel.Double_Progression, sets: 3, reps_min: 10, reps_max: 15, target_rpe: 9, rest_seconds: 60  },
+        ]
+      },
+      {
+        day_number: 3,
+        day_type: DayType.ShoulderDay,
+        slots: [
+          { order_index: 0, architectural_group: ReplacementGroup.Primary_Vertical_Press,    is_required: true,  archetype: SlotArchetype.PrimeCompound,     progression_model: ProgressionModel.Double_Progression, sets: 4, reps_min: 8,  reps_max: 12, target_rpe: 8, rest_seconds: 120 },
+          { order_index: 1, architectural_group: ReplacementGroup.Isolation_Lateral_Delt,    is_required: true,  archetype: SlotArchetype.Isolation,         progression_model: ProgressionModel.Double_Progression, sets: 3, reps_min: 12, reps_max: 20, target_rpe: 9, rest_seconds: 60  },
+          { order_index: 2, architectural_group: ReplacementGroup.Primary_Horizontal_Pull,   is_required: false, archetype: SlotArchetype.SecondaryCompound, progression_model: ProgressionModel.Double_Progression, sets: 3, reps_min: 10, reps_max: 15, target_rpe: 8, rest_seconds: 75  },
+        ]
+      },
+      {
+        day_number: 4,
+        day_type: DayType.Legs,
+        slots: [
+          { order_index: 0, architectural_group: ReplacementGroup.Primary_Bilateral_Squat,   is_required: true,  archetype: SlotArchetype.PrimeCompound,     progression_model: ProgressionModel.Double_Progression, sets: 4, reps_min: 6,  reps_max: 10, target_rpe: 8, rest_seconds: 150 },
+          { order_index: 1, architectural_group: ReplacementGroup.Primary_Bilateral_Hinge,   is_required: true,  archetype: SlotArchetype.SecondaryCompound, progression_model: ProgressionModel.Double_Progression, sets: 3, reps_min: 6,  reps_max: 10, target_rpe: 8, rest_seconds: 120 },
+          { order_index: 2, architectural_group: ReplacementGroup.Unilateral_Squat_Lunge,    is_required: true,  archetype: SlotArchetype.SecondaryCompound, progression_model: ProgressionModel.Double_Progression, sets: 3, reps_min: 8,  reps_max: 12, target_rpe: 8, rest_seconds: 90  },
+          { order_index: 3, architectural_group: ReplacementGroup.Isolation_Hamstring_Curl,  is_required: false, archetype: SlotArchetype.Isolation,         progression_model: ProgressionModel.Double_Progression, sets: 3, reps_min: 12, reps_max: 15, target_rpe: 9, rest_seconds: 75  },
+          { order_index: 4, architectural_group: ReplacementGroup.Isolation_Calf_Raise,      is_required: false, archetype: SlotArchetype.Isolation,         progression_model: ProgressionModel.Double_Progression, sets: 3, reps_min: 15, reps_max: 25, target_rpe: 9, rest_seconds: 60  },
+        ]
+      },
+      {
+        day_number: 5,
+        day_type: DayType.ArmsDay,
+        slots: [
+          { order_index: 0, architectural_group: ReplacementGroup.Isolation_Bicep_Flexion,   is_required: true,  archetype: SlotArchetype.Isolation,         progression_model: ProgressionModel.Double_Progression, sets: 4, reps_min: 10, reps_max: 15, target_rpe: 9, rest_seconds: 60  },
+          { order_index: 1, architectural_group: ReplacementGroup.Isolation_Tricep_Extension,is_required: true,  archetype: SlotArchetype.Isolation,         progression_model: ProgressionModel.Double_Progression, sets: 4, reps_min: 10, reps_max: 15, target_rpe: 9, rest_seconds: 60  },
+          { order_index: 2, architectural_group: ReplacementGroup.Primary_Horizontal_Pull,   is_required: false, archetype: SlotArchetype.SecondaryCompound, progression_model: ProgressionModel.Double_Progression, sets: 3, reps_min: 12, reps_max: 15, target_rpe: 8, rest_seconds: 75  },
+          { order_index: 3, architectural_group: ReplacementGroup.Isolation_Lateral_Delt,    is_required: false, archetype: SlotArchetype.Isolation,         progression_model: ProgressionModel.Double_Progression, sets: 3, reps_min: 15, reps_max: 20, target_rpe: 9, rest_seconds: 60  },
+        ]
+      },
+    ]
+  },
+
   ...adaptiveTemplates
 ];

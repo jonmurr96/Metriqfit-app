@@ -1463,7 +1463,7 @@ serve(async (req) => {
   const serviceRoleKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
   const adminSecret = Deno.env.get("WORKOUT_MAPPING_ADMIN_SECRET");
 
-  if (!supabaseUrl || !serviceRoleKey) {
+  if (!supabaseUrl || !serviceRoleKey || !adminSecret) {
     return jsonResponse({ success: false, error: "Missing Supabase config" }, 500);
   }
 
@@ -1480,7 +1480,7 @@ serve(async (req) => {
   const batchSize = Math.max(1, Math.min(200, Number(body.batchSize || 50)));
   const cursor = body.cursor || null;
 
-  if (adminSecret && body.adminSecret !== adminSecret) {
+  if (body.adminSecret !== adminSecret) {
     return jsonResponse({ success: false, error: "Unauthorized" }, 401);
   }
 

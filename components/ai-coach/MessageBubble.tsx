@@ -1,5 +1,5 @@
 import React from 'react';
-import { View, Text, StyleSheet, Platform } from 'react-native';
+import { View, Text, StyleSheet } from 'react-native';
 import { MotiView } from 'moti';
 import { useTokens } from '../../lib/theme';
 import { TabBarIcon } from '../../components/navigation/TabBarIcon';
@@ -12,10 +12,6 @@ interface MessageBubbleProps {
   delay?: number;
 }
 
-/**
- * Message bubble with unified ring + glass design.
- * Coach bubbles use glass effect, user bubbles use ring border.
- */
 export function MessageBubble({
   message,
   sender,
@@ -23,7 +19,7 @@ export function MessageBubble({
   animated = true,
   delay = 0,
 }: MessageBubbleProps) {
-  const { c, s, ty, r, glass } = useTokens();
+  const { c, s, ty, r } = useTokens();
   const isUser = sender === 'user';
 
   const Wrapper = animated ? MotiView : View;
@@ -45,18 +41,16 @@ export function MessageBubble({
       ]}
     >
       {!isUser && (
-        // Ring avatar for coach
         <View
           style={[
             styles.avatar,
             {
-              borderWidth: 2,
-              borderColor: c.primary,
-              backgroundColor: 'transparent',
+              backgroundColor: c.surface2,
+              borderColor: c.border,
             },
           ]}
         >
-          <TabBarIcon name="sparkles" color={c.primary} size={14} />
+          <TabBarIcon name="sparkles" color={c.textMuted} size={14} />
         </View>
       )}
       <View
@@ -64,34 +58,29 @@ export function MessageBubble({
           styles.bubble,
           isUser
             ? {
-              // Ring style for user bubble
-              backgroundColor: 'transparent',
+              backgroundColor: `${c.primary}22`,
               borderRadius: r.lg,
-              borderBottomRightRadius: 4,
-              borderWidth: 2,
-              borderColor: c.primary,
-            }
-            : {
-              // Glass style for coach bubble
-              backgroundColor: glass.background,
-              borderRadius: r.lg,
-              borderBottomLeftRadius: 4,
+              borderBottomRightRadius: 6,
               borderWidth: 1,
               borderColor: `${c.primary}30`,
+            }
+            : {
+              backgroundColor: c.surface,
+              borderRadius: r.lg,
+              borderBottomLeftRadius: 6,
+              borderWidth: 1,
+              borderColor: c.border,
             },
-          !isUser && Platform.OS === 'web' && {
-            backdropFilter: 'blur(12px)',
-          } as any,
         ]}
       >
         <Text
           style={[
             styles.messageText,
             {
-              color: isUser ? c.primary : c.text,
+              color: c.text,
               fontFamily: ty.body.family,
               fontSize: ty.sizes.md,
-              lineHeight: 22,
+              lineHeight: 23,
             },
           ]}
         >
@@ -102,7 +91,7 @@ export function MessageBubble({
             style={[
               styles.timestamp,
               {
-                color: isUser ? `${c.primary}80` : c.textSubtle,
+                color: c.textSubtle,
                 fontFamily: ty.body.family,
                 fontSize: ty.sizes.xs,
                 marginTop: s.xs,
@@ -136,10 +125,11 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     marginRight: 8,
+    borderWidth: 1,
   },
   bubble: {
-    maxWidth: '84%',
-    paddingVertical: 12,
+    maxWidth: '86%',
+    paddingVertical: 13,
     paddingHorizontal: 16,
   },
   messageText: {},

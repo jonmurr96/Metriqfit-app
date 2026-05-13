@@ -21,22 +21,41 @@ function assert(condition, message) {
 }
 
 async function createInternalUser(email, label) {
-  const { data: { user }, error } = await serviceClient.auth.admin.createUser({
-    email,
-    password: 'VerificationTest123!',
-    email_confirm: true,
-    user_metadata: { persona: label, test_run: 'REGRTEST_0404' }
+  const { data, error } = await serviceClient.rpc('admin_create_email_user', {
+    p_email: email,
+    p_password: 'VerificationTest123!',
   });
-  
+
   if (error) {
-    if (error.message.includes('already registered')) {
-        const { data: { users } } = await serviceClient.auth.admin.listUsers();
-        const existing = users.find(u => u.email === email);
-        return existing.id;
-    }
     throw new Error(`Failed to create user ${email}: ${error.message}`);
   }
-  return user.id;
+
+  if (!data?.ok || !data?.user_id) {
+    if (data?.error === 'User already exists') {
+      const { data: { users } } = await serviceClient.auth.admin.listUsers();
+      const existing = users.find((u) => u.email === email);
+      if (existing?.id) {
+        return existing.id;
+      }
+    }
+    throw new Error(`Failed to create user ${email}: ${data?.error || 'unknown RPC error'}`);
+  }
+
+  return data.user_id;
+}
+
+async function deleteInternalUser(userId) {
+  if (!userId) return;
+
+  const { error } = await serviceClient.auth.admin.deleteUser(userId);
+  if (error) {
+    console.warn(`[WARN] Failed to delete test user ${userId}: ${error.message}`);
+  }
+}
+
+function buildRunScopedEmail(persona, runId) {
+  const localPart = `regrtest_${persona.id.toLowerCase()}_${runId}`;
+  return `${localPart}@metriqfit.com`;
 }
 
 async function seedPersona(userId, email, persona) {
@@ -176,25 +195,39 @@ const PERSONAS = [
 async function validateWorkout(planId, userId, persona) {
   const { data: plan, error } = await serviceClient
     .from('user_workout_plans')
-    .select('*, days:user_workout_plan_days(*, exercises:user_workout_plan_exercises(*, exercise:exercises(name, split_tags)))')
+    .select(`
+      *,
+      days:user_workout_plan_days(
+        *,
+        exercises:user_workout_plan_exercises(
+          *,
+          exercise:exercises!user_workout_plan_exercises_exercise_id_fkey(
+            name,
+            split_tags
+          )
+        )
+      )
+    `)
     .eq('id', planId)
     .single();
 
   assert(!error, `Failed to fetch workout plan: ${error?.message}`);
   
   // Day Count Integrity
+  const days = Array.isArray(plan.days) ? plan.days : [];
   const requestedDays = persona.onboarding.training_days_per_week;
-  assert(plan.days.length === requestedDays, `Day count mismatch: Expected ${requestedDays}, got ${plan.days.length}`);
+  assert(days.length === requestedDays, `Day count mismatch: Expected ${requestedDays}, got ${days.length}`);
   
   // Active State
   assert(plan.is_active === true, 'Workout plan should be active');
   
   // Schedule Check
-  const { data: schedules } = await serviceClient
-    .from('user_workout_plan_schedules')
+  const { data: schedulesData } = await serviceClient
+    .from('user_workout_plan_schedule')
     .select('*')
     .eq('plan_id', planId);
-    
+  const schedules = Array.isArray(schedulesData) ? schedulesData : [];
+
   assert(schedules.length > 0, 'No schedule rows found for plan');
   
   // Weekday Mapping Check (for persona with explicit days)
@@ -206,7 +239,7 @@ async function validateWorkout(planId, userId, persona) {
 
   // Injury Blocklist Check (P5)
   if (persona.id === 'P5') {
-      const exercises = plan.days.flatMap(d => d.exercises).map(e => e.exercise.name.toLowerCase());
+      const exercises = days.flatMap((d) => Array.isArray(d.exercises) ? d.exercises : []).map((e) => e.exercise.name.toLowerCase());
       const prohibited = ['deadlift', 'back squat', 'barbell row', 'box jump'];
       for (const p of prohibited) {
           assert(!exercises.some(e => e.includes(p)), `Prohibited exercise found in rehab plan: ${p}`);
@@ -222,9 +255,9 @@ async function validateNutrition(planId, persona) {
             *,
             meals:user_nutrition_plan_meals(
                 *,
-                variants:user_nutrition_plan_meal_variants(
+                variants:user_nutrition_plan_meal_variants!user_nutrition_plan_meal_variants_plan_meal_id_fkey(
                     *,
-                    items:user_nutrition_plan_meal_variant_items(*)
+                    items:user_nutrition_plan_meal_variant_items!user_nutrition_plan_meal_variant_items_variant_id_fkey(*)
                 )
             )
         `)
@@ -235,7 +268,8 @@ async function validateNutrition(planId, persona) {
     assert(plan.is_active === true, 'Nutrition plan should be active');
 
     // Macro Safety Check
-    const allItems = plan.meals.flatMap(m => m.variants).flatMap(v => v.items);
+    const meals = Array.isArray(plan.meals) ? plan.meals : [];
+    const allItems = meals.flatMap((m) => Array.isArray(m.variants) ? m.variants : []).flatMap((v) => Array.isArray(v.items) ? v.items : []);
     for (const item of allItems) {
         assert(!isNaN(item.calories) && item.calories >= 0, `Invalid calories for item ${item.item_name}: ${item.calories}`);
         assert(!isNaN(item.protein) && item.protein >= 0, `Invalid protein for item ${item.item_name}: ${item.protein}`);
@@ -243,26 +277,30 @@ async function validateNutrition(planId, persona) {
     }
 
     // Variety Check (P2 vs P3)
-    const variantCount = plan.meals.flatMap(m => m.variants).length;
+    const variantCount = meals.flatMap((m) => Array.isArray(m.variants) ? m.variants : []).length;
     console.log(`[CHECK] Persona ${persona.id} total meal variants: ${variantCount}`);
     
     if (persona.id === 'P2') {
-        assert(variantCount > plan.meals.length, 'Vegan High Variety plan should have multiple variants per meal');
+        assert(variantCount > meals.length, 'Vegan High Variety plan should have multiple variants per meal');
     }
 }
 
 async function runVerification() {
     console.log('--- STARTING VERIFICATION PASSPORT ---');
+    let failureCount = 0;
+    const runId = `${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 8)}`;
     
     for (const persona of PERSONAS) {
+        const email = buildRunScopedEmail(persona, runId);
+        let userId = null;
         console.log(`\n>>> Testing Persona: ${persona.name} (${persona.id})`);
         
         try {
-            const userId = await createInternalUser(persona.email, persona.name);
-            await seedPersona(userId, persona.email, persona);
+            userId = await createInternalUser(email, persona.name);
+            await seedPersona(userId, email, persona);
             
             console.log(`[STEP] Context seeded. Triggering generation...`);
-            const result = await triggerGeneration(userId, persona.email);
+            const result = await triggerGeneration(userId, email);
             
             console.log(`[STEP] Generation successful (RunID: ${result.runId})`);
             
@@ -271,12 +309,21 @@ async function runVerification() {
             
             console.log(`[RESULT] ✅ Persona ${persona.id} Passed All Checks`);
         } catch (e) {
+            failureCount += 1;
             console.error(`[RESULT] ❌ Persona ${persona.id} Failed: ${e.message}`);
             // If failed, we log it but continue with others
+        } finally {
+            if (userId) {
+                await deleteInternalUser(userId);
+            }
         }
     }
     
     console.log('\n--- VERIFICATION COMPLETE ---');
+    if (failureCount > 0) {
+        console.error(`\n${failureCount} persona verification(s) failed.`);
+        process.exit(1);
+    }
 }
 
 runVerification();

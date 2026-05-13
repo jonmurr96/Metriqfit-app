@@ -1,9 +1,10 @@
-import React, { useState, useEffect } from 'react';
-import { StyleSheet, View, Text, Pressable, ScrollView, TextInput, Alert } from 'react-native';
+import React, { useState, useEffect, useRef } from 'react';
+import { StyleSheet, View, Text, Pressable, ScrollView, TextInput, Alert, Image, ActivityIndicator } from 'react-native';
 import { useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { LinearGradient } from 'expo-linear-gradient';
 import { MotiView, AnimatePresence } from 'moti';
+import { CameraView, useCameraPermissions, type CameraType } from 'expo-camera';
 
 import { useTokens } from '../../lib/theme';
 import { TabBarIcon } from '../../components/navigation/TabBarIcon';
@@ -13,12 +14,15 @@ import { useAuth } from '../../lib/auth';
 import { useProfile } from '../../hooks/useUser';
 import { useApplyCheckInUpdates, usePreviewCheckIn } from '../../hooks/useCheckIn';
 import { usePrepCoachState, useRunPrepCheckInAdjustment } from '../../hooks/usePrepCoach';
+import { useUploadProgressPhoto } from '../../hooks/useProgressPhotos';
 import { useEntitlementStatus } from '../../hooks/useSubscription';
 import { getTierLabel } from '../../lib/subscription/plans';
 import type { CheckInPreviewResult } from '../../services/checkInService';
 import type { PrepCoachAdjustmentResult } from '../../services/prepCoachService';
+import type { ProgressPhotoAngle } from '../../services/progressPhotoService';
 
 type Step = 'metrics' | 'wellness' | 'photos' | 'analysis';
+type BodyPhotoAngle = Extract<ProgressPhotoAngle, 'front' | 'side' | 'back'>;
 
 export default function CheckInScreen() {
     const { c, s, ty, r, shadow } = useTokens();
@@ -28,9 +32,12 @@ export default function CheckInScreen() {
     const { data: profile } = useProfile();
     const { data: prepState } = usePrepCoachState();
     const { data: entitlement } = useEntitlementStatus();
+    const cameraRef = useRef<CameraView>(null);
+    const [cameraPermission, requestCameraPermission] = useCameraPermissions();
     const previewCheckInMutation = usePreviewCheckIn();
     const applyUpdatesMutation = useApplyCheckInUpdates();
     const runPrepAdjustmentMutation = useRunPrepCheckInAdjustment();
+    const uploadProgressPhotoMutation = useUploadProgressPhoto();
 
     const [currentStep, setCurrentStep] = useState<Step>('metrics');
     const [progress, setProgress] = useState(0.25);
@@ -49,12 +56,17 @@ export default function CheckInScreen() {
     const [prepPreviewResult, setPrepPreviewResult] = useState<PrepCoachAdjustmentResult | null>(null);
     const [prepAppliedResult, setPrepAppliedResult] = useState<PrepCoachAdjustmentResult | null>(null);
     const [updatesApplied, setUpdatesApplied] = useState(false);
+    const [capturingAngle, setCapturingAngle] = useState<BodyPhotoAngle | null>(null);
+    const [photoFacing, setPhotoFacing] = useState<CameraType>('back');
+    const [photoUris, setPhotoUris] = useState<Partial<Record<BodyPhotoAngle, string>>>({});
+    const [isCapturingPhoto, setIsCapturingPhoto] = useState(false);
+    const [isUploadingPhotos, setIsUploadingPhotos] = useState(false);
 
     const prepModeEnabled = prepState?.enabled === true;
     const tier = entitlement?.tier ?? 'free';
     const isElite = entitlement?.isElite === true;
     const tierLabel = getTierLabel(tier);
-    const isApplyingAnyUpdate = applyUpdatesMutation.isPending || runPrepAdjustmentMutation.isPending;
+    const isBusy = applyUpdatesMutation.isPending || runPrepAdjustmentMutation.isPending || previewCheckInMutation.isPending || isUploadingPhotos;
 
     // Populate weight from profile when it loads
     useEffect(() => {
@@ -118,6 +130,7 @@ export default function CheckInScreen() {
                 stress,
                 energy,
             });
+            await uploadProgressPhotos(preview.measurementId);
             setAnalysisResult(preview);
             setUpdatesApplied(false);
             setPrepAppliedResult(null);
@@ -141,6 +154,51 @@ export default function CheckInScreen() {
             setCurrentStep('photos');
         } finally {
             setIsAnalyzing(false);
+        }
+    };
+
+    const uploadProgressPhotos = async (measurementId: string) => {
+        const entries = Object.entries(photoUris) as [BodyPhotoAngle, string][];
+        if (!entries.length) return;
+
+        setIsUploadingPhotos(true);
+        try {
+            await Promise.all(entries.map(([angle, uri]) => uploadProgressPhotoMutation.mutateAsync({
+                uri,
+                angle,
+                measurementId,
+                metadata: { source: 'weekly_check_in' },
+            })));
+        } catch (error: any) {
+            Alert.alert('Photos not saved', error?.message || 'Your check-in was saved, but one or more progress photos could not be uploaded.');
+        } finally {
+            setIsUploadingPhotos(false);
+        }
+    };
+
+    const handleOpenPhotoCamera = async (angle: BodyPhotoAngle) => {
+        if (!cameraPermission?.granted) {
+            const nextPermission = await requestCameraPermission();
+            if (!nextPermission.granted) {
+                Alert.alert('Camera permission needed', 'Enable camera access to save progress photos.');
+                return;
+            }
+        }
+        setCapturingAngle(angle);
+    };
+
+    const handleCaptureProgressPhoto = async () => {
+        if (!cameraRef.current || !capturingAngle) return;
+        setIsCapturingPhoto(true);
+        try {
+            const photo = await cameraRef.current.takePictureAsync({ quality: 0.7 });
+            if (!photo?.uri) throw new Error('Could not capture photo.');
+            setPhotoUris((current) => ({ ...current, [capturingAngle]: photo.uri }));
+            setCapturingAngle(null);
+        } catch (error: any) {
+            Alert.alert('Photo failed', error?.message || 'Could not capture this photo.');
+        } finally {
+            setIsCapturingPhoto(false);
         }
     };
 
@@ -224,13 +282,23 @@ export default function CheckInScreen() {
         </View>
     );
 
-    const PhotoSlot = ({ label }: { label: string }) => (
+    const PhotoSlot = ({ label, angle }: { label: string; angle: BodyPhotoAngle }) => (
         <Pressable
-            onPress={() => Alert.alert('Progress Photos', 'Camera integration coming soon! You\'ll be able to take front, side, and back photos to track your physique over time.')}
-            style={{ flex: 1, aspectRatio: 0.75, borderWidth: 1, borderColor: c.border, borderRadius: r.md, borderStyle: 'dashed', alignItems: 'center', justifyContent: 'center', backgroundColor: 'rgba(255,255,255,0.02)' }}
+            onPress={() => handleOpenPhotoCamera(angle)}
+            style={{ flex: 1, aspectRatio: 0.75, borderWidth: 1, borderColor: photoUris[angle] ? c.primary : c.border, borderRadius: r.md, borderStyle: photoUris[angle] ? 'solid' : 'dashed', alignItems: 'center', justifyContent: 'center', backgroundColor: 'rgba(255,255,255,0.02)', overflow: 'hidden' }}
         >
-            <TabBarIcon name="camera" color={c.textMuted} size={24} />
-            <Text style={{ color: c.textMuted, fontSize: 12, marginTop: 8, fontFamily: ty.body.family }}>{label}</Text>
+            {photoUris[angle] ? (
+                <>
+                    <Image source={{ uri: photoUris[angle] }} style={StyleSheet.absoluteFill} resizeMode="cover" />
+                    <View style={{ ...StyleSheet.absoluteFillObject, backgroundColor: 'rgba(0,0,0,0.18)' }} />
+                    <View style={{ position: 'absolute', top: 8, right: 8, width: 24, height: 24, borderRadius: 12, backgroundColor: c.success, alignItems: 'center', justifyContent: 'center' }}>
+                        <TabBarIcon name="checkmark" color={c.bg} size={15} />
+                    </View>
+                </>
+            ) : (
+                <TabBarIcon name="camera" color={c.textMuted} size={24} />
+            )}
+            <Text style={{ color: photoUris[angle] ? c.text : c.textMuted, fontSize: 12, marginTop: 8, fontFamily: ty.body.familySemibold, textShadowColor: 'rgba(0,0,0,0.4)', textShadowRadius: 6 }}>{label}</Text>
         </Pressable>
     );
 
@@ -250,6 +318,50 @@ export default function CheckInScreen() {
                 return c.textMuted;
         }
     };
+
+    if (capturingAngle) {
+        return (
+            <View style={[styles.container, { backgroundColor: c.bg }]}>
+                <CameraView ref={cameraRef} style={StyleSheet.absoluteFill} facing={photoFacing} />
+                <View style={[styles.cameraHeader, { paddingTop: insets.top + 12 }]}>
+                    <Pressable
+                        onPress={() => setCapturingAngle(null)}
+                        style={[styles.cameraCircleButton, { backgroundColor: 'rgba(7, 12, 28, 0.78)' }]}
+                        accessibilityLabel="Close camera"
+                        accessibilityRole="button"
+                    >
+                        <TabBarIcon name="close" color={c.text} size={24} />
+                    </Pressable>
+                    <Text style={{ color: c.text, fontFamily: ty.heading.familySemibold, fontSize: ty.sizes.lg }}>
+                        {capturingAngle.charAt(0).toUpperCase() + capturingAngle.slice(1)}
+                    </Text>
+                    <Pressable
+                        onPress={() => setPhotoFacing((current) => current === 'back' ? 'front' : 'back')}
+                        style={[styles.cameraCircleButton, { backgroundColor: 'rgba(7, 12, 28, 0.78)' }]}
+                        accessibilityLabel="Flip camera"
+                        accessibilityRole="button"
+                    >
+                        <TabBarIcon name="camera-reverse" color={c.text} size={22} />
+                    </Pressable>
+                </View>
+                <View style={[styles.cameraFooter, { paddingBottom: insets.bottom + 28 }]}>
+                    <Pressable
+                        onPress={handleCaptureProgressPhoto}
+                        disabled={isCapturingPhoto}
+                        style={[styles.captureButton, { backgroundColor: c.primary, borderColor: c.bg }]}
+                        accessibilityLabel="Capture progress photo"
+                        accessibilityRole="button"
+                    >
+                        {isCapturingPhoto ? (
+                            <ActivityIndicator color={c.bg} />
+                        ) : (
+                            <TabBarIcon name="camera" color={c.bg} size={34} />
+                        )}
+                    </Pressable>
+                </View>
+            </View>
+        );
+    }
 
     return (
         <View style={[styles.container, { backgroundColor: c.bg }]}>
@@ -315,7 +427,7 @@ export default function CheckInScreen() {
                                 </View>
                                 {analysisResult && analysisResult.weightChangeKg !== null ? (
                                     <Text style={{ color: c.success, marginTop: 16, fontFamily: ty.body.familyMedium }}>
-                                        {analysisResult.weightChangeKg <= 0 ? '📉' : '📈'} {Math.abs(analysisResult.weightChangeKg).toFixed(1)} kg change since last check-in
+                                        {analysisResult.weightChangeKg <= 0 ? 'Down' : 'Up'} {Math.abs(isImperial ? analysisResult.weightChangeKg * 2.20462 : analysisResult.weightChangeKg).toFixed(1)} {isImperial ? 'lb' : 'kg'} since last check-in
                                     </Text>
                                 ) : (
                                     <Text style={{ color: c.textMuted, marginTop: 16, fontFamily: ty.body.familyMedium }}>
@@ -363,15 +475,15 @@ export default function CheckInScreen() {
                             />
 
                             <View style={{ flexDirection: 'row', gap: 12, height: 200 }}>
-                                <PhotoSlot label="Front" />
-                                <PhotoSlot label="Side" />
-                                <PhotoSlot label="Back" />
+                                <PhotoSlot label="Front" angle="front" />
+                                <PhotoSlot label="Side" angle="side" />
+                                <PhotoSlot label="Back" angle="back" />
                             </View>
 
                             <View style={{ marginTop: s.xl, flexDirection: 'row', alignItems: 'center', gap: 12, backgroundColor: 'rgba(34, 211, 238, 0.1)', padding: 16, borderRadius: r.md }}>
                                 <TabBarIcon name="information-circle" color={c.primary} size={20} />
                                 <Text style={{ color: c.text, flex: 1, fontSize: 12 }}>
-                                    Photos are privately stored and only analyzed by AI for body fat estimation.
+                                Photos are privately stored and attached to this check-in for front, side, and back comparisons.
                                 </Text>
                             </View>
                         </MotiView>
@@ -540,7 +652,7 @@ export default function CheckInScreen() {
                         <Pressable
                             style={{ alignItems: 'center', padding: 12, marginBottom: 8 }}
                             onPress={() => router.back()}
-                            disabled={isApplyingAnyUpdate}
+                            disabled={isBusy}
                         >
                             <Text style={{ color: c.textMuted, fontFamily: ty.body.familyMedium }}>
                                 No Thanks, Keep Current Targets
@@ -559,19 +671,19 @@ export default function CheckInScreen() {
                             }
                         ]}
                         onPress={handleNext}
-                        disabled={isApplyingAnyUpdate}
+                            disabled={isBusy}
                     >
                         <Text style={{ color: c.bg, fontFamily: ty.heading.familySemibold, fontSize: 16 }}>
                             {currentStep === 'analysis'
                                 ? (
-                                    isApplyingAnyUpdate
+                                    isBusy
                                         ? 'Applying Updates...'
                                         : (prepModeEnabled
                                             ? (isElite ? 'Apply Prep Adjustments' : 'Save Prep Recommendation')
                                             : 'Accept Updates')
                                 )
                                 : currentStep === 'photos'
-                                    ? (previewCheckInMutation.isPending ? 'Analyzing...' : 'Analyze Progress')
+                                    ? (previewCheckInMutation.isPending || isUploadingPhotos ? 'Analyzing...' : 'Analyze Progress')
                                     : 'Continue'}
                         </Text>
                         {currentStep !== 'analysis' && <TabBarIcon name="arrow-forward" color={c.bg} size={18} />}
@@ -621,5 +733,37 @@ const styles = StyleSheet.create({
         shadowOffset: { width: 0, height: 0 },
         shadowOpacity: 0.8,
         shadowRadius: 40,
-    }
+    },
+    cameraHeader: {
+        position: 'absolute',
+        top: 0,
+        left: 0,
+        right: 0,
+        paddingHorizontal: 20,
+        flexDirection: 'row',
+        alignItems: 'center',
+        justifyContent: 'space-between',
+    },
+    cameraCircleButton: {
+        width: 48,
+        height: 48,
+        borderRadius: 24,
+        alignItems: 'center',
+        justifyContent: 'center',
+    },
+    cameraFooter: {
+        position: 'absolute',
+        left: 0,
+        right: 0,
+        bottom: 0,
+        alignItems: 'center',
+    },
+    captureButton: {
+        width: 78,
+        height: 78,
+        borderRadius: 39,
+        borderWidth: 4,
+        alignItems: 'center',
+        justifyContent: 'center',
+    },
 });

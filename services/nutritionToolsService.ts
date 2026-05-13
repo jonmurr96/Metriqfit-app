@@ -4,8 +4,6 @@ import {
   getEditableNutritionPlanContext,
   type EditableNutritionPlanContext,
 } from './planService';
-import { getGroceryLists } from './groceryService';
-import { getPantryItems } from './pantryService';
 import {
   canAccessFeature,
   checkEntitlementStatus,
@@ -16,7 +14,7 @@ import type { FeatureGateKey, SubscriptionTier } from '../lib/subscription/plans
 export type NutritionToolAccessState = 'available' | 'premium_required' | 'elite_required';
 
 export interface NutritionToolCard {
-  id: 'camera' | 'barcode' | 'menu' | 'recipe-import' | 'pantry' | 'grocery' | 'macro-budgeter' | 'supplement-guide';
+  id: 'camera' | 'barcode' | 'menu' | 'recipe-import' | 'macro-budgeter' | 'supplement-guide';
   title: string;
   subtitle: string;
   icon: string;
@@ -30,8 +28,6 @@ export interface NutritionToolsSnapshot {
   isElite: boolean;
   isPremium: boolean;
   scanQuotaLabel: string | null;
-  latestGroceryListTitle: string | null;
-  pantryLowStockCount: number;
   editableContext: EditableNutritionPlanContext;
   previewPending: boolean;
   cards: NutritionToolCard[];
@@ -50,21 +46,16 @@ function getAccessState(feature: FeatureGateKey, tier: SubscriptionTier): Nutrit
 }
 
 export async function getNutritionToolsSnapshot(userId: string): Promise<NutritionToolsSnapshot> {
-  const [entitlement, photoUsage, aiUsage, groceryLists, pantryItems, editableContext] = await Promise.all([
+  const [entitlement, photoUsage, aiUsage, editableContext] = await Promise.all([
     checkEntitlementStatus(userId),
     getPhotoScanUsage(userId).catch(() => null),
     getDailyUsage(userId).catch(() => null),
-    getGroceryLists(userId).catch(() => []),
-    getPantryItems(userId).catch(() => []),
     getEditableNutritionPlanContext(userId),
   ]);
 
   const tier = entitlement.tier;
   const isElite = entitlement.isElite;
   const isPremium = entitlement.isPremium;
-  const lowStockCount = pantryItems.filter((item) => Number(item.reorder_threshold || 0) > 0
-    && Number(item.quantity_value || 0) <= Number(item.reorder_threshold || 0)).length;
-  const latestList = groceryLists[0] || null;
   const previewPending = editableContext.source === 'preview';
   const photoQuota = photoUsage
     ? photoUsage.isUnlimited
@@ -83,8 +74,6 @@ export async function getNutritionToolsSnapshot(userId: string): Promise<Nutriti
     isElite,
     isPremium,
     scanQuotaLabel: photoQuota,
-    latestGroceryListTitle: latestList?.title || null,
-    pantryLowStockCount: lowStockCount,
     editableContext,
     previewPending,
     cards: [
@@ -123,24 +112,6 @@ export async function getNutritionToolsSnapshot(userId: string): Promise<Nutriti
         route: '/(tabs)/nutrition/recipe-import',
         accessState: getAccessState('recipe_url_import', tier),
         meta: !isElite ? 'Elite-only import flow' : 'Saves into your recipe flow',
-      },
-      {
-        id: 'pantry',
-        title: 'Pantry',
-        subtitle: 'Track what is on hand before you build or swap meals.',
-        icon: 'archive-outline',
-        route: '/(tabs)/nutrition/pantry',
-        accessState: getAccessState('pantry', tier),
-        meta: lowStockCount > 0 ? `${lowStockCount} low-stock items` : `${pantryItems.length} active items`,
-      },
-      {
-        id: 'grocery',
-        title: 'Grocery Builder',
-        subtitle: 'Generate meals and a grocery list around constraints.',
-        icon: 'basket-outline',
-        route: '/(tabs)/nutrition/grocery-planner',
-        accessState: getAccessState('grocery_planner', tier),
-        meta: withPreviewMeta(latestList?.title || 'No active grocery list yet', editableContext),
       },
       {
         id: 'macro-budgeter',

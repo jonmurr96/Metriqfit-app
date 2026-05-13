@@ -1,7 +1,13 @@
 import { createClient } from '@supabase/supabase-js';
 import Constants from 'expo-constants';
 import { Platform } from 'react-native';
-import AsyncStorage from '@react-native-async-storage/async-storage';
+import * as SecureStore from 'expo-secure-store';
+
+const nativeSecureStorage = {
+  getItem: (key: string) => SecureStore.getItemAsync(key),
+  setItem: (key: string, value: string) => SecureStore.setItemAsync(key, value),
+  removeItem: (key: string) => SecureStore.deleteItemAsync(key),
+};
 
 // Get Supabase URL and anon key from environment variables
 const supabaseUrl = Constants.expoConfig?.extra?.supabaseUrl || process.env.EXPO_PUBLIC_SUPABASE_URL || '';
@@ -20,7 +26,7 @@ if (!hasValidConfig) {
     'Please set EXPO_PUBLIC_SUPABASE_URL and EXPO_PUBLIC_SUPABASE_ANON_KEY in your .env file.\n' +
     'Authentication and data features will not work until configured.\n'
   );
-} else {
+} else if (__DEV__) {
   console.log('✅ SUPABASE CONFIGURED WITH URL:', supabaseUrl);
 }
 
@@ -33,7 +39,7 @@ export const supabase = createClient(
       autoRefreshToken: true,
       persistSession: true,
       detectSessionInUrl: Platform.OS === 'web',
-      storage: Platform.OS === 'web' ? undefined : AsyncStorage,
+      storage: Platform.OS === 'web' ? undefined : nativeSecureStorage,
     },
   }
 );

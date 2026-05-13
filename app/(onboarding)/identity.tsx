@@ -14,8 +14,6 @@ import { MotiView } from 'moti';
 import { LinearGradient } from 'expo-linear-gradient';
 import { metriqfitTheme } from '../../lib/theme';
 import { useOnboarding } from '../../lib/onboarding';
-import { useAuth } from '../../lib/auth';
-import { supabase } from '../../lib/supabase';
 import { PremiumHeader, PremiumFooter } from '../../components/onboarding/premium';
 
 const { colors: c, spacing: s } = metriqfitTheme;
@@ -24,7 +22,6 @@ const CYAN = '#22D3EE';
 
 export default function IdentityScreen() {
   const { data, updateData, setCurrentStep } = useOnboarding();
-  const { user } = useAuth();
   const isValid =
     !!data.first_name && data.first_name.trim().length >= 1 &&
     !!data.last_name && data.last_name.trim().length >= 1;
@@ -32,12 +29,6 @@ export default function IdentityScreen() {
   const handleContinue = () => {
     if (isValid) {
       setCurrentStep(2);
-      if (user?.id) {
-        supabase
-          .from('onboarding_answers')
-          .upsert({ user_id: user.id, last_onboarding_step: 'about-you' }, { onConflict: 'user_id' })
-          .then(() => {});
-      }
       router.push('/(onboarding)/about-you');
     }
   };

@@ -19,6 +19,8 @@ export interface ProgressSectionShellProps {
   secondarySection?: ProgressSecondaryNavProps["section"];
   secondaryItem?: ProgressSecondaryNavProps["activeItem"];
   showBackButton?: boolean;
+  showPrimaryNav?: boolean;
+  showSecondaryNav?: boolean;
   children: ReactNode;
 }
 
@@ -28,6 +30,8 @@ export function ProgressSectionShell({
   secondarySection,
   secondaryItem,
   showBackButton = true,
+  showPrimaryNav = true,
+  showSecondaryNav = true,
   children,
 }: ProgressSectionShellProps) {
   const { c, s, ty } = useTokens();
@@ -68,8 +72,8 @@ export function ProgressSectionShell({
         <View style={styles.backButton} />
       </View>
 
-      <ProgressPrimaryNav activeSection={primarySection} />
-      {secondarySection && secondaryItem ? (
+      {showPrimaryNav ? <ProgressPrimaryNav activeSection={primarySection} /> : null}
+      {showSecondaryNav && secondarySection && secondaryItem ? (
         <ProgressSecondaryNav section={secondarySection} activeItem={secondaryItem} />
       ) : null}
 

@@ -292,12 +292,17 @@ async function invokeEdgeFunction<T>(
     throw new Error('Supabase edge functions are not configured');
   }
 
+  const { data: sessionData, error: sessionError } = await supabase.auth.getSession();
+  if (sessionError || !sessionData.session?.access_token) {
+    throw new Error('Sign in is required to use this nutrition tool.');
+  }
+
   const response = await fetch(`${edgeFunctionUrl}/functions/v1/${functionName}`, {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
       apikey: edgeFunctionAnonKey,
-      Authorization: `Bearer ${edgeFunctionAnonKey}`,
+      Authorization: `Bearer ${sessionData.session.access_token}`,
     },
     body: JSON.stringify(body),
     signal,

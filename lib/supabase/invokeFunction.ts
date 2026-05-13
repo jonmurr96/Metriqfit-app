@@ -1,3 +1,5 @@
+import * as Sentry from '@sentry/react-native';
+
 /**
  * Wraps supabase.functions.invoke to handle @supabase/functions-js v2.91+
  * behavior where non-2xx responses return data=null with the raw Response
@@ -9,7 +11,10 @@
 export async function invokeFunction<T = any>(
   invokeFn: () => Promise<{ data: T | null; error: any }>,
 ): Promise<{ data: T | null; parsedError: Record<string, any> | null; rawError: any }> {
-  const { data, error } = await invokeFn();
+  const { data, error } = await Sentry.startSpan(
+    { name: 'Supabase Edge Function', op: 'supabase.function.invoke' },
+    invokeFn,
+  );
 
   if (!error) {
     return { data, parsedError: null, rawError: null };

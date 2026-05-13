@@ -15,7 +15,7 @@ export function CoachPromptLauncherRow({ prompts, onSelect }: CoachPromptLaunche
   if (!prompts.length) return null;
 
   return (
-    <View style={{ marginTop: s.md }}>
+    <View style={{ marginTop: s.sm }}>
       <ScrollView
         horizontal
         showsHorizontalScrollIndicator={false}
@@ -31,11 +31,11 @@ export function CoachPromptLauncherRow({ prompts, onSelect }: CoachPromptLaunche
               styles.chip,
               {
                 minHeight: 44,
-                maxWidth: 250,
-                borderRadius: r.pill,
+                maxWidth: 260,
+                borderRadius: 16,
                 borderWidth: 1,
                 borderColor: c.border,
-                backgroundColor: pressed ? c.surface2 : c.surface,
+                backgroundColor: pressed ? c.surface2 : c.bg,
               },
             ]}
           >
@@ -43,12 +43,12 @@ export function CoachPromptLauncherRow({ prompts, onSelect }: CoachPromptLaunche
               style={[
                 styles.iconWrap,
                 {
-                  borderRadius: r.sm,
-                  backgroundColor: c.opacity.primaryLight,
+                  borderRadius: r.pill,
+                  backgroundColor: c.surface,
                 },
               ]}
             >
-              <TabBarIcon name={prompt.icon as any} color={c.primary} size={14} />
+              <TabBarIcon name={prompt.icon as any} color={c.textMuted} size={14} />
             </View>
             <Text
               numberOfLines={1}
@@ -72,7 +72,7 @@ const styles = StyleSheet.create({
   chip: {
     flexDirection: 'row',
     alignItems: 'center',
-    paddingHorizontal: 14,
+    paddingHorizontal: 13,
     gap: 8,
   },
   iconWrap: {

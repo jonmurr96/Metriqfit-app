@@ -2,7 +2,7 @@ import { serve } from "https://deno.land/std@0.224.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.45.4";
 
 interface RequestBody {
-  userId: string;
+  userId?: string;
   eventType?: string; // Optional: filter achievements by event type
   metadata?: Record<string, unknown>;
 }
@@ -27,6 +27,10 @@ interface Achievement {
 interface UnlockedAchievement extends Achievement {
   unlocked_at: string;
   progress_percentage: number;
+}
+
+function isElitePlan(planType: unknown) {
+  return String(planType || "").toLowerCase().startsWith("elite");
 }
 
 async function checkWorkoutCountAchievements(
@@ -145,7 +149,10 @@ async function checkTripleThreatDayAchievements(
     .eq("user_id", userId)
     .eq("date", today);
 
-  const totalWater = waterLogs?.reduce((sum, log) => sum + log.amount_ml, 0) || 0;
+  const totalWater = waterLogs?.reduce(
+    (sum: number, log: { amount_ml?: number | null }) => sum + (log.amount_ml || 0),
+    0,
+  ) || 0;
   const waterGoalMet = totalWater >= (targets?.water_ml || 0) * 0.8; // 80% threshold
 
   return (workouts?.length || 0) > 0 && (meals?.length || 0) >= 3 && waterGoalMet;
@@ -193,18 +200,36 @@ serve(async (req) => {
   }
 
   try {
+    const authHeader = req.headers.get("Authorization") || "";
+    if (!authHeader) {
+      return new Response(
+        JSON.stringify({ error: "Missing authorization header" }),
+        { status: 401, headers: { "Content-Type": "application/json" } },
+      );
+    }
+
     const supabase = createClient(
       Deno.env.get("SUPABASE_URL") ?? "",
-      Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? ""
+      Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? "",
+      { global: { headers: { Authorization: authHeader } } },
     );
 
-    const body: RequestBody = await req.json();
-    const { userId, eventType, metadata = {} } = body;
-
-    if (!userId) {
+    const { data: authData, error: authError } = await supabase.auth.getUser();
+    if (authError || !authData?.user) {
       return new Response(
-        JSON.stringify({ error: "Missing userId" }),
-        { status: 400, headers: { "Content-Type": "application/json" } }
+        JSON.stringify({ error: "Unauthorized" }),
+        { status: 401, headers: { "Content-Type": "application/json" } },
+      );
+    }
+
+    const body: RequestBody = await req.json();
+    const { eventType, metadata = {} } = body;
+    const userId = body.userId || authData.user.id;
+
+    if (userId !== authData.user.id) {
+      return new Response(
+        JSON.stringify({ error: "User mismatch" }),
+        { status: 403, headers: { "Content-Type": "application/json" } }
       );
     }
 
@@ -229,12 +254,19 @@ serve(async (req) => {
     // Check user subscription tier
     const { data: subscription } = await supabase
       .from("subscriptions")
-      .select("tier")
+      .select("plan_type, status, expires_at, trial_ends_at")
       .eq("user_id", userId)
-      .eq("is_active", true)
+      .in("status", ["active", "trial", "grace_period"])
+      .order("updated_at", { ascending: false })
+      .limit(1)
       .single();
 
-    const isElite = subscription?.tier === "elite";
+    const now = Date.now();
+    const expiresAt = subscription?.expires_at ? new Date(String(subscription.expires_at)).getTime() : null;
+    const trialEndsAt = subscription?.trial_ends_at ? new Date(String(subscription.trial_ends_at)).getTime() : null;
+    const isTrialing = subscription?.status === "trial" && trialEndsAt !== null && trialEndsAt > now;
+    const isCurrent = Boolean(subscription && (subscription.status === "active" || subscription.status === "grace_period" || isTrialing) && (expiresAt === null || expiresAt > now || isTrialing));
+    const isElite = isCurrent && isElitePlan(subscription?.plan_type);
 
     // Filter achievements to check
     const achievementsToCheck = allAchievements.filter((achievement: Achievement) => {
@@ -320,8 +352,9 @@ serve(async (req) => {
     );
   } catch (error) {
     console.error("Error in check-achievements function:", error);
+    const message = error instanceof Error ? error.message : String(error);
     return new Response(
-      JSON.stringify({ error: error.message }),
+      JSON.stringify({ error: message }),
       { status: 500, headers: { "Content-Type": "application/json" } }
     );
   }
