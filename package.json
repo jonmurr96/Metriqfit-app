@@ -22,6 +22,7 @@
     "test": "node --test lib/workout/*.test.mjs"
   },
   "dependencies": {
+    "@clerk/expo": "^3.2.12",
     "@expo-google-fonts/inter": "^0.2.3",
     "@expo-google-fonts/jetbrains-mono": "^0.2.3",
     "@expo-google-fonts/sora": "^0.2.3",
@@ -55,6 +56,7 @@
     "expo-status-bar": "~3.0.9",
     "expo-video": "~3.0.16",
     "moti": "^0.30.0",
+    "nativewind": "^4.2.4",
     "react": "19.1.0",
     "react-dom": "19.1.0",
     "react-native": "0.81.5",

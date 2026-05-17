@@ -1,9 +1,9 @@
 import { useRef, useState } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
-import { Link, router } from 'expo-router';
+import { Link, type Href, router } from 'expo-router';
 import { MotiView } from 'moti';
+import { useSignIn, useOAuth } from '@clerk/expo';
 
-import { useAuth } from '../../lib/auth';
 import { useTokens } from '../../lib/theme';
 import { AuthScreenShell } from '../../components/auth/AuthScreenShell';
 import { FloatingLabelInput } from '../../components/auth/FloatingLabelInput';
@@ -14,11 +14,11 @@ import { AuthFooterLinks } from '../../components/auth/AuthFooterLinks';
 const normalizeError = (message?: string): string => {
   if (!message) return 'Something went wrong. Please try again.';
   const lowered = message.toLowerCase();
-  if (lowered.includes('invalid login credentials')) {
+  if (lowered.includes('invalid') || lowered.includes('credentials') || lowered.includes('password')) {
     return 'Invalid email or password. Please check your credentials.';
   }
-  if (lowered.includes('email not confirmed')) {
-    return 'Please verify your email before signing in.';
+  if (lowered.includes('not found') || lowered.includes('no account')) {
+    return 'No account found with this email. Please sign up.';
   }
   if (lowered.includes('network')) {
     return 'Network issue detected. Check your connection and retry.';
@@ -28,7 +28,8 @@ const normalizeError = (message?: string): string => {
 
 export default function SignInScreen() {
   const { c, ty, s, theme } = useTokens();
-  const { signIn, signInWithOAuth, oauthAvailability } = useAuth();
+  const { signIn, fetchStatus } = useSignIn();
+  const { startOAuthFlow: startGoogleOAuth } = useOAuth({ strategy: 'oauth_google' });
 
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
@@ -36,6 +37,8 @@ export default function SignInScreen() {
   const [error, setError] = useState('');
   const [successMessage, setSuccessMessage] = useState('');
   const passwordRef = useRef<any>(null);
+
+  const isBusy = loading || fetchStatus === 'fetching';
 
   const handleEmailPasswordSignIn = async () => {
     if (!email || !password) {
@@ -49,13 +52,24 @@ export default function SignInScreen() {
     setSuccessMessage('');
 
     try {
-      const { error: signInError } = await signIn(email.trim(), password);
+      const { error: signInError } = await signIn.password({
+        emailAddress: email.trim(),
+        password,
+      });
+
       if (signInError) {
         setError(normalizeError(signInError.message));
         return;
       }
+
       setSuccessMessage('Signed in successfully. Redirecting...');
-      router.replace('/');
+
+      await signIn.finalize({
+        navigate: ({ decorateUrl }) => {
+          const url = decorateUrl('/');
+          router.replace(url as Href);
+        },
+      });
     } catch (err: any) {
       setError(normalizeError(err?.message));
     } finally {
@@ -63,22 +77,22 @@ export default function SignInScreen() {
     }
   };
 
-  const handleOAuthSignIn = async (provider: 'google' | 'apple') => {
+  const handleGoogleSignIn = async () => {
     setLoading(true);
     setError('');
     setSuccessMessage('');
 
-    const { error: oauthError } = await signInWithOAuth(provider);
-    if (oauthError) {
-      setError(normalizeError(oauthError.message));
+    try {
+      const { createdSessionId, setActive } = await startGoogleOAuth();
+      if (createdSessionId && setActive) {
+        await setActive({ session: createdSessionId });
+        router.replace('/');
+      }
+    } catch (err: any) {
+      setError(normalizeError(err?.message));
+    } finally {
       setLoading(false);
-      return;
     }
-
-    if (provider === 'google') {
-      setSuccessMessage('Redirecting to Google sign in...');
-    }
-    setLoading(false);
   };
 
   return (
@@ -91,7 +105,7 @@ export default function SignInScreen() {
           prompt="New to MetriqFit?"
           actionLabel="Create account"
           href="/(auth)/sign-up"
-          disabled={loading}
+          disabled={isBusy}
         />
       }
     >
@@ -99,9 +113,8 @@ export default function SignInScreen() {
       <View style={{ gap: s.sm }}>
         <AuthProviderButton
           provider="google"
-          onPress={() => handleOAuthSignIn('google')}
-          disabled={loading || !oauthAvailability.google}
-          helperText={!oauthAvailability.google ? 'Google sign in is disabled in this environment.' : undefined}
+          onPress={handleGoogleSignIn}
+          disabled={isBusy}
         />
         <AuthProviderButton provider="apple" disabled />
       </View>
@@ -127,7 +140,7 @@ export default function SignInScreen() {
         autoComplete="email"
         returnKeyType="next"
         onSubmitEditing={() => passwordRef.current?.focus()}
-        editable={!loading}
+        editable={!isBusy}
         accessibilityLabel="Email"
         accessibilityHint="Enter the email linked to your account"
       />
@@ -147,13 +160,13 @@ export default function SignInScreen() {
           textContentType="password"
           returnKeyType="go"
           onSubmitEditing={handleEmailPasswordSignIn}
-          editable={!loading}
+          editable={!isBusy}
           accessibilityLabel="Password"
           accessibilityHint="Enter your account password"
         />
         <Link href={'/(auth)/forgot-password' as any} asChild>
           <Pressable
-            disabled={loading}
+            disabled={isBusy}
             accessibilityRole="link"
             accessibilityLabel="Forgot password"
             style={styles.forgotWrap}
@@ -191,7 +204,7 @@ export default function SignInScreen() {
       <ShimmerButton
         label="Sign In"
         onPress={handleEmailPasswordSignIn}
-        loading={loading}
+        loading={isBusy}
         accessibilityHint="Signs in with your email and password"
       />
     </AuthScreenShell>

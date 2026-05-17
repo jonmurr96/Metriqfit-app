@@ -38,13 +38,10 @@ export default function SecuritySettingsScreen() {
   const [isDeleting, setIsDeleting] = useState(false);
 
   const linkedProviders = useMemo(() => {
-    const providers = (user?.app_metadata?.providers || user?.identities?.map((identity) => identity.provider)) as
-      | string[]
-      | undefined;
-
-    if (!providers?.length) return ['email'];
-    return Array.from(new Set(providers));
-  }, [user?.app_metadata?.providers, user?.identities]);
+    const metaProviders = user?.user_metadata?.providers as string[] | undefined;
+    if (metaProviders?.length) return Array.from(new Set(metaProviders));
+    return ['email'];
+  }, [user?.user_metadata]);
 
   const handlePasswordReset = async () => {
     if (!user?.email) {

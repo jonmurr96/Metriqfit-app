@@ -168,7 +168,7 @@ const TRAINING_TIMES: { value: TrainingTime; label: string }[] = [
 
 export default function NutritionScreen() {
   const { data, updateData, setCurrentStep } = useOnboarding();
-  const { session } = useAuth();
+  const { user } = useAuth();
   const { width } = useWindowDimensions();
   const isCompactWidth = width < 390;
   const [isLoading, setIsLoading] = useState(false);
@@ -333,17 +333,12 @@ export default function NutritionScreen() {
     setIsLoading(true);
     setError(null);
     try {
-      const userId = session?.user?.id;
-      if (!userId) {
-        const { data: { session: s2 } } = await supabase.auth.getSession();
-        if (!s2?.user?.id) {
-          setError('Session expired. Please sign in again.');
-          router.replace('/(auth)/sign-in');
-          return;
-        }
+      const uid = user?.id;
+      if (!uid) {
+        setError('Session expired. Please sign in again.');
+        router.replace('/(auth)/sign-in');
+        return;
       }
-      const uid = session?.user?.id || (await supabase.auth.getSession()).data.session?.user?.id;
-      if (!uid) throw new Error('No user session');
 
       const normalizedAnswers = normalizeOnboardingAnswers(data);
 
