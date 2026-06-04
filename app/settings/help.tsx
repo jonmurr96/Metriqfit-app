@@ -11,6 +11,7 @@ import {
   SUPPORT_EMAIL,
   TERMS_OF_SERVICE_URL,
 } from '../../lib/appConfig';
+import { PressableScale } from '@/components/common/PressableScale';
 
 export default function HelpSettingsScreen() {
   const { c, s, ty, r } = useTokens();
@@ -43,9 +44,9 @@ export default function HelpSettingsScreen() {
     subtitle: string;
     onPress: () => void;
   }) => (
-    <Pressable
+    <PressableScale
       onPress={onPress}
-      style={({ pressed }) => [
+      style={(pressed) => [
         styles.row,
         {
           borderColor: c.border,
@@ -62,7 +63,7 @@ export default function HelpSettingsScreen() {
         <Text style={{ color: c.textMuted, fontFamily: ty.body.family, marginTop: 4 }}>{subtitle}</Text>
       </View>
       <TabBarIcon name="chevron-forward" color={c.textSubtle} size={16} />
-    </Pressable>
+    </PressableScale>
   );
 
   return (

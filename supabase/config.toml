@@ -1,79 +1,84 @@
 # Supabase CLI function configuration.
-# User-facing functions should use gateway JWT verification plus in-function
-# authorization checks. Admin batch functions remain secret-gated because they
-# are not called with a user's Supabase session.
+#
+# User-facing functions use `verify_jwt = false` at the gateway because Supabase's
+# gateway JWT validator only accepts the project's HS256 token and rejects Clerk's
+# RS256 third-party tokens with `Invalid JWT`. Each user-facing function instead
+# verifies the Clerk JWT itself via the shared `_shared/clerkAuth.ts` helper
+# (JWKS, pinned issuer). Admin batch functions (migrate-workout-plans-v2,
+# remediate-workout-mappings) stay verify_jwt=false because they are secret-gated
+# and not called with a user's session.
 
 [functions.import-recipe-url]
-verify_jwt = true
+verify_jwt = false
 
 [functions.menu-scan-rank]
-verify_jwt = true
+verify_jwt = false
 
 [functions.search-food-catalog]
-verify_jwt = true
+verify_jwt = false
 
 [functions.upsert-external-food-item]
-verify_jwt = true
+verify_jwt = false
 
 [functions.confirm-serving]
-verify_jwt = true
+verify_jwt = false
 
 [functions.analyze-food-photo]
-verify_jwt = true
+verify_jwt = false
 
 [functions.ai-coach-message]
-verify_jwt = true
+verify_jwt = false
 
 [functions.award-xp]
-verify_jwt = true
+verify_jwt = false
 
 [functions.update-streak]
-verify_jwt = true
+verify_jwt = false
 
 [functions.check-achievements]
-verify_jwt = true
+verify_jwt = false
 
 [functions.build-meals-from-constraints]
-verify_jwt = true
+verify_jwt = false
 
 [functions.apply-meal-plan-batch-change]
-verify_jwt = true
+verify_jwt = false
 
 [functions.apply-meal-plan-change]
-verify_jwt = true
+verify_jwt = false
 
 [functions.generate-user-plans]
-verify_jwt = true
+verify_jwt = false
 
 [functions.barcode-lookup]
-verify_jwt = true
+verify_jwt = false
 
 [functions.import-workout-plan]
-verify_jwt = true
+verify_jwt = false
 
 [functions.adapt-workout-plan]
-verify_jwt = true
+verify_jwt = false
 
 [functions.migrate-workout-plans-v2]
 verify_jwt = false
 
 [functions.reschedule-workout-day]
-verify_jwt = true
+verify_jwt = false
 
 [functions.compute-plan-consistency]
-verify_jwt = true
+verify_jwt = false
 
 [functions.prep-coach-checkin-adjust]
-verify_jwt = true
+verify_jwt = false
 
 [functions.repair-workout-plan-coherence]
-verify_jwt = true
+verify_jwt = false
 
 [functions.delete-account]
-verify_jwt = true
+verify_jwt = false
 
 [functions.sync-revenuecat-subscription]
-verify_jwt = true
+verify_jwt = false
 
 [functions.remediate-workout-mappings]
 verify_jwt = false

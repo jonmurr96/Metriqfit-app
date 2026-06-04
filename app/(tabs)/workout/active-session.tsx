@@ -497,8 +497,8 @@ export default function ActiveSessionScreen() {
       reps_max: currentExercise.reps_max,
       rest_seconds: currentExercise.rest_seconds,
       sets: currentExercise.sets.map(toLoggingSet),
-      isModifiedCarryover: currentExercise.is_modified_carryover,
-      isReset: currentExercise.is_reset,
+      isModifiedCarryover: (currentExercise as any).is_modified_carryover,
+      isReset: (currentExercise as any).is_reset,
     };
   }, [currentExercise]);
 

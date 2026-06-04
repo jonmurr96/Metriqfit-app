@@ -422,7 +422,7 @@ function remediateTemplateForClone(
               equipment_required: nextExercise.equipment_required || [],
               primary_muscle: nextExercise.primary_muscle || null,
               pattern: nextExercise.pattern || null,
-              difficulty: nextExercise.difficulty || null,
+              difficulty: nextExercise.difficulty != null ? String(nextExercise.difficulty) : null,
             },
           };
         }),

@@ -4,6 +4,7 @@ import { MotiView } from 'moti';
 import Svg, { Circle } from 'react-native-svg';
 import { useTokens } from '../../lib/theme';
 import { TabBarIcon } from '../../components/navigation/TabBarIcon';
+import { PressableScale } from '@/components/common/PressableScale';
 
 interface HydrationCardProps {
   current?: number;
@@ -169,8 +170,8 @@ export function HydrationCard({
               origin={`${ringSize / 2}, ${ringSize / 2}`}
             />
           </Svg>
-          <Pressable
-            style={({ pressed }) => [
+          <PressableScale
+            style={(pressed) => [
               styles.addButton,
               {
                 backgroundColor: 'transparent',
@@ -201,7 +202,7 @@ export function HydrationCard({
             >
               ADD
             </Text>
-          </Pressable>
+          </PressableScale>
         </View>
 
         {/* Numbers + progress */}

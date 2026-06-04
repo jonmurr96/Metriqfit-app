@@ -19,7 +19,6 @@ import type {
   UserTrainingProfile,
 } from './training-profile.ts';
 import type { GeneratedSplitDaySelection } from './generated-split-selection.ts';
-import { NORMALIZED_MUSCLES } from './exerciseClassification.ts';
 
 // ---------------------------------------------------------------------------
 // Types
@@ -38,7 +37,7 @@ export type EdgeCaseType =
 
 export type EdgeCaseHandlerResult = {
   handled: boolean;
-  fallbackPlan?: GeneratedSplitDaySelection;
+  fallbackPlan?: any;
   error?: string;
   warnings: string[];
   degradedMode: boolean;
@@ -108,56 +107,41 @@ function getFallbackBodyweightExercises(): ProgramExercise[] {
       id: 'fallback_pushup',
       name: 'Push-Up',
       pattern: 'horizontal_push',
-      sets: 3,
-      reps: '10-15',
-      restSeconds: 60,
-      tags: ['chest', 'front_delts', 'triceps'],
-      muscleGroups: ['chest'],
-      equipment: 'bodyweight',
+      category: 'chest',
+      equipment_required: ['bodyweight'],
+      primary_muscle: 'chest',
     },
     {
       id: 'fallback_squat',
       name: 'Bodyweight Squat',
       pattern: 'compound_squat',
-      sets: 3,
-      reps: '15-20',
-      restSeconds: 60,
-      tags: ['quads', 'glutes'],
-      muscleGroups: ['quads'],
-      equipment: 'bodyweight',
+      category: 'legs',
+      equipment_required: ['bodyweight'],
+      primary_muscle: 'quads',
     },
     {
       id: 'fallback_lunge',
       name: 'Walking Lunge',
       pattern: 'single_leg',
-      sets: 3,
-      reps: '10/leg',
-      restSeconds: 60,
-      tags: ['quads', 'glutes', 'hamstrings'],
-      muscleGroups: ['quads'],
-      equipment: 'bodyweight',
+      category: 'legs',
+      equipment_required: ['bodyweight'],
+      primary_muscle: 'quads',
     },
     {
       id: 'fallback_row',
       name: 'Inverted Row (Under Table)',
       pattern: 'horizontal_pull',
-      sets: 3,
-      reps: '8-12',
-      restSeconds: 60,
-      tags: ['back', 'biceps', 'rear_delts'],
-      muscleGroups: ['back'],
-      equipment: 'bodyweight',
+      category: 'back',
+      equipment_required: ['bodyweight'],
+      primary_muscle: 'back',
     },
     {
       id: 'fallback_plank',
       name: 'Plank',
       pattern: 'core',
-      sets: 3,
-      reps: '30-60s',
-      restSeconds: 45,
-      tags: ['abs', 'core'],
-      muscleGroups: ['abs'],
-      equipment: 'bodyweight',
+      category: 'core',
+      equipment_required: ['bodyweight'],
+      primary_muscle: 'abs',
     },
   ];
 }
@@ -241,7 +225,7 @@ function getExerciseInjuryConflicts(
   injuries: string[]
 ): string[] {
   const conflicts: string[] = [];
-  const nameLower = exercise.name.toLowerCase();
+  const nameLower = (exercise.name || '').toLowerCase();
 
   // Simple keyword matching (production would use more sophisticated rules)
   const injuryKeywords: Record<string, string[]> = {
@@ -295,7 +279,7 @@ export function resolveConstraintConflicts(
   }
 
   // Check for very short sessions + many exercises
-  const estimatedMinExercises = Math.ceil(profile.sessionDurationMin / 10);
+  const estimatedMinExercises = Math.ceil((profile.sessionDurationMin || 0) / 10);
   if (profile.maxExercisesPerDay > estimatedMinExercises) {
     conflicts.push(
       `Session duration may not allow for ${profile.maxExercisesPerDay} exercises`
@@ -341,10 +325,11 @@ export function resolveConstraintConflicts(
 
 const CRITICAL_PATTERNS_BY_GOAL: Record<PrimaryGoal, string[]> = {
   build_muscle: ['compound_squat', 'horizontal_push', 'horizontal_pull'],
-  build_strength: ['compound_squat', 'compound_hinge', 'horizontal_push'],
+  get_stronger: ['compound_squat', 'compound_hinge', 'horizontal_push'],
   lose_fat: ['compound_squat', 'conditioning', 'horizontal_push'],
-  improve_health: ['compound_squat', 'horizontal_push', 'core'],
-  maintain_fitness: ['compound_squat', 'horizontal_push', 'horizontal_pull'],
+  improve_endurance: ['compound_squat', 'horizontal_push', 'core'],
+  general_fitness: ['compound_squat', 'horizontal_push', 'horizontal_pull'],
+  athletic_performance: ['compound_squat', 'horizontal_push', 'horizontal_pull'],
 };
 
 /**
@@ -456,7 +441,7 @@ export function handleEdgeCases(
     exercisePool: PoolExercise[];
     selectedExercises: PoolExercise[];
     profile: UserTrainingProfile;
-    generatedPlan?: GeneratedSplitDaySelection;
+    generatedPlan?: any;
   }
 ): EdgeCaseHandlerResult {
   const warnings: string[] = [];
@@ -495,14 +480,16 @@ export function handleEdgeCases(
 
   // Check 3: Pattern coverage
   if (context.generatedPlan) {
-    const allExercises = context.generatedPlan.days.flatMap((d) => d.exercises);
+    const allExercises = context.generatedPlan.days.flatMap((d: any) => d.exercises);
     const patternCheck = validatePatternCoverage(
       allExercises,
       context.profile.primaryGoal,
       false // Non-strict mode for edge case handling
     );
-    warnings.push(...patternCheck.warnings);
-    degradedMode = degradedMode || !patternCheck.valid;
+    if (!patternCheck.valid) {
+      warnings.push(...patternCheck.warnings);
+      degradedMode = true;
+    }
   }
 
   // Check 4: Injury safety

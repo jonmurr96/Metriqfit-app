@@ -1,6 +1,7 @@
 import React from 'react';
-import { View, Text, Pressable, StyleSheet } from 'react-native';
+import { View, Text, StyleSheet } from 'react-native';
 import { router } from 'expo-router';
+import { PressableScale } from '@/components/common/PressableScale';
 import { Ionicons } from '@expo/vector-icons';
 import { metriqfitTheme } from '../../../lib/theme';
 import { BrandMark } from '../../branding/BrandMark';
@@ -20,15 +21,15 @@ export function PremiumHeader({ currentStep, totalSteps, showBack = true, onBack
   return (
     <View style={styles.container}>
       {showBack ? (
-        <Pressable
+        <PressableScale
           onPress={() => (onBack ? onBack() : router.back())}
-          style={({ pressed }) => [
+          style={(pressed) => [
             styles.backButton,
             pressed && styles.backButtonPressed,
           ]}
         >
           <Ionicons name="chevron-back" size={20} color={c.primary} />
-        </Pressable>
+        </PressableScale>
       ) : (
         <View style={styles.backPlaceholder} />
       )}

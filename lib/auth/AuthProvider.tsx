@@ -10,6 +10,7 @@ import {
   logoutRevenueCat,
 } from '../../services/revenuecatClient';
 import { queryClient } from '../queryClient';
+import { registerClerkTokenGetter } from './getClerkToken';
 
 type OAuthProvider = 'google' | 'apple';
 
@@ -39,9 +40,19 @@ const oauthAvailability = {
 };
 
 export function AuthProvider({ children }: { children: React.ReactNode }) {
-  const { isSignedIn, isLoaded: authLoaded, userId } = useClerkAuth();
+  const { isSignedIn, isLoaded: authLoaded, userId, getToken } = useClerkAuth();
   const { user: clerkUser, isLoaded: userLoaded } = useUser();
   const { signOut: clerkSignOut } = useClerk();
+
+  // Bridge Clerk JWTs -> Supabase client and getClerkToken helper.
+  // Supabase Third-Party Auth is configured with Clerk's domain, so we pass
+  // the default Clerk session token — no JWT template required.
+  useEffect(() => {
+    import('../supabase').then(({ setClerkTokenGetter }) => {
+      setClerkTokenGetter(() => getToken());
+    });
+    registerClerkTokenGetter(() => getToken());
+  }, [getToken]);
 
   const loading = !authLoaded || !userLoaded;
 

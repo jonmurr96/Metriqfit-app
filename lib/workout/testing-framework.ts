@@ -14,8 +14,8 @@
 
 import type { ExperienceLevel, PrimaryGoal } from './training-profile.ts';
 import type { DayRecipe } from './exercise-recipes-by-experience.ts';
-import type { PeriodizationConfig, RecoveryScore } from './periodization-system.ts';
-import type { ProgramWithRecovery } from './recovery-system.ts';
+import type { PeriodizationConfig } from './periodization-system.ts';
+import type { ProgramWithRecovery, RecoveryScore } from './recovery-system.ts';
 
 // ---------------------------------------------------------------------------
 // Test Types
@@ -238,7 +238,7 @@ export function generateRandomExperienceLevel(): ExperienceLevel {
 }
 
 export function generateRandomGoal(): PrimaryGoal {
-  const goals: PrimaryGoal[] = ['lose_fat', 'build_muscle', 'build_strength', 'general_fitness'];
+  const goals: PrimaryGoal[] = ['lose_fat', 'build_muscle', 'get_stronger', 'general_fitness'];
   return goals[Math.floor(Math.random() * goals.length)];
 }
 
@@ -470,7 +470,7 @@ export const TestData = {
     },
     advanced: {
       experienceLevel: 'advanced' as const,
-      primaryGoal: 'build_strength' as const,
+      primaryGoal: 'get_stronger' as const,
       daysPerWeek: 5,
       sessionDurationMin: 75,
       equipmentAccess: 'full_gym',

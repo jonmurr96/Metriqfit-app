@@ -1,5 +1,5 @@
 import React, { useMemo } from 'react';
-import { StyleSheet, Text, View } from 'react-native';
+import { Text, View } from 'react-native';
 import { useTokens } from '../../../lib/theme';
 import type { WorkoutScheduleEntry } from '../../../services/planService';
 
@@ -32,20 +32,20 @@ export function WorkoutWeekPreview({ schedule, exercisesByPlanDayId }: WorkoutWe
 
   if (!ordered.length) {
     return (
-      <View style={[styles.emptyCard, { borderColor: c.border, backgroundColor: c.bg, borderRadius: r.md }]}> 
+      <View className="border p-3" style={{ borderColor: c.border, backgroundColor: c.bg, borderRadius: r.md }}>
         <Text style={{ color: c.textMuted, fontFamily: ty.body.family }}>No weekly schedule available yet.</Text>
       </View>
     );
   }
 
   return (
-    <View style={styles.wrapper}>
+    <View className="gap-2">
       {ordered.map((entry) => {
         const exercises = entry.plan_day_id ? exercisesByPlanDayId.get(entry.plan_day_id) || [] : [];
         const isWorkout = entry.session_type === 'workout';
         return (
-          <View key={entry.id} style={[styles.dayCard, { borderColor: c.border, backgroundColor: c.bg, borderRadius: r.md }]}> 
-            <View style={styles.dayHeader}>
+          <View key={entry.id} className="border p-[10px]" style={{ borderColor: c.border, backgroundColor: c.bg, borderRadius: r.md }}>
+            <View className="flex-row items-center justify-between mb-1">
               <Text style={{ color: c.text, fontFamily: ty.body.familySemibold }}>{formatDateLabel(entry.scheduled_date)}</Text>
               <Text style={{ color: isWorkout ? c.primary : c.textMuted, fontFamily: ty.body.familySemibold, fontSize: 12 }}>
                 {isWorkout ? 'Workout' : 'Rest'}
@@ -79,23 +79,3 @@ export function WorkoutWeekPreview({ schedule, exercisesByPlanDayId }: WorkoutWe
     </View>
   );
 }
-
-const styles = StyleSheet.create({
-  wrapper: {
-    gap: 8,
-  },
-  dayCard: {
-    borderWidth: 1,
-    padding: 10,
-  },
-  dayHeader: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    marginBottom: 4,
-  },
-  emptyCard: {
-    borderWidth: 1,
-    padding: 12,
-  },
-});

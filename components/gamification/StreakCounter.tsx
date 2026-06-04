@@ -5,12 +5,13 @@
  */
 
 import React from 'react';
-import { StyleSheet, Text, View, Pressable, ActivityIndicator } from 'react-native';
+import { StyleSheet, Text, View, ActivityIndicator } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
 
 import { useTokens } from '../../lib/theme';
 import { useHighestStreak } from '../../hooks/useGamification';
+import { PressableScale } from '@/components/common/PressableScale';
 
 export function StreakCounter() {
   const { c, s, ty } = useTokens();
@@ -39,9 +40,9 @@ export function StreakCounter() {
   }
 
   return (
-    <Pressable
+    <PressableScale
       onPress={handlePress}
-      style={({ pressed }) => [
+      style={(pressed) => [
         styles.container,
         {
           backgroundColor: pressed ? c.surfaceActive : c.surfaceSubtle,
@@ -62,7 +63,7 @@ export function StreakCounter() {
       >
         {currentStreak}
       </Text>
-    </Pressable>
+    </PressableScale>
   );
 }
 

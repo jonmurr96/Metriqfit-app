@@ -56,7 +56,7 @@ export type SoftConstraint =
 // Equipment Constraints
 // ---------------------------------------------------------------------------
 
-const EQUIPMENT_HIERARCHY: Record<EquipmentAccess, string[]> = {
+const EQUIPMENT_HIERARCHY: Record<string, string[]> = {
   full_gym: ['barbell', 'dumbbell', 'machine', 'cable', 'bodyweight'],
   barbell_rack: ['barbell', 'dumbbell', 'bodyweight'],
   dumbbells_only: ['dumbbell', 'bodyweight'],
@@ -72,7 +72,7 @@ export function validateEquipmentCompatibility(
   exercise: PoolExercise,
   equipmentAccess: EquipmentAccess
 ): ConstraintCheck {
-  const allowedEquipment = EQUIPMENT_HIERARCHY[equipmentAccess];
+  const allowedEquipment = EQUIPMENT_HIERARCHY[equipmentAccess] || [];
   const exerciseEquipment = exercise.equipment_options || [];
 
   // Check if exercise can be performed with available equipment
@@ -135,7 +135,9 @@ export function validateExperienceLevel(
   exercise: PoolExercise,
   experienceLevel: ExperienceLevel
 ): ConstraintCheck {
-  const difficulty = parseInt(exercise.difficulty || '1', 10);
+  const difficulty = typeof exercise.difficulty === 'number'
+    ? exercise.difficulty
+    : parseInt(String(exercise.difficulty || '1'), 10);
   const maxDifficulty = COMPLEXITY_LIMITS[experienceLevel];
 
   if (difficulty <= maxDifficulty) {
@@ -406,7 +408,7 @@ export function validatePlan(
 
   // Hard constraints
   checks.push(validateExerciseCount(context.exercises.length, context.profile.maxExercisesPerDay));
-  checks.push(validateSessionDuration(context.exercises, context.profile.sessionDurationMin));
+  checks.push(validateSessionDuration(context.exercises, context.profile.sessionDurationMin ?? 60));
 
   // Check each exercise
   for (const ex of context.exercises) {

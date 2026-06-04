@@ -1,5 +1,6 @@
 import React from 'react';
-import { Pressable, StyleSheet, Text, View } from 'react-native';
+import { StyleSheet, Text, View } from 'react-native';
+import { PressableScale } from '@/components/common/PressableScale';
 import type { AICoachMemoryItem } from '../../services/aiCoachService';
 import { useTokens } from '../../lib/theme';
 import { CoachSheet } from './CoachSheet';
@@ -97,10 +98,10 @@ export function CoachMemorySheet({
 
             {!item.isDerived && item.status === 'active' ? (
               <View style={[styles.actions, { gap: s.sm, marginTop: s.md }]}>
-                <Pressable
+                <PressableScale
                   accessibilityRole="button"
                   onPress={() => onDismiss(item)}
-                  style={({ pressed }) => [
+                  style={(pressed) => [
                     styles.action,
                     {
                       minHeight: 44,
@@ -114,11 +115,11 @@ export function CoachMemorySheet({
                   <Text style={{ color: c.textMuted, fontFamily: ty.body.familySemibold, fontSize: ty.sizes.sm }}>
                     Dismiss
                   </Text>
-                </Pressable>
-                <Pressable
+                </PressableScale>
+                <PressableScale
                   accessibilityRole="button"
                   onPress={() => onResolve(item)}
-                  style={({ pressed }) => [
+                  style={(pressed) => [
                     styles.action,
                     {
                       minHeight: 44,
@@ -130,7 +131,7 @@ export function CoachMemorySheet({
                   <Text style={{ color: c.bg, fontFamily: ty.body.familySemibold, fontSize: ty.sizes.sm }}>
                     Resolve
                   </Text>
-                </Pressable>
+                </PressableScale>
               </View>
             ) : null}
           </View>

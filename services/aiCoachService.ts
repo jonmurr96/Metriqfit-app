@@ -11,6 +11,7 @@
 
 import { supabase } from '../lib/supabase';
 import type { Database, Json } from '../lib/supabase/types';
+import { getClerkSupabaseToken } from '../lib/auth/getClerkToken';
 import { buildAICoachDashboardState, type AICoachDashboardBuildInput } from '../lib/ai-coach/dashboard-state';
 import { getNutritionTodaySnapshot, type NutritionTodaySnapshot } from './nutritionDashboardService';
 import { getActiveWorkoutPlan } from './planService';
@@ -1170,30 +1171,11 @@ export async function sendMessage(
   }
 
   const ensureFreshSession = async () => {
-    const { data: sessionData, error: sessionError } = await supabase.auth.getSession();
-    if (sessionError) {
-      throw new Error(sessionError.message || 'Unable to read current session');
+    try {
+      await getClerkSupabaseToken();
+    } catch (err: any) {
+      throw new Error(err.message || 'Authentication required. Please sign in again.');
     }
-
-    const currentSession = sessionData.session;
-    if (!currentSession) {
-      throw new Error('No active session. Please sign in again.');
-    }
-
-    const expiresSoon = !!currentSession.expires_at && currentSession.expires_at * 1000 <= Date.now() + 60_000;
-    if (!expiresSoon) {
-      return currentSession;
-    }
-
-    const { data: refreshedData, error: refreshError } = await supabase.auth.refreshSession({
-      refresh_token: currentSession.refresh_token,
-    });
-
-    if (refreshError || !refreshedData.session) {
-      throw new Error(refreshError?.message || 'Session expired. Please sign in again.');
-    }
-
-    return refreshedData.session;
   };
 
   const invokeCoachMessage = () =>

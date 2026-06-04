@@ -125,7 +125,7 @@ function selectProtocol(experienceLevel: ExperienceLevel, goal: PrimaryGoal): Pr
     return PROGRESSIVE_OVERLOAD_PROTOCOLS.find((p) => p.name === 'Linear Weight Addition')!;
   }
 
-  if (goal === 'build_strength') {
+  if (goal === 'get_stronger') {
     return PROGRESSIVE_OVERLOAD_PROTOCOLS.find((p) => p.name === 'APRE (Autoregulated)')!;
   }
 

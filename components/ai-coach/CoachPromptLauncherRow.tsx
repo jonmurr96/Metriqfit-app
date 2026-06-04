@@ -1,5 +1,6 @@
 import React from 'react';
-import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { ScrollView, StyleSheet, Text, View } from 'react-native';
+import { PressableScale } from '@/components/common/PressableScale';
 import { useTokens } from '../../lib/theme';
 import type { SuggestedPrompt } from '../../services/aiCoachService';
 import { TabBarIcon } from '../navigation/TabBarIcon';
@@ -22,12 +23,12 @@ export function CoachPromptLauncherRow({ prompts, onSelect }: CoachPromptLaunche
         contentContainerStyle={{ paddingLeft: s.lg, paddingRight: s.xl, gap: s.sm }}
       >
         {prompts.map((prompt) => (
-          <Pressable
+          <PressableScale
             key={prompt.id}
             accessibilityRole="button"
             accessibilityLabel={prompt.label}
             onPress={() => onSelect(prompt)}
-            style={({ pressed }) => [
+            style={(pressed) => [
               styles.chip,
               {
                 minHeight: 44,
@@ -61,7 +62,7 @@ export function CoachPromptLauncherRow({ prompts, onSelect }: CoachPromptLaunche
             >
               {prompt.label}
             </Text>
-          </Pressable>
+          </PressableScale>
         ))}
       </ScrollView>
     </View>

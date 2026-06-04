@@ -1,4 +1,14 @@
-import React, { createContext, useContext, useState, useCallback } from 'react';
+import React, { createContext, useContext, useState, useCallback, useRef, useEffect } from 'react';
+
+const STEP_NAMES = [
+  'identity',
+  'about-you',
+  'height',
+  'weight',
+  'goals',
+  'training',
+  'nutrition',
+];
 
 export type GoalType = 'lose_weight' | 'build_muscle' | 'get_fitter' | 'gain_weight' | 'maintain_weight' | 'recomp' | 'increase_endurance' | 'general_fitness';
 export type ActivityLevel = 'sedentary' | 'lightly_active' | 'moderately_active' | 'very_active';
@@ -150,12 +160,44 @@ const defaultData: OnboardingData = {
 
 const OnboardingContext = createContext<OnboardingContextType | undefined>(undefined);
 
-export function OnboardingProvider({ children }: { children: React.ReactNode }) {
-  const [data, setData] = useState<OnboardingData>(defaultData);
-  const [currentStep, setCurrentStep] = useState(1);
-  // Updated to 7 steps for the new flow:
-  // 1. Identity → 2. About You → 3. Height → 4. Weight → 5. Goals → 6. Training → 7. Nutrition
+export interface OnboardingProviderProps {
+  children: React.ReactNode;
+  initialAnswers?: Partial<OnboardingData> | null;
+  initialStep?: number;
+  onPersistProgress?: (data: OnboardingData, stepIndex: number) => void;
+}
+
+export function OnboardingProvider({
+  children,
+  initialAnswers,
+  initialStep = 1,
+  onPersistProgress,
+}: OnboardingProviderProps) {
+  const [data, setData] = useState<OnboardingData>(() => ({
+    ...defaultData,
+    ...initialAnswers,
+  }));
+  const [currentStep, setCurrentStep] = useState(initialStep);
   const totalSteps = 7;
+
+  // Track data in a ref to avoid stale closure issues during async persisting
+  const dataRef = useRef(data);
+  useEffect(() => {
+    dataRef.current = data;
+  }, [data]);
+
+  // Keep state synchronized if initialAnswers or initialStep change
+  useEffect(() => {
+    if (initialAnswers) {
+      setData((prev) => ({ ...prev, ...initialAnswers }));
+    }
+  }, [initialAnswers]);
+
+  useEffect(() => {
+    if (initialStep) {
+      setCurrentStep(initialStep);
+    }
+  }, [initialStep]);
 
   const updateData = useCallback((updates: Partial<OnboardingData>) => {
     setData((prev) => ({ ...prev, ...updates }));
@@ -166,8 +208,16 @@ export function OnboardingProvider({ children }: { children: React.ReactNode }) 
     setCurrentStep(1);
   }, []);
 
+  // Wrap setCurrentStep to trigger the persistence callback
+  const setStepAndPersist = useCallback((stepIndex: number) => {
+    setCurrentStep(stepIndex);
+    if (onPersistProgress) {
+      onPersistProgress(dataRef.current, stepIndex);
+    }
+  }, [onPersistProgress]);
+
   return (
-    <OnboardingContext.Provider value={{ data, updateData, resetData, currentStep, setCurrentStep, totalSteps }}>
+    <OnboardingContext.Provider value={{ data, updateData, resetData, currentStep, setCurrentStep: setStepAndPersist, totalSteps }}>
       {children}
     </OnboardingContext.Provider>
   );

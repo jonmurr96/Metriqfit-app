@@ -3,6 +3,7 @@ import { View, Text, StyleSheet, Pressable } from 'react-native';
 import { MotiView } from 'moti';
 import { useTokens } from '../../lib/theme';
 import { TabBarIcon } from '../../components/navigation/TabBarIcon';
+import { PressableScale } from '@/components/common/PressableScale';
 
 interface FoodItem {
   name: string;
@@ -208,8 +209,8 @@ export function MealTimeline({
                     ))}
 
                     {/* Ring add food button */}
-                    <Pressable
-                      style={({ pressed }) => [
+                    <PressableScale
+                      style={(pressed) => [
                         styles.addFoodButton,
                         {
                           borderWidth: 2,
@@ -241,7 +242,7 @@ export function MealTimeline({
                       >
                         ADD FOOD
                       </Text>
-                    </Pressable>
+                    </PressableScale>
                   </View>
                 )}
               </View>

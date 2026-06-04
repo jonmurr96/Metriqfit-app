@@ -244,9 +244,9 @@ export default function NutritionScreen() {
     data.training_time,
     data.wake_time,
   ]);
-  
+
   const isValid = Object.values(validationChecks).every(Boolean);
-  
+
   // Log validation state for debugging
   React.useEffect(() => {
     if (!isValid) {
@@ -427,7 +427,7 @@ export default function NutritionScreen() {
 
   return (
     <SafeAreaView style={styles.container} edges={['top']}>
-      <KeyboardAvoidingView style={styles.flex} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
+      <KeyboardAvoidingView className="flex-1" behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
         <PremiumHeader currentStep={7} totalSteps={7} />
 
         <ScrollView
@@ -442,7 +442,7 @@ export default function NutritionScreen() {
             style={styles.content}
           >
             {/* Title */}
-            <View style={styles.titleBlock}>
+            <View className="mb-7">
               <Text style={styles.titleLine1}>Final step —</Text>
               <Text style={[styles.titleAccent, { color: ORANGE }]}>nutrition</Text>
               <Text style={styles.subtitle}>Personalises your meal plan and macros</Text>
@@ -455,11 +455,11 @@ export default function NutritionScreen() {
                 <Text style={styles.errorText}>{error}</Text>
               </View>
             )}
-            
+
             {/* Dietary preference */}
-            <View style={styles.section}>
+            <View className="mb-7">
               <Text style={styles.sectionLabel}>Dietary Style</Text>
-              <View style={styles.dietGrid}>
+              <View className="flex-row flex-wrap gap-[10px]">
                 {DIETS.map((d) => {
                   const sel = data.dietary_preference === d.value;
                   return (
@@ -489,10 +489,10 @@ export default function NutritionScreen() {
             </View>
 
             {/* Allergies */}
-            <View style={styles.section}>
+            <View className="mb-7">
               <Text style={styles.sectionLabel}>Food Allergies</Text>
               <Text style={styles.sectionHint}>Select all that apply</Text>
-              <View style={styles.chipRowWrap}>
+              <View className="flex-row flex-wrap gap-2">
                 {ALLERGIES.map((a) => {
                   const sel = data.allergies_exclusions.includes(a.value);
                   return (
@@ -518,10 +518,10 @@ export default function NutritionScreen() {
             </View>
 
             {/* Foods to avoid */}
-            <View style={styles.section}>
+            <View className="mb-7">
               <Text style={styles.sectionLabel}>Foods to Avoid</Text>
               <Text style={styles.sectionHint}>Optional · Things you just won&apos;t eat</Text>
-              <View style={styles.chipRowWrap}>
+              <View className="flex-row flex-wrap gap-2">
                 {AVOID_FOODS.map((f) => {
                   const isNoneOpt = f.value === 'none';
                   const sel = isNoneOpt ? avoidedNone : data.refused_foods.includes(f.value as RefusedFood);
@@ -539,10 +539,10 @@ export default function NutritionScreen() {
             </View>
 
             {/* NEW: Preferred Proteins */}
-            <View style={styles.section}>
+            <View className="mb-7">
               <Text style={styles.sectionLabel}>Top 3 Protein Sources</Text>
               <Text style={styles.sectionHint}>Pick your favorites — we&apos;ll prioritize these</Text>
-              <View style={styles.chipRowWrap}>
+              <View className="flex-row flex-wrap gap-2">
                 {PROTEINS.map((p) => {
                   const sel = data.preferred_proteins.includes(p.value);
                   const rank = data.preferred_proteins.indexOf(p.value) + 1;
@@ -566,10 +566,10 @@ export default function NutritionScreen() {
             </View>
 
             {/* NEW: Preferred Carbs */}
-            <View style={styles.section}>
+            <View className="mb-7">
               <Text style={styles.sectionLabel}>Top 3 Carb Sources</Text>
               <Text style={styles.sectionHint}>Pick your favorites — energy for training</Text>
-              <View style={styles.chipRowWrap}>
+              <View className="flex-row flex-wrap gap-2">
                 {CARBS.map((c) => {
                   const sel = data.preferred_carbs.includes(c.value);
                   const rank = data.preferred_carbs.indexOf(c.value) + 1;
@@ -593,10 +593,10 @@ export default function NutritionScreen() {
             </View>
 
             {/* NEW: Preferred Fats */}
-            <View style={styles.section}>
+            <View className="mb-7">
               <Text style={styles.sectionLabel}>Top 3 Fat Sources</Text>
               <Text style={styles.sectionHint}>Pick your favorites — healthy fats for hormones</Text>
-              <View style={styles.chipRowWrap}>
+              <View className="flex-row flex-wrap gap-2">
                 {FATS.map((f) => {
                   const sel = data.preferred_fats.includes(f.value);
                   const rank = data.preferred_fats.indexOf(f.value) + 1;
@@ -620,7 +620,7 @@ export default function NutritionScreen() {
             </View>
 
             {/* Schedule — Wake Time */}
-            <View style={styles.section}>
+            <View className="mb-7">
               <Text style={styles.sectionLabel}>Wake Up Time</Text>
               <Text style={styles.sectionHint}>When do you typically wake up?</Text>
               <View style={[styles.mealRow, isCompactWidth && styles.mealRowCompact]}>
@@ -640,7 +640,7 @@ export default function NutritionScreen() {
             </View>
 
             {/* Schedule — First Meal */}
-            <View style={styles.section}>
+            <View className="mb-7">
               <Text style={styles.sectionLabel}>First Meal</Text>
               <Text style={styles.sectionHint}>How long after waking do you eat?</Text>
               <View style={[styles.mealRow, isCompactWidth && styles.mealRowCompact]}>
@@ -660,7 +660,7 @@ export default function NutritionScreen() {
             </View>
 
             {/* Schedule — Last Meal Before Bed */}
-            <View style={styles.section}>
+            <View className="mb-7">
               <Text style={styles.sectionLabel}>Last Meal Before Bed</Text>
               <Text style={styles.sectionHint}>How early do you stop eating before sleep?</Text>
               <View style={[styles.mealRow, isCompactWidth && styles.mealRowCompact]}>
@@ -680,10 +680,10 @@ export default function NutritionScreen() {
             </View>
 
             {/* NEW: Training Time */}
-            <View style={styles.section}>
+            <View className="mb-7">
               <Text style={styles.sectionLabel}>Training Time</Text>
               <Text style={styles.sectionHint}>When do you typically work out?</Text>
-              <View style={styles.trainingGrid}>
+              <View className="flex-row flex-wrap gap-[10px]">
                 {TRAINING_TIMES.map((t) => {
                   const sel = data.training_time === t.value;
                   return (
@@ -700,8 +700,8 @@ export default function NutritionScreen() {
             </View>
 
             {/* Meals per day */}
-            <View style={styles.section}>
-              <View style={styles.sectionHeaderRow}>
+            <View className="mb-7">
+              <View className="flex-row items-center justify-between mb-1">
                 <Text style={styles.sectionLabel}>Meals Per Day</Text>
                 {mealRecommendation && (
                   <View style={styles.recommendedPill}>
@@ -771,10 +771,8 @@ export default function NutritionScreen() {
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: BG },
-  flex: { flex: 1 },
   scrollContent: { flexGrow: 1, paddingBottom: 32 },
   content: { paddingHorizontal: s.xl, paddingTop: s.lg },
-  titleBlock: { marginBottom: 28 },
   titleLine1: { fontSize: 28, fontFamily: 'Unbounded_700Bold', color: '#FFFFFF' },
   titleAccent: { fontSize: 28, fontFamily: 'Unbounded_700Bold' },
   subtitle: { fontSize: 13, fontFamily: 'Sora_400Regular', color: 'rgba(255,255,255,0.4)', marginTop: 10 },
@@ -790,16 +788,9 @@ const styles = StyleSheet.create({
     marginBottom: 20,
   },
   errorText: { flex: 1, fontSize: 13, fontFamily: 'Sora_400Regular', color: '#EF4444' },
-  section: { marginBottom: 28 },
   sectionLabel: {
     fontSize: 12, fontFamily: 'Sora_600SemiBold', color: `${CYAN}CC`,
     letterSpacing: 1, textTransform: 'uppercase', marginBottom: 4,
-  },
-  sectionHeaderRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    marginBottom: 4,
   },
   sectionHint: {
     fontSize: 12, fontFamily: 'Sora_400Regular', color: 'rgba(255,255,255,0.3)', marginBottom: 14,
@@ -847,7 +838,6 @@ const styles = StyleSheet.create({
   },
 
   // Diet grid (2 cols)
-  dietGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 10 },
   dietCard: {
     width: '47.5%',
     flexDirection: 'row',
@@ -876,19 +866,16 @@ const styles = StyleSheet.create({
   },
 
   // Chips
-  chipRowWrap: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
   chip: {
     paddingHorizontal: 14, paddingVertical: 9,
     borderRadius: 10, borderWidth: 1,
     borderColor: 'rgba(255,255,255,0.08)',
     backgroundColor: SURFACE,
   },
-  chipSelected: { backgroundColor: `${CYAN}10`, borderColor: CYAN },
   chipSelectedGreen: { backgroundColor: '#22C55E10', borderColor: '#22C55E' },
   chipSelectedRed: { backgroundColor: '#EF444410', borderColor: '#EF4444' },
   chipSelectedOrange: { backgroundColor: `${ORANGE}10`, borderColor: ORANGE },
   chipText: { fontSize: 13, fontFamily: 'Sora_500Medium', color: 'rgba(255,255,255,0.5)' },
-  chipTextSelected: { color: CYAN },
 
   // Meals
   mealRow: { flexDirection: 'row', gap: 10 },
@@ -966,9 +953,6 @@ const styles = StyleSheet.create({
   },
 
   // NEW: Training Time Grid
-  trainingGrid: {
-    flexDirection: 'row', flexWrap: 'wrap', gap: 10,
-  },
   trainingCard: {
     width: '30%',
     paddingVertical: 14, paddingHorizontal: 8,
@@ -988,63 +972,5 @@ const styles = StyleSheet.create({
   trainingCardTextSelected: {
     color: PURPLE,
     fontFamily: 'Sora_600SemiBold',
-  },
-
-  // NEW: Carb Response Grid
-  carbGrid: {
-    flexDirection: 'row', flexWrap: 'wrap', gap: 10,
-  },
-  carbCard: {
-    width: '47%',
-    padding: 14,
-    borderRadius: 12, borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.08)',
-    backgroundColor: SURFACE,
-  },
-  carbCardSelected: {
-    backgroundColor: '#22C55E',
-    borderColor: '#22C55E',
-  },
-  carbCardLabel: {
-    fontSize: 14, fontFamily: 'Sora_600SemiBold', color: 'rgba(255,255,255,0.8)',
-    marginBottom: 4,
-  },
-  carbCardLabelSelected: {
-    color: BG,
-  },
-  carbCardDesc: {
-    fontSize: 11, fontFamily: 'Sora_400Regular', color: 'rgba(255,255,255,0.4)',
-  },
-  carbCardDescSelected: {
-    color: 'rgba(0,0,0,0.6)',
-  },
-
-  // NEW: Cooking Level Grid
-  cookingGrid: {
-    flexDirection: 'row', flexWrap: 'wrap', gap: 10,
-  },
-  cookingCard: {
-    width: '47%',
-    padding: 14,
-    borderRadius: 12, borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.08)',
-    backgroundColor: SURFACE,
-  },
-  cookingCardSelected: {
-    backgroundColor: '#F59E0B',
-    borderColor: '#F59E0B',
-  },
-  cookingCardLabel: {
-    fontSize: 14, fontFamily: 'Sora_600SemiBold', color: 'rgba(255,255,255,0.8)',
-    marginBottom: 4,
-  },
-  cookingCardLabelSelected: {
-    color: BG,
-  },
-  cookingCardDesc: {
-    fontSize: 11, fontFamily: 'Sora_400Regular', color: 'rgba(255,255,255,0.4)',
-  },
-  cookingCardDescSelected: {
-    color: 'rgba(0,0,0,0.6)',
   },
 });

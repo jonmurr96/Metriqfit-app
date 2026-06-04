@@ -8,6 +8,7 @@ export interface OnboardingStatus {
 
 export interface OnboardingAnswersStatusRow {
   completed_at?: string | null;
+  answers?: any;
 }
 
 export function deriveOnboardingStatus(input: {
@@ -22,11 +23,15 @@ export function deriveOnboardingStatus(input: {
     ? Boolean(input.answers?.completed_at || (input.hasTargets && input.hasPlans))
     : false;
 
+  const lastOnboardingStep = hasReadableAnswers
+    ? (input.answers?.answers as any)?._last_step || null
+    : null;
+
   return {
     hasCompletedOnboarding,
     hasTargets: input.hasTargets,
     hasPlans: input.hasPlans,
     hasCompletedPaywall: input.hasPaywallCompletion,
-    lastOnboardingStep: null,
+    lastOnboardingStep,
   };
 }

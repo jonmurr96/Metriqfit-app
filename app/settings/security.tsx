@@ -24,6 +24,7 @@ import {
 } from '../../services/accountService';
 import { PRIVACY_POLICY_URL, TERMS_OF_SERVICE_URL } from '../../lib/appConfig';
 import { clearNotificationState } from '../../services/notificationService';
+import { PressableScale } from '@/components/common/PressableScale';
 
 export default function SecuritySettingsScreen() {
   const { c, s, ty, r } = useTokens();
@@ -148,10 +149,10 @@ export default function SecuritySettingsScreen() {
     destructive?: boolean;
     loading?: boolean;
   }) => (
-    <Pressable
+    <PressableScale
       onPress={onPress}
       disabled={loading}
-      style={({ pressed }) => [
+      style={(pressed) => [
         styles.row,
         {
           borderColor: c.border,
@@ -175,7 +176,7 @@ export default function SecuritySettingsScreen() {
       ) : (
         <TabBarIcon name="chevron-forward" color={c.textSubtle} size={16} />
       )}
-    </Pressable>
+    </PressableScale>
   );
 
   return (
@@ -215,10 +216,10 @@ export default function SecuritySettingsScreen() {
               },
             ]}
           />
-          <Pressable
+          <PressableScale
             onPress={handleEmailChange}
             disabled={isSubmittingEmail}
-            style={({ pressed }) => [
+            style={(pressed) => [
               styles.primaryButton,
               {
                 backgroundColor: c.primary,
@@ -231,7 +232,7 @@ export default function SecuritySettingsScreen() {
             ) : (
               <Text style={{ color: c.bg, fontFamily: ty.body.familySemibold }}>Request email change</Text>
             )}
-          </Pressable>
+          </PressableScale>
         </View>
 
         <View style={{ marginTop: s.lg, gap: s.md }}>

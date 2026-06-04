@@ -1,5 +1,6 @@
 import { serve } from "https://deno.land/std@0.224.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.45.4";
+import { verifyClerkRequest } from "../_shared/clerkAuth.ts";
 
 interface RequestBody {
   userId?: string;
@@ -63,7 +64,7 @@ serve(async (req) => {
       { global: { headers: { Authorization: authHeader } } },
     );
 
-    const { data: authData, error: authError } = await supabase.auth.getUser();
+    const { data: authData, error: authError } = await verifyClerkRequest(req);
     if (authError || !authData?.user) {
       return new Response(
         JSON.stringify({ error: "Unauthorized" }),

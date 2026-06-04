@@ -22,7 +22,6 @@ export function MacroDashboard({ consumed }: MacroDashboardProps = {}) {
   const { c, s, ty } = useTokens();
   const { user } = useAuth();
 
-  // Fetch user targets
   const {
     data: targets,
     isLoading: targetsLoading,
@@ -32,13 +31,12 @@ export function MacroDashboard({ consumed }: MacroDashboardProps = {}) {
     queryKey: ['user-targets', user?.id],
     queryFn: () => getUserTargets(user!.id),
     enabled: !!user,
-    staleTime: 5 * 60 * 1000, // 5 minutes
+    staleTime: 5 * 60 * 1000,
   });
 
-  // Show error state
   if (targetsError) {
     return (
-      <View style={[styles.container, { paddingVertical: s.xl }]}>
+      <View className="items-center" style={{ paddingVertical: s.xl }}>
         <Ionicons name="cloud-offline-outline" size={32} color={c.textMuted} />
         <Text
           style={{
@@ -51,22 +49,16 @@ export function MacroDashboard({ consumed }: MacroDashboardProps = {}) {
         >
           Failed to load dashboard data
         </Text>
-        <Pressable
-          onPress={() => {
-            refetchTargets();
-          }}
-          style={{ padding: s.sm }}
-        >
+        <Pressable onPress={() => refetchTargets()} style={{ padding: s.sm }}>
           <Text style={{ color: c.primary, fontFamily: ty.body.familySemibold }}>Tap to Retry</Text>
         </Pressable>
       </View>
     );
   }
 
-  // Show loading state
   if (targetsLoading) {
     return (
-      <View style={[styles.container, { paddingVertical: s.xl }]}>
+      <View className="items-center" style={{ paddingVertical: s.xl }}>
         <ActivityIndicator size="large" color={c.primary} />
         <Text
           style={{
@@ -82,7 +74,6 @@ export function MacroDashboard({ consumed }: MacroDashboardProps = {}) {
     );
   }
 
-  // Use real data with fallbacks
   const data = {
     calories: { consumed: consumed?.calories || 0, target: targets?.calories || 2000 },
     protein: { consumed: Math.round(consumed?.protein || 0), target: targets?.protein_g || 150 },
@@ -126,7 +117,7 @@ export function MacroDashboard({ consumed }: MacroDashboardProps = {}) {
   ];
 
   return (
-    <View style={styles.container}>
+    <View className="items-center">
       <AnimatedCalorieRing
         consumed={data.calories.consumed}
         target={data.calories.target}
@@ -135,14 +126,14 @@ export function MacroDashboard({ consumed }: MacroDashboardProps = {}) {
         animationDelay={200}
       />
 
-      <View style={[styles.macroCardsRow, { gap: s.sm, marginTop: s.xl }]}>
+      <View className="flex-row px-4" style={{ gap: s.sm, marginTop: s.xl }}>
         {macroCards.map((macro, index) => (
           <GlassCard
             key={macro.label}
             intensity="light"
             animated={true}
             delay={800 + index * 100}
-            style={styles.macroCard}
+            style={{ flex: 1 }}
           >
             <LinearGradient
               colors={[`${macro.colors[0]}08`, 'transparent']}
@@ -151,7 +142,7 @@ export function MacroDashboard({ consumed }: MacroDashboardProps = {}) {
               style={StyleSheet.absoluteFill}
             />
 
-            <View style={styles.macroCardHeader}>
+            <View className="flex-row justify-between items-center">
               <Text
                 style={{
                   color: c.textMuted,
@@ -174,25 +165,23 @@ export function MacroDashboard({ consumed }: MacroDashboardProps = {}) {
             </View>
 
             <View
-              style={[
-                styles.progressBarBg,
-                {
-                  backgroundColor: 'rgba(255,255,255,0.08)',
-                  borderRadius: 6,
-                  marginTop: s.sm,
-                  marginBottom: s.sm,
-                }
-              ]}
+              className="h-2 w-full overflow-visible"
+              style={{
+                backgroundColor: 'rgba(255,255,255,0.08)',
+                borderRadius: 6,
+                marginTop: s.sm,
+                marginBottom: s.sm,
+              }}
             >
               <MotiView
                 from={{ width: '0%' }}
                 animate={{ width: `${Math.min(100, macro.percent)}%` }}
                 transition={{ type: 'timing', duration: 800, delay: 1000 + index * 100 }}
-                style={styles.progressBarFill}
+                style={{ height: 8, overflow: 'visible' }}
               >
                 <View
+                  className="h-2 w-full rounded-md overflow-hidden"
                   style={[
-                    styles.progressBarGlow,
                     {
                       backgroundColor: macro.glowColor,
                       shadowColor: macro.glowColor,
@@ -215,7 +204,7 @@ export function MacroDashboard({ consumed }: MacroDashboardProps = {}) {
               </MotiView>
             </View>
 
-            <View style={styles.macroValues}>
+            <View className="flex-row items-baseline">
               <Text
                 style={{
                   color: c.text,
@@ -241,40 +230,3 @@ export function MacroDashboard({ consumed }: MacroDashboardProps = {}) {
     </View>
   );
 }
-
-const styles = StyleSheet.create({
-  container: {
-    alignItems: 'center',
-  },
-  macroCardsRow: {
-    flexDirection: 'row',
-    paddingHorizontal: 16,
-  },
-  macroCard: {
-    flex: 1,
-  },
-  macroCardHeader: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-  },
-  progressBarBg: {
-    height: 8,
-    width: '100%',
-    overflow: 'visible',
-  },
-  progressBarFill: {
-    height: 8,
-    overflow: 'visible',
-  },
-  progressBarGlow: {
-    height: 8,
-    width: '100%',
-    borderRadius: 6,
-    overflow: 'hidden',
-  },
-  macroValues: {
-    flexDirection: 'row',
-    alignItems: 'baseline',
-  },
-});

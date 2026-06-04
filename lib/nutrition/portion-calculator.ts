@@ -112,6 +112,7 @@ export function adjustPortionToTarget(
     protein?: number;
     carbs?: number;
     fat?: number;
+    calories?: number;
   },
   priority: 'protein' | 'carbs' | 'fat' | 'calories' = 'protein'
 ): PortionResult {

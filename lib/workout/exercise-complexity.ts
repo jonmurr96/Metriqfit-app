@@ -22,7 +22,7 @@ export type ComplexityMetadata = {
   injuryRisk: 'low' | 'moderate' | 'high';
   requiresSpotter: boolean;
   setupDifficulty: 'easy' | 'moderate' | 'hard';
-  motorControlDemand: 'low' | 'moderate' | 'high';
+  motorControlDemand: 'low' | 'moderate' | 'high' | 'very high';
 };
 
 // ---------------------------------------------------------------------------
@@ -584,7 +584,7 @@ export function getAdjustedComplexity(
 
   // Smith machine exercises are easier when that's all you have
   if (exerciseName.includes('Smith') || exerciseName.includes('Machine')) {
-    if (equipmentAccess === 'smith_machine') {
+    if ((equipmentAccess as string) === 'smith_machine') {
       // Smith machine becomes foundational if that's your primary equipment
       return 'foundational';
     }

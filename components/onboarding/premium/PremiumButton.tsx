@@ -1,6 +1,7 @@
 import React from 'react';
-import { Text, Pressable, StyleSheet, ActivityIndicator } from 'react-native';
+import { Text, StyleSheet, ActivityIndicator } from 'react-native';
 import { MotiView } from 'moti';
+import { PressableScale } from '@/components/common/PressableScale';
 import { metriqfitTheme } from '../../../lib/theme';
 
 const { colors: c, spacing: s, radius: r } = metriqfitTheme;
@@ -23,10 +24,10 @@ export function PremiumButton({
   const isPrimary = variant === 'primary';
 
   return (
-    <Pressable
+    <PressableScale
       onPress={onPress}
       disabled={disabled || loading}
-      style={({ pressed }) => [
+      style={(pressed) => [
         styles.button,
         isPrimary ? styles.buttonPrimary : styles.buttonSecondary,
         (disabled || loading) && styles.buttonDisabled,
@@ -46,7 +47,7 @@ export function PremiumButton({
           {label}
         </Text>
       )}
-    </Pressable>
+    </PressableScale>
   );
 }
 

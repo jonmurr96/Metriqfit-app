@@ -1,5 +1,6 @@
 import React from 'react';
-import { Pressable, StyleSheet, Text, View } from 'react-native';
+import { StyleSheet, Text, View } from 'react-native';
+import { PressableScale } from '@/components/common/PressableScale';
 import { useTokens } from '../../lib/theme';
 import type { AICoachIntervention } from '../../services/aiCoachService';
 import { TabBarIcon } from '../navigation/TabBarIcon';
@@ -41,10 +42,10 @@ export function CoachInterventionCard({
   const { c, s, r, ty } = useTokens();
 
   return (
-    <Pressable
+    <PressableScale
       accessibilityRole={onPress ? 'button' : undefined}
       onPress={onPress}
-      style={({ pressed }) => [
+      style={(pressed) => [
         styles.card,
         {
           borderRadius: r.lg,
@@ -124,11 +125,11 @@ export function CoachInterventionCard({
       {(onApply || onReject) ? (
         <View style={[styles.actions, { marginTop: s.lg, gap: s.sm }]}>
           {onReject ? (
-            <Pressable
+            <PressableScale
               accessibilityRole="button"
               accessibilityLabel={intervention.rejectLabel || 'Dismiss'}
               onPress={onReject}
-              style={({ pressed }) => [
+              style={(pressed) => [
                 styles.secondaryAction,
                 {
                   minHeight: 44,
@@ -149,15 +150,15 @@ export function CoachInterventionCard({
               >
                 {isRejecting ? 'Working...' : intervention.rejectLabel || 'Dismiss'}
               </Text>
-            </Pressable>
+            </PressableScale>
           ) : null}
 
           {onApply ? (
-            <Pressable
+            <PressableScale
               accessibilityRole="button"
               accessibilityLabel={intervention.applyLabel || 'Apply'}
               onPress={onApply}
-              style={({ pressed }) => [
+              style={(pressed) => [
                 styles.primaryAction,
                 {
                   minHeight: 44,
@@ -176,11 +177,11 @@ export function CoachInterventionCard({
               >
                 {isApplying ? 'Applying...' : intervention.applyLabel || 'Apply'}
               </Text>
-            </Pressable>
+            </PressableScale>
           ) : null}
         </View>
       ) : null}
-    </Pressable>
+    </PressableScale>
   );
 }
 

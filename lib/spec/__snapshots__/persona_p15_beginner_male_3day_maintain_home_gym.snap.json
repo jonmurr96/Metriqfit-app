@@ -1,0 +1,6142 @@
+{
+  "persona": "p15_beginner_male_3day_maintain_home_gym",
+  "plan": {
+    "horizon_weeks": 4,
+    "nutrition_days": [
+      {
+        "is_training_day": true,
+        "meals": [
+          {
+            "items": [
+              {
+                "carb_g": 4,
+                "fat_g": 39.6,
+                "food_id": "f_eggs",
+                "food_name": "Eggs",
+                "grams": 360,
+                "kcal": 558,
+                "protein_g": 46.8
+              },
+              {
+                "carb_g": 60.6,
+                "fat_g": 0.6,
+                "food_id": "f_rice",
+                "food_name": "Jasmine Rice",
+                "grams": 215,
+                "kcal": 280,
+                "protein_g": 5.8
+              },
+              {
+                "carb_g": 0,
+                "fat_g": 29,
+                "food_id": "f_olive_oil",
+                "food_name": "Olive Oil",
+                "grams": 29,
+                "kcal": 256,
+                "protein_g": 0
+              },
+              {
+                "carb_g": 7.2,
+                "fat_g": 0.4,
+                "food_id": "f_broccoli",
+                "food_name": "Broccoli",
+                "grams": 100,
+                "kcal": 35,
+                "protein_g": 2.4
+              }
+            ],
+            "slot": "breakfast",
+            "target_carb_g": 61,
+            "target_fat_g": 29,
+            "target_kcal": 677,
+            "target_protein_g": 47,
+            "variants": [
+              {
+                "items": [
+                  {
+                    "carb_g": 4,
+                    "fat_g": 39.6,
+                    "food_id": "f_eggs",
+                    "food_name": "Eggs",
+                    "grams": 360,
+                    "kcal": 558,
+                    "protein_g": 46.8
+                  },
+                  {
+                    "carb_g": 59.7,
+                    "fat_g": 6.2,
+                    "food_id": "f_oats",
+                    "food_name": "Rolled Oats",
+                    "grams": 90,
+                    "kcal": 350,
+                    "protein_g": 15.2
+                  },
+                  {
+                    "carb_g": 12.5,
+                    "fat_g": 28.9,
+                    "food_id": "f_almonds",
+                    "food_name": "Almonds",
+                    "grams": 58,
+                    "kcal": 336,
+                    "protein_g": 12.3
+                  },
+                  {
+                    "carb_g": 7.2,
+                    "fat_g": 0.4,
+                    "food_id": "f_broccoli",
+                    "food_name": "Broccoli",
+                    "grams": 100,
+                    "kcal": 35,
+                    "protein_g": 2.4
+                  }
+                ]
+              },
+              {
+                "items": [
+                  {
+                    "carb_g": 4,
+                    "fat_g": 39.6,
+                    "food_id": "f_eggs",
+                    "food_name": "Eggs",
+                    "grams": 360,
+                    "kcal": 558,
+                    "protein_g": 46.8
+                  },
+                  {
+                    "carb_g": 59.7,
+                    "fat_g": 6.2,
+                    "food_id": "f_oats",
+                    "food_name": "Rolled Oats",
+                    "grams": 90,
+                    "kcal": 350,
+                    "protein_g": 15.2
+                  },
+                  {
+                    "carb_g": 0,
+                    "fat_g": 29,
+                    "food_id": "f_olive_oil",
+                    "food_name": "Olive Oil",
+                    "grams": 29,
+                    "kcal": 256,
+                    "protein_g": 0
+                  },
+                  {
+                    "carb_g": 7.2,
+                    "fat_g": 0.4,
+                    "food_id": "f_broccoli",
+                    "food_name": "Broccoli",
+                    "grams": 100,
+                    "kcal": 35,
+                    "protein_g": 2.4
+                  }
+                ]
+              },
+              {
+                "items": [
+                  {
+                    "carb_g": 4,
+                    "fat_g": 39.6,
+                    "food_id": "f_eggs",
+                    "food_name": "Eggs",
+                    "grams": 360,
+                    "kcal": 558,
+                    "protein_g": 46.8
+                  },
+                  {
+                    "carb_g": 60.6,
+                    "fat_g": 0.6,
+                    "food_id": "f_rice",
+                    "food_name": "Jasmine Rice",
+                    "grams": 215,
+                    "kcal": 280,
+                    "protein_g": 5.8
+                  },
+                  {
+                    "carb_g": 12.5,
+                    "fat_g": 28.9,
+                    "food_id": "f_almonds",
+                    "food_name": "Almonds",
+                    "grams": 58,
+                    "kcal": 336,
+                    "protein_g": 12.3
+                  },
+                  {
+                    "carb_g": 7.2,
+                    "fat_g": 0.4,
+                    "food_id": "f_broccoli",
+                    "food_name": "Broccoli",
+                    "grams": 100,
+                    "kcal": 35,
+                    "protein_g": 2.4
+                  }
+                ]
+              }
+            ]
+          },
+          {
+            "items": [
+              {
+                "carb_g": 4.6,
+                "fat_g": 45.7,
+                "food_id": "f_eggs",
+                "food_name": "Eggs",
+                "grams": 415,
+                "kcal": 643,
+                "protein_g": 54
+              },
+              {
+                "carb_g": 152.5,
+                "fat_g": 15.9,
+                "food_id": "f_oats",
+                "food_name": "Rolled Oats",
+                "grams": 230,
+                "kcal": 895,
+                "protein_g": 38.9
+              },
+              {
+                "carb_g": 14.7,
+                "fat_g": 33.9,
+                "food_id": "f_almonds",
+                "food_name": "Almonds",
+                "grams": 68,
+                "kcal": 394,
+                "protein_g": 14.4
+              },
+              {
+                "carb_g": 7.2,
+                "fat_g": 0.4,
+                "food_id": "f_broccoli",
+                "food_name": "Broccoli",
+                "grams": 100,
+                "kcal": 35,
+                "protein_g": 2.4
+              }
+            ],
+            "slot": "lunch",
+            "target_carb_g": 153,
+            "target_fat_g": 34,
+            "target_kcal": 1218,
+            "target_protein_g": 54,
+            "variants": [
+              {
+                "items": [
+                  {
+                    "carb_g": 4.6,
+                    "fat_g": 45.7,
+                    "food_id": "f_eggs",
+                    "food_name": "Eggs",
+                    "grams": 415,
+                    "kcal": 643,
+                    "protein_g": 54
+                  },
+                  {
+                    "carb_g": 153.2,
+                    "fat_g": 1.5,
+                    "food_id": "f_sweet_potato",
+                    "food_name": "Sweet Potato",
+                    "grams": 740,
+                    "kcal": 666,
+                    "protein_g": 14.8
+                  },
+                  {
+                    "carb_g": 14.7,
+                    "fat_g": 33.9,
+                    "food_id": "f_almonds",
+                    "food_name": "Almonds",
+                    "grams": 68,
+                    "kcal": 394,
+                    "protein_g": 14.4
+                  },
+                  {
+                    "carb_g": 7.2,
+                    "fat_g": 0.4,
+                    "food_id": "f_broccoli",
+                    "food_name": "Broccoli",
+                    "grams": 100,
+                    "kcal": 35,
+                    "protein_g": 2.4
+                  }
+                ]
+              },
+              {
+                "items": [
+                  {
+                    "carb_g": 0,
+                    "fat_g": 6.3,
+                    "food_id": "f_chicken",
+                    "food_name": "Chicken Breast",
+                    "grams": 175,
+                    "kcal": 289,
+                    "protein_g": 54.3
+                  },
+                  {
+                    "carb_g": 152.5,
+                    "fat_g": 15.9,
+                    "food_id": "f_oats",
+                    "food_name": "Rolled Oats",
+                    "grams": 230,
+                    "kcal": 895,
+                    "protein_g": 38.9
+                  },
+                  {
+                    "carb_g": 14.7,
+                    "fat_g": 33.9,
+                    "food_id": "f_almonds",
+                    "food_name": "Almonds",
+                    "grams": 68,
+                    "kcal": 394,
+                    "protein_g": 14.4
+                  },
+                  {
+                    "carb_g": 7.2,
+                    "fat_g": 0.4,
+                    "food_id": "f_broccoli",
+                    "food_name": "Broccoli",
+                    "grams": 100,
+                    "kcal": 35,
+                    "protein_g": 2.4
+                  }
+                ]
+              },
+              {
+                "items": [
+                  {
+                    "carb_g": 4.6,
+                    "fat_g": 45.7,
+                    "food_id": "f_eggs",
+                    "food_name": "Eggs",
+                    "grams": 415,
+                    "kcal": 643,
+                    "protein_g": 54
+                  },
+                  {
+                    "carb_g": 152.5,
+                    "fat_g": 15.9,
+                    "food_id": "f_oats",
+                    "food_name": "Rolled Oats",
+                    "grams": 230,
+                    "kcal": 895,
+                    "protein_g": 38.9
+                  },
+                  {
+                    "carb_g": 0,
+                    "fat_g": 34,
+                    "food_id": "f_olive_oil",
+                    "food_name": "Olive Oil",
+                    "grams": 34,
+                    "kcal": 301,
+                    "protein_g": 0
+                  },
+                  {
+                    "carb_g": 7.2,
+                    "fat_g": 0.4,
+                    "food_id": "f_broccoli",
+                    "food_name": "Broccoli",
+                    "grams": 100,
+                    "kcal": 35,
+                    "protein_g": 2.4
+                  }
+                ]
+              }
+            ]
+          },
+          {
+            "items": [
+              {
+                "carb_g": 0,
+                "fat_g": 6.3,
+                "food_id": "f_chicken",
+                "food_name": "Chicken Breast",
+                "grams": 175,
+                "kcal": 289,
+                "protein_g": 54.3
+              },
+              {
+                "carb_g": 92.1,
+                "fat_g": 0.9,
+                "food_id": "f_sweet_potato",
+                "food_name": "Sweet Potato",
+                "grams": 445,
+                "kcal": 401,
+                "protein_g": 8.9
+              },
+              {
+                "carb_g": 14.7,
+                "fat_g": 33.9,
+                "food_id": "f_almonds",
+                "food_name": "Almonds",
+                "grams": 68,
+                "kcal": 394,
+                "protein_g": 14.4
+              },
+              {
+                "carb_g": 7.2,
+                "fat_g": 0.4,
+                "food_id": "f_broccoli",
+                "food_name": "Broccoli",
+                "grams": 100,
+                "kcal": 35,
+                "protein_g": 2.4
+              }
+            ],
+            "slot": "dinner",
+            "target_carb_g": 92,
+            "target_fat_g": 34,
+            "target_kcal": 812,
+            "target_protein_g": 54,
+            "variants": [
+              {
+                "items": [
+                  {
+                    "carb_g": 0,
+                    "fat_g": 35.1,
+                    "food_id": "f_salmon",
+                    "food_name": "Salmon",
+                    "grams": 270,
+                    "kcal": 562,
+                    "protein_g": 54
+                  },
+                  {
+                    "carb_g": 92.1,
+                    "fat_g": 0.9,
+                    "food_id": "f_sweet_potato",
+                    "food_name": "Sweet Potato",
+                    "grams": 445,
+                    "kcal": 401,
+                    "protein_g": 8.9
+                  },
+                  {
+                    "carb_g": 14.7,
+                    "fat_g": 33.9,
+                    "food_id": "f_almonds",
+                    "food_name": "Almonds",
+                    "grams": 68,
+                    "kcal": 394,
+                    "protein_g": 14.4
+                  },
+                  {
+                    "carb_g": 7.2,
+                    "fat_g": 0.4,
+                    "food_id": "f_broccoli",
+                    "food_name": "Broccoli",
+                    "grams": 100,
+                    "kcal": 35,
+                    "protein_g": 2.4
+                  }
+                ]
+              },
+              {
+                "items": [
+                  {
+                    "carb_g": 0,
+                    "fat_g": 6.3,
+                    "food_id": "f_chicken",
+                    "food_name": "Chicken Breast",
+                    "grams": 175,
+                    "kcal": 289,
+                    "protein_g": 54.3
+                  },
+                  {
+                    "carb_g": 92.1,
+                    "fat_g": 0.9,
+                    "food_id": "f_sweet_potato",
+                    "food_name": "Sweet Potato",
+                    "grams": 445,
+                    "kcal": 401,
+                    "protein_g": 8.9
+                  },
+                  {
+                    "carb_g": 0,
+                    "fat_g": 34,
+                    "food_id": "f_olive_oil",
+                    "food_name": "Olive Oil",
+                    "grams": 34,
+                    "kcal": 301,
+                    "protein_g": 0
+                  },
+                  {
+                    "carb_g": 7.2,
+                    "fat_g": 0.4,
+                    "food_id": "f_broccoli",
+                    "food_name": "Broccoli",
+                    "grams": 100,
+                    "kcal": 35,
+                    "protein_g": 2.4
+                  }
+                ]
+              },
+              {
+                "items": [
+                  {
+                    "carb_g": 0,
+                    "fat_g": 35.1,
+                    "food_id": "f_salmon",
+                    "food_name": "Salmon",
+                    "grams": 270,
+                    "kcal": 562,
+                    "protein_g": 54
+                  },
+                  {
+                    "carb_g": 92.1,
+                    "fat_g": 0.9,
+                    "food_id": "f_sweet_potato",
+                    "food_name": "Sweet Potato",
+                    "grams": 445,
+                    "kcal": 401,
+                    "protein_g": 8.9
+                  },
+                  {
+                    "carb_g": 0,
+                    "fat_g": 34,
+                    "food_id": "f_olive_oil",
+                    "food_name": "Olive Oil",
+                    "grams": 34,
+                    "kcal": 301,
+                    "protein_g": 0
+                  },
+                  {
+                    "carb_g": 7.2,
+                    "fat_g": 0.4,
+                    "food_id": "f_broccoli",
+                    "food_name": "Broccoli",
+                    "grams": 100,
+                    "kcal": 35,
+                    "protein_g": 2.4
+                  }
+                ]
+              }
+            ]
+          }
+        ],
+        "totals": {
+          "carb_g": 364.79999999999995,
+          "fat_g": 207.00000000000006,
+          "kcal": 4215,
+          "protein_g": 244.70000000000002
+        },
+        "weekday": "mon"
+      },
+      {
+        "is_training_day": false,
+        "meals": [
+          {
+            "items": [
+              {
+                "carb_g": 0,
+                "fat_g": 30.6,
+                "food_id": "f_salmon",
+                "food_name": "Salmon",
+                "grams": 235,
+                "kcal": 489,
+                "protein_g": 47
+              },
+              {
+                "carb_g": 92.1,
+                "fat_g": 0.9,
+                "food_id": "f_sweet_potato",
+                "food_name": "Sweet Potato",
+                "grams": 445,
+                "kcal": 401,
+                "protein_g": 8.9
+              },
+              {
+                "carb_g": 0,
+                "fat_g": 29,
+                "food_id": "f_olive_oil",
+                "food_name": "Olive Oil",
+                "grams": 29,
+                "kcal": 256,
+                "protein_g": 0
+              },
+              {
+                "carb_g": 7.2,
+                "fat_g": 0.4,
+                "food_id": "f_broccoli",
+                "food_name": "Broccoli",
+                "grams": 100,
+                "kcal": 35,
+                "protein_g": 2.4
+              }
+            ],
+            "slot": "breakfast",
+            "target_carb_g": 92,
+            "target_fat_g": 29,
+            "target_kcal": 812,
+            "target_protein_g": 47,
+            "variants": [
+              {
+                "items": [
+                  {
+                    "carb_g": 0,
+                    "fat_g": 30.6,
+                    "food_id": "f_salmon",
+                    "food_name": "Salmon",
+                    "grams": 235,
+                    "kcal": 489,
+                    "protein_g": 47
+                  },
+                  {
+                    "carb_g": 92.8,
+                    "fat_g": 9.7,
+                    "food_id": "f_oats",
+                    "food_name": "Rolled Oats",
+                    "grams": 140,
+                    "kcal": 545,
+                    "protein_g": 23.7
+                  },
+                  {
+                    "carb_g": 0,
+                    "fat_g": 29,
+                    "food_id": "f_olive_oil",
+                    "food_name": "Olive Oil",
+                    "grams": 29,
+                    "kcal": 256,
+                    "protein_g": 0
+                  },
+                  {
+                    "carb_g": 7.2,
+                    "fat_g": 0.4,
+                    "food_id": "f_broccoli",
+                    "food_name": "Broccoli",
+                    "grams": 100,
+                    "kcal": 35,
+                    "protein_g": 2.4
+                  }
+                ]
+              },
+              {
+                "items": [
+                  {
+                    "carb_g": 0,
+                    "fat_g": 30.6,
+                    "food_id": "f_salmon",
+                    "food_name": "Salmon",
+                    "grams": 235,
+                    "kcal": 489,
+                    "protein_g": 47
+                  },
+                  {
+                    "carb_g": 91.6,
+                    "fat_g": 1,
+                    "food_id": "f_rice",
+                    "food_name": "Jasmine Rice",
+                    "grams": 325,
+                    "kcal": 423,
+                    "protein_g": 8.8
+                  },
+                  {
+                    "carb_g": 0,
+                    "fat_g": 29,
+                    "food_id": "f_olive_oil",
+                    "food_name": "Olive Oil",
+                    "grams": 29,
+                    "kcal": 256,
+                    "protein_g": 0
+                  },
+                  {
+                    "carb_g": 7.2,
+                    "fat_g": 0.4,
+                    "food_id": "f_broccoli",
+                    "food_name": "Broccoli",
+                    "grams": 100,
+                    "kcal": 35,
+                    "protein_g": 2.4
+                  }
+                ]
+              },
+              {
+                "items": [
+                  {
+                    "carb_g": 0,
+                    "fat_g": 30.6,
+                    "food_id": "f_salmon",
+                    "food_name": "Salmon",
+                    "grams": 235,
+                    "kcal": 489,
+                    "protein_g": 47
+                  },
+                  {
+                    "carb_g": 91.6,
+                    "fat_g": 1,
+                    "food_id": "f_rice",
+                    "food_name": "Jasmine Rice",
+                    "grams": 325,
+                    "kcal": 423,
+                    "protein_g": 8.8
+                  },
+                  {
+                    "carb_g": 12.5,
+                    "fat_g": 28.9,
+                    "food_id": "f_almonds",
+                    "food_name": "Almonds",
+                    "grams": 58,
+                    "kcal": 336,
+                    "protein_g": 12.3
+                  },
+                  {
+                    "carb_g": 7.2,
+                    "fat_g": 0.4,
+                    "food_id": "f_broccoli",
+                    "food_name": "Broccoli",
+                    "grams": 100,
+                    "kcal": 35,
+                    "protein_g": 2.4
+                  }
+                ]
+              }
+            ]
+          },
+          {
+            "items": [
+              {
+                "carb_g": 4.6,
+                "fat_g": 45.7,
+                "food_id": "f_eggs",
+                "food_name": "Eggs",
+                "grams": 415,
+                "kcal": 643,
+                "protein_g": 54
+              },
+              {
+                "carb_g": 122.7,
+                "fat_g": 12.8,
+                "food_id": "f_oats",
+                "food_name": "Rolled Oats",
+                "grams": 185,
+                "kcal": 720,
+                "protein_g": 31.3
+              },
+              {
+                "carb_g": 7.1,
+                "fat_g": 33.9,
+                "food_id": "f_walnuts",
+                "food_name": "Walnuts",
+                "grams": 52,
+                "kcal": 340,
+                "protein_g": 7.9
+              },
+              {
+                "carb_g": 7.2,
+                "fat_g": 0.4,
+                "food_id": "f_broccoli",
+                "food_name": "Broccoli",
+                "grams": 100,
+                "kcal": 35,
+                "protein_g": 2.4
+              }
+            ],
+            "slot": "lunch",
+            "target_carb_g": 122,
+            "target_fat_g": 34,
+            "target_kcal": 1082,
+            "target_protein_g": 54,
+            "variants": [
+              {
+                "items": [
+                  {
+                    "carb_g": 212.2,
+                    "fat_g": 22.1,
+                    "food_id": "f_oats",
+                    "food_name": "Rolled Oats",
+                    "grams": 320,
+                    "kcal": 1245,
+                    "protein_g": 54.1
+                  },
+                  {
+                    "carb_g": 122.7,
+                    "fat_g": 1.3,
+                    "food_id": "f_rice",
+                    "food_name": "Jasmine Rice",
+                    "grams": 435,
+                    "kcal": 566,
+                    "protein_g": 11.7
+                  },
+                  {
+                    "carb_g": 7.1,
+                    "fat_g": 33.9,
+                    "food_id": "f_walnuts",
+                    "food_name": "Walnuts",
+                    "grams": 52,
+                    "kcal": 340,
+                    "protein_g": 7.9
+                  },
+                  {
+                    "carb_g": 7.2,
+                    "fat_g": 0.4,
+                    "food_id": "f_broccoli",
+                    "food_name": "Broccoli",
+                    "grams": 100,
+                    "kcal": 35,
+                    "protein_g": 2.4
+                  }
+                ]
+              },
+              {
+                "items": [
+                  {
+                    "carb_g": 0,
+                    "fat_g": 6.3,
+                    "food_id": "f_chicken",
+                    "food_name": "Chicken Breast",
+                    "grams": 175,
+                    "kcal": 289,
+                    "protein_g": 54.3
+                  },
+                  {
+                    "carb_g": 122.7,
+                    "fat_g": 1.3,
+                    "food_id": "f_rice",
+                    "food_name": "Jasmine Rice",
+                    "grams": 435,
+                    "kcal": 566,
+                    "protein_g": 11.7
+                  },
+                  {
+                    "carb_g": 7.1,
+                    "fat_g": 33.9,
+                    "food_id": "f_walnuts",
+                    "food_name": "Walnuts",
+                    "grams": 52,
+                    "kcal": 340,
+                    "protein_g": 7.9
+                  },
+                  {
+                    "carb_g": 7.2,
+                    "fat_g": 0.4,
+                    "food_id": "f_broccoli",
+                    "food_name": "Broccoli",
+                    "grams": 100,
+                    "kcal": 35,
+                    "protein_g": 2.4
+                  }
+                ]
+              },
+              {
+                "items": [
+                  {
+                    "carb_g": 0,
+                    "fat_g": 35.1,
+                    "food_id": "f_salmon",
+                    "food_name": "Salmon",
+                    "grams": 270,
+                    "kcal": 562,
+                    "protein_g": 54
+                  },
+                  {
+                    "carb_g": 122.7,
+                    "fat_g": 1.3,
+                    "food_id": "f_rice",
+                    "food_name": "Jasmine Rice",
+                    "grams": 435,
+                    "kcal": 566,
+                    "protein_g": 11.7
+                  },
+                  {
+                    "carb_g": 14.7,
+                    "fat_g": 33.9,
+                    "food_id": "f_almonds",
+                    "food_name": "Almonds",
+                    "grams": 68,
+                    "kcal": 394,
+                    "protein_g": 14.4
+                  },
+                  {
+                    "carb_g": 7.2,
+                    "fat_g": 0.4,
+                    "food_id": "f_broccoli",
+                    "food_name": "Broccoli",
+                    "grams": 100,
+                    "kcal": 35,
+                    "protein_g": 2.4
+                  }
+                ]
+              }
+            ]
+          },
+          {
+            "items": [
+              {
+                "carb_g": 0,
+                "fat_g": 6.3,
+                "food_id": "f_chicken",
+                "food_name": "Chicken Breast",
+                "grams": 175,
+                "kcal": 289,
+                "protein_g": 54.3
+              },
+              {
+                "carb_g": 91.6,
+                "fat_g": 1,
+                "food_id": "f_rice",
+                "food_name": "Jasmine Rice",
+                "grams": 325,
+                "kcal": 423,
+                "protein_g": 8.8
+              },
+              {
+                "carb_g": 7.1,
+                "fat_g": 33.9,
+                "food_id": "f_walnuts",
+                "food_name": "Walnuts",
+                "grams": 52,
+                "kcal": 340,
+                "protein_g": 7.9
+              },
+              {
+                "carb_g": 7.2,
+                "fat_g": 0.4,
+                "food_id": "f_broccoli",
+                "food_name": "Broccoli",
+                "grams": 100,
+                "kcal": 35,
+                "protein_g": 2.4
+              }
+            ],
+            "slot": "dinner",
+            "target_carb_g": 92,
+            "target_fat_g": 34,
+            "target_kcal": 812,
+            "target_protein_g": 54,
+            "variants": [
+              {
+                "items": [
+                  {
+                    "carb_g": 0,
+                    "fat_g": 35.1,
+                    "food_id": "f_salmon",
+                    "food_name": "Salmon",
+                    "grams": 270,
+                    "kcal": 562,
+                    "protein_g": 54
+                  },
+                  {
+                    "carb_g": 91.6,
+                    "fat_g": 1,
+                    "food_id": "f_rice",
+                    "food_name": "Jasmine Rice",
+                    "grams": 325,
+                    "kcal": 423,
+                    "protein_g": 8.8
+                  },
+                  {
+                    "carb_g": 14.7,
+                    "fat_g": 33.9,
+                    "food_id": "f_almonds",
+                    "food_name": "Almonds",
+                    "grams": 68,
+                    "kcal": 394,
+                    "protein_g": 14.4
+                  },
+                  {
+                    "carb_g": 7.2,
+                    "fat_g": 0.4,
+                    "food_id": "f_broccoli",
+                    "food_name": "Broccoli",
+                    "grams": 100,
+                    "kcal": 35,
+                    "protein_g": 2.4
+                  }
+                ]
+              },
+              {
+                "items": [
+                  {
+                    "carb_g": 0,
+                    "fat_g": 6.3,
+                    "food_id": "f_chicken",
+                    "food_name": "Chicken Breast",
+                    "grams": 175,
+                    "kcal": 289,
+                    "protein_g": 54.3
+                  },
+                  {
+                    "carb_g": 91.6,
+                    "fat_g": 1,
+                    "food_id": "f_rice",
+                    "food_name": "Jasmine Rice",
+                    "grams": 325,
+                    "kcal": 423,
+                    "protein_g": 8.8
+                  },
+                  {
+                    "carb_g": 0,
+                    "fat_g": 34,
+                    "food_id": "f_olive_oil",
+                    "food_name": "Olive Oil",
+                    "grams": 34,
+                    "kcal": 301,
+                    "protein_g": 0
+                  },
+                  {
+                    "carb_g": 7.2,
+                    "fat_g": 0.4,
+                    "food_id": "f_broccoli",
+                    "food_name": "Broccoli",
+                    "grams": 100,
+                    "kcal": 35,
+                    "protein_g": 2.4
+                  }
+                ]
+              },
+              {
+                "items": [
+                  {
+                    "carb_g": 0,
+                    "fat_g": 35.1,
+                    "food_id": "f_salmon",
+                    "food_name": "Salmon",
+                    "grams": 270,
+                    "kcal": 562,
+                    "protein_g": 54
+                  },
+                  {
+                    "carb_g": 91.6,
+                    "fat_g": 1,
+                    "food_id": "f_rice",
+                    "food_name": "Jasmine Rice",
+                    "grams": 325,
+                    "kcal": 423,
+                    "protein_g": 8.8
+                  },
+                  {
+                    "carb_g": 7.1,
+                    "fat_g": 33.9,
+                    "food_id": "f_walnuts",
+                    "food_name": "Walnuts",
+                    "grams": 52,
+                    "kcal": 340,
+                    "protein_g": 7.9
+                  },
+                  {
+                    "carb_g": 7.2,
+                    "fat_g": 0.4,
+                    "food_id": "f_broccoli",
+                    "food_name": "Broccoli",
+                    "grams": 100,
+                    "kcal": 35,
+                    "protein_g": 2.4
+                  }
+                ]
+              }
+            ]
+          }
+        ],
+        "totals": {
+          "carb_g": 346.8,
+          "fat_g": 195.3,
+          "kcal": 4006,
+          "protein_g": 227.3
+        },
+        "weekday": "tue"
+      },
+      {
+        "is_training_day": true,
+        "meals": [
+          {
+            "items": [
+              {
+                "carb_g": 0,
+                "fat_g": 30.6,
+                "food_id": "f_salmon",
+                "food_name": "Salmon",
+                "grams": 235,
+                "kcal": 489,
+                "protein_g": 47
+              },
+              {
+                "carb_g": 60.6,
+                "fat_g": 0.6,
+                "food_id": "f_rice",
+                "food_name": "Jasmine Rice",
+                "grams": 215,
+                "kcal": 280,
+                "protein_g": 5.8
+              },
+              {
+                "carb_g": 12.5,
+                "fat_g": 28.9,
+                "food_id": "f_almonds",
+                "food_name": "Almonds",
+                "grams": 58,
+                "kcal": 336,
+                "protein_g": 12.3
+              },
+              {
+                "carb_g": 7.2,
+                "fat_g": 0.4,
+                "food_id": "f_broccoli",
+                "food_name": "Broccoli",
+                "grams": 100,
+                "kcal": 35,
+                "protein_g": 2.4
+              }
+            ],
+            "slot": "breakfast",
+            "target_carb_g": 61,
+            "target_fat_g": 29,
+            "target_kcal": 677,
+            "target_protein_g": 47,
+            "variants": [
+              {
+                "items": [
+                  {
+                    "carb_g": 0,
+                    "fat_g": 30.6,
+                    "food_id": "f_salmon",
+                    "food_name": "Salmon",
+                    "grams": 235,
+                    "kcal": 489,
+                    "protein_g": 47
+                  },
+                  {
+                    "carb_g": 59.7,
+                    "fat_g": 6.2,
+                    "food_id": "f_oats",
+                    "food_name": "Rolled Oats",
+                    "grams": 90,
+                    "kcal": 350,
+                    "protein_g": 15.2
+                  },
+                  {
+                    "carb_g": 6,
+                    "fat_g": 28.7,
+                    "food_id": "f_walnuts",
+                    "food_name": "Walnuts",
+                    "grams": 44,
+                    "kcal": 288,
+                    "protein_g": 6.7
+                  },
+                  {
+                    "carb_g": 7.2,
+                    "fat_g": 0.4,
+                    "food_id": "f_broccoli",
+                    "food_name": "Broccoli",
+                    "grams": 100,
+                    "kcal": 35,
+                    "protein_g": 2.4
+                  }
+                ]
+              },
+              {
+                "items": [
+                  {
+                    "carb_g": 0,
+                    "fat_g": 30.6,
+                    "food_id": "f_salmon",
+                    "food_name": "Salmon",
+                    "grams": 235,
+                    "kcal": 489,
+                    "protein_g": 47
+                  },
+                  {
+                    "carb_g": 60.6,
+                    "fat_g": 0.6,
+                    "food_id": "f_rice",
+                    "food_name": "Jasmine Rice",
+                    "grams": 215,
+                    "kcal": 280,
+                    "protein_g": 5.8
+                  },
+                  {
+                    "carb_g": 6,
+                    "fat_g": 28.7,
+                    "food_id": "f_walnuts",
+                    "food_name": "Walnuts",
+                    "grams": 44,
+                    "kcal": 288,
+                    "protein_g": 6.7
+                  },
+                  {
+                    "carb_g": 7.2,
+                    "fat_g": 0.4,
+                    "food_id": "f_broccoli",
+                    "food_name": "Broccoli",
+                    "grams": 100,
+                    "kcal": 35,
+                    "protein_g": 2.4
+                  }
+                ]
+              },
+              {
+                "items": [
+                  {
+                    "carb_g": 0,
+                    "fat_g": 30.6,
+                    "food_id": "f_salmon",
+                    "food_name": "Salmon",
+                    "grams": 235,
+                    "kcal": 489,
+                    "protein_g": 47
+                  },
+                  {
+                    "carb_g": 59.7,
+                    "fat_g": 6.2,
+                    "food_id": "f_oats",
+                    "food_name": "Rolled Oats",
+                    "grams": 90,
+                    "kcal": 350,
+                    "protein_g": 15.2
+                  },
+                  {
+                    "carb_g": 12.5,
+                    "fat_g": 28.9,
+                    "food_id": "f_almonds",
+                    "food_name": "Almonds",
+                    "grams": 58,
+                    "kcal": 336,
+                    "protein_g": 12.3
+                  },
+                  {
+                    "carb_g": 7.2,
+                    "fat_g": 0.4,
+                    "food_id": "f_broccoli",
+                    "food_name": "Broccoli",
+                    "grams": 100,
+                    "kcal": 35,
+                    "protein_g": 2.4
+                  }
+                ]
+              }
+            ]
+          },
+          {
+            "items": [
+              {
+                "carb_g": 212.2,
+                "fat_g": 22.1,
+                "food_id": "f_oats",
+                "food_name": "Rolled Oats",
+                "grams": 320,
+                "kcal": 1245,
+                "protein_g": 54.1
+              },
+              {
+                "carb_g": 153.7,
+                "fat_g": 1.6,
+                "food_id": "f_rice",
+                "food_name": "Jasmine Rice",
+                "grams": 545,
+                "kcal": 709,
+                "protein_g": 14.7
+              },
+              {
+                "carb_g": 7.1,
+                "fat_g": 33.9,
+                "food_id": "f_walnuts",
+                "food_name": "Walnuts",
+                "grams": 52,
+                "kcal": 340,
+                "protein_g": 7.9
+              },
+              {
+                "carb_g": 7.2,
+                "fat_g": 0.4,
+                "food_id": "f_broccoli",
+                "food_name": "Broccoli",
+                "grams": 100,
+                "kcal": 35,
+                "protein_g": 2.4
+              }
+            ],
+            "slot": "lunch",
+            "target_carb_g": 153,
+            "target_fat_g": 34,
+            "target_kcal": 1218,
+            "target_protein_g": 54,
+            "variants": [
+              {
+                "items": [
+                  {
+                    "carb_g": 48.6,
+                    "fat_g": 231.5,
+                    "food_id": "f_walnuts",
+                    "food_name": "Walnuts",
+                    "grams": 355,
+                    "kcal": 2322,
+                    "protein_g": 54
+                  },
+                  {
+                    "carb_g": 152.5,
+                    "fat_g": 15.9,
+                    "food_id": "f_oats",
+                    "food_name": "Rolled Oats",
+                    "grams": 230,
+                    "kcal": 895,
+                    "protein_g": 38.9
+                  },
+                  {
+                    "carb_g": 0,
+                    "fat_g": 34,
+                    "food_id": "f_olive_oil",
+                    "food_name": "Olive Oil",
+                    "grams": 34,
+                    "kcal": 301,
+                    "protein_g": 0
+                  },
+                  {
+                    "carb_g": 7.2,
+                    "fat_g": 0.4,
+                    "food_id": "f_broccoli",
+                    "food_name": "Broccoli",
+                    "grams": 100,
+                    "kcal": 35,
+                    "protein_g": 2.4
+                  }
+                ]
+              },
+              {
+                "items": [
+                  {
+                    "carb_g": 48.6,
+                    "fat_g": 231.5,
+                    "food_id": "f_walnuts",
+                    "food_name": "Walnuts",
+                    "grams": 355,
+                    "kcal": 2322,
+                    "protein_g": 54
+                  },
+                  {
+                    "carb_g": 153.7,
+                    "fat_g": 1.6,
+                    "food_id": "f_rice",
+                    "food_name": "Jasmine Rice",
+                    "grams": 545,
+                    "kcal": 709,
+                    "protein_g": 14.7
+                  },
+                  {
+                    "carb_g": 14.7,
+                    "fat_g": 33.9,
+                    "food_id": "f_almonds",
+                    "food_name": "Almonds",
+                    "grams": 68,
+                    "kcal": 394,
+                    "protein_g": 14.4
+                  },
+                  {
+                    "carb_g": 7.2,
+                    "fat_g": 0.4,
+                    "food_id": "f_broccoli",
+                    "food_name": "Broccoli",
+                    "grams": 100,
+                    "kcal": 35,
+                    "protein_g": 2.4
+                  }
+                ]
+              },
+              {
+                "items": [
+                  {
+                    "carb_g": 48.6,
+                    "fat_g": 231.5,
+                    "food_id": "f_walnuts",
+                    "food_name": "Walnuts",
+                    "grams": 355,
+                    "kcal": 2322,
+                    "protein_g": 54
+                  },
+                  {
+                    "carb_g": 153.7,
+                    "fat_g": 1.6,
+                    "food_id": "f_rice",
+                    "food_name": "Jasmine Rice",
+                    "grams": 545,
+                    "kcal": 709,
+                    "protein_g": 14.7
+                  },
+                  {
+                    "carb_g": 0,
+                    "fat_g": 34,
+                    "food_id": "f_olive_oil",
+                    "food_name": "Olive Oil",
+                    "grams": 34,
+                    "kcal": 301,
+                    "protein_g": 0
+                  },
+                  {
+                    "carb_g": 7.2,
+                    "fat_g": 0.4,
+                    "food_id": "f_broccoli",
+                    "food_name": "Broccoli",
+                    "grams": 100,
+                    "kcal": 35,
+                    "protein_g": 2.4
+                  }
+                ]
+              }
+            ]
+          },
+          {
+            "items": [
+              {
+                "carb_g": 48.6,
+                "fat_g": 231.5,
+                "food_id": "f_walnuts",
+                "food_name": "Walnuts",
+                "grams": 355,
+                "kcal": 2322,
+                "protein_g": 54
+              },
+              {
+                "carb_g": 92.8,
+                "fat_g": 9.7,
+                "food_id": "f_oats",
+                "food_name": "Rolled Oats",
+                "grams": 140,
+                "kcal": 545,
+                "protein_g": 23.7
+              },
+              {
+                "carb_g": 0,
+                "fat_g": 34,
+                "food_id": "f_olive_oil",
+                "food_name": "Olive Oil",
+                "grams": 34,
+                "kcal": 301,
+                "protein_g": 0
+              },
+              {
+                "carb_g": 7.2,
+                "fat_g": 0.4,
+                "food_id": "f_broccoli",
+                "food_name": "Broccoli",
+                "grams": 100,
+                "kcal": 35,
+                "protein_g": 2.4
+              }
+            ],
+            "slot": "dinner",
+            "target_carb_g": 92,
+            "target_fat_g": 34,
+            "target_kcal": 812,
+            "target_protein_g": 54,
+            "variants": [
+              {
+                "items": [
+                  {
+                    "carb_g": 48.6,
+                    "fat_g": 231.5,
+                    "food_id": "f_walnuts",
+                    "food_name": "Walnuts",
+                    "grams": 355,
+                    "kcal": 2322,
+                    "protein_g": 54
+                  },
+                  {
+                    "carb_g": 91.6,
+                    "fat_g": 1,
+                    "food_id": "f_rice",
+                    "food_name": "Jasmine Rice",
+                    "grams": 325,
+                    "kcal": 423,
+                    "protein_g": 8.8
+                  },
+                  {
+                    "carb_g": 14.7,
+                    "fat_g": 33.9,
+                    "food_id": "f_almonds",
+                    "food_name": "Almonds",
+                    "grams": 68,
+                    "kcal": 394,
+                    "protein_g": 14.4
+                  },
+                  {
+                    "carb_g": 7.2,
+                    "fat_g": 0.4,
+                    "food_id": "f_broccoli",
+                    "food_name": "Broccoli",
+                    "grams": 100,
+                    "kcal": 35,
+                    "protein_g": 2.4
+                  }
+                ]
+              },
+              {
+                "items": [
+                  {
+                    "carb_g": 48.6,
+                    "fat_g": 231.5,
+                    "food_id": "f_walnuts",
+                    "food_name": "Walnuts",
+                    "grams": 355,
+                    "kcal": 2322,
+                    "protein_g": 54
+                  },
+                  {
+                    "carb_g": 91.6,
+                    "fat_g": 1,
+                    "food_id": "f_rice",
+                    "food_name": "Jasmine Rice",
+                    "grams": 325,
+                    "kcal": 423,
+                    "protein_g": 8.8
+                  },
+                  {
+                    "carb_g": 0,
+                    "fat_g": 34,
+                    "food_id": "f_olive_oil",
+                    "food_name": "Olive Oil",
+                    "grams": 34,
+                    "kcal": 301,
+                    "protein_g": 0
+                  },
+                  {
+                    "carb_g": 7.2,
+                    "fat_g": 0.4,
+                    "food_id": "f_broccoli",
+                    "food_name": "Broccoli",
+                    "grams": 100,
+                    "kcal": 35,
+                    "protein_g": 2.4
+                  }
+                ]
+              },
+              {
+                "items": [
+                  {
+                    "carb_g": 120,
+                    "fat_g": 2.4,
+                    "food_id": "f_lentils",
+                    "food_name": "Lentils",
+                    "grams": 600,
+                    "kcal": 696,
+                    "protein_g": 54
+                  },
+                  {
+                    "carb_g": 92.8,
+                    "fat_g": 9.7,
+                    "food_id": "f_oats",
+                    "food_name": "Rolled Oats",
+                    "grams": 140,
+                    "kcal": 545,
+                    "protein_g": 23.7
+                  },
+                  {
+                    "carb_g": 0,
+                    "fat_g": 34,
+                    "food_id": "f_olive_oil",
+                    "food_name": "Olive Oil",
+                    "grams": 34,
+                    "kcal": 301,
+                    "protein_g": 0
+                  },
+                  {
+                    "carb_g": 7.2,
+                    "fat_g": 0.4,
+                    "food_id": "f_broccoli",
+                    "food_name": "Broccoli",
+                    "grams": 100,
+                    "kcal": 35,
+                    "protein_g": 2.4
+                  }
+                ]
+              }
+            ]
+          }
+        ],
+        "totals": {
+          "carb_g": 609.1,
+          "fat_g": 394.09999999999997,
+          "kcal": 6672,
+          "protein_g": 226.7
+        },
+        "weekday": "wed"
+      },
+      {
+        "is_training_day": false,
+        "meals": [
+          {
+            "items": [
+              {
+                "carb_g": 42.5,
+                "fat_g": 202.1,
+                "food_id": "f_walnuts",
+                "food_name": "Walnuts",
+                "grams": 310,
+                "kcal": 2027,
+                "protein_g": 47.1
+              },
+              {
+                "carb_g": 91.6,
+                "fat_g": 1,
+                "food_id": "f_rice",
+                "food_name": "Jasmine Rice",
+                "grams": 325,
+                "kcal": 423,
+                "protein_g": 8.8
+              },
+              {
+                "carb_g": 12.5,
+                "fat_g": 28.9,
+                "food_id": "f_almonds",
+                "food_name": "Almonds",
+                "grams": 58,
+                "kcal": 336,
+                "protein_g": 12.3
+              },
+              {
+                "carb_g": 7.2,
+                "fat_g": 0.4,
+                "food_id": "f_broccoli",
+                "food_name": "Broccoli",
+                "grams": 100,
+                "kcal": 35,
+                "protein_g": 2.4
+              }
+            ],
+            "slot": "breakfast",
+            "target_carb_g": 92,
+            "target_fat_g": 29,
+            "target_kcal": 812,
+            "target_protein_g": 47,
+            "variants": [
+              {
+                "items": [
+                  {
+                    "carb_g": 0,
+                    "fat_g": 30.6,
+                    "food_id": "f_salmon",
+                    "food_name": "Salmon",
+                    "grams": 235,
+                    "kcal": 489,
+                    "protein_g": 47
+                  },
+                  {
+                    "carb_g": 91.6,
+                    "fat_g": 8.2,
+                    "food_id": "f_quinoa",
+                    "food_name": "Quinoa",
+                    "grams": 430,
+                    "kcal": 516,
+                    "protein_g": 18.9
+                  },
+                  {
+                    "carb_g": 12.5,
+                    "fat_g": 28.9,
+                    "food_id": "f_almonds",
+                    "food_name": "Almonds",
+                    "grams": 58,
+                    "kcal": 336,
+                    "protein_g": 12.3
+                  },
+                  {
+                    "carb_g": 7.2,
+                    "fat_g": 0.4,
+                    "food_id": "f_broccoli",
+                    "food_name": "Broccoli",
+                    "grams": 100,
+                    "kcal": 35,
+                    "protein_g": 2.4
+                  }
+                ]
+              },
+              {
+                "items": [
+                  {
+                    "carb_g": 42.5,
+                    "fat_g": 202.1,
+                    "food_id": "f_walnuts",
+                    "food_name": "Walnuts",
+                    "grams": 310,
+                    "kcal": 2027,
+                    "protein_g": 47.1
+                  },
+                  {
+                    "carb_g": 91.6,
+                    "fat_g": 1,
+                    "food_id": "f_rice",
+                    "food_name": "Jasmine Rice",
+                    "grams": 325,
+                    "kcal": 423,
+                    "protein_g": 8.8
+                  },
+                  {
+                    "carb_g": 0,
+                    "fat_g": 29,
+                    "food_id": "f_olive_oil",
+                    "food_name": "Olive Oil",
+                    "grams": 29,
+                    "kcal": 256,
+                    "protein_g": 0
+                  },
+                  {
+                    "carb_g": 7.2,
+                    "fat_g": 0.4,
+                    "food_id": "f_broccoli",
+                    "food_name": "Broccoli",
+                    "grams": 100,
+                    "kcal": 35,
+                    "protein_g": 2.4
+                  }
+                ]
+              },
+              {
+                "items": [
+                  {
+                    "carb_g": 16.4,
+                    "fat_g": 1.8,
+                    "food_id": "f_yogurt",
+                    "food_name": "Greek Yogurt 0%",
+                    "grams": 455,
+                    "kcal": 268,
+                    "protein_g": 46.9
+                  },
+                  {
+                    "carb_g": 92,
+                    "fat_g": 1.8,
+                    "food_id": "f_lentils",
+                    "food_name": "Lentils",
+                    "grams": 460,
+                    "kcal": 534,
+                    "protein_g": 41.4
+                  },
+                  {
+                    "carb_g": 12.5,
+                    "fat_g": 28.9,
+                    "food_id": "f_almonds",
+                    "food_name": "Almonds",
+                    "grams": 58,
+                    "kcal": 336,
+                    "protein_g": 12.3
+                  },
+                  {
+                    "carb_g": 7.2,
+                    "fat_g": 0.4,
+                    "food_id": "f_broccoli",
+                    "food_name": "Broccoli",
+                    "grams": 100,
+                    "kcal": 35,
+                    "protein_g": 2.4
+                  }
+                ]
+              }
+            ]
+          },
+          {
+            "items": [
+              {
+                "carb_g": 0,
+                "fat_g": 35.1,
+                "food_id": "f_salmon",
+                "food_name": "Salmon",
+                "grams": 270,
+                "kcal": 562,
+                "protein_g": 54
+              },
+              {
+                "carb_g": 122.5,
+                "fat_g": 10.9,
+                "food_id": "f_quinoa",
+                "food_name": "Quinoa",
+                "grams": 575,
+                "kcal": 690,
+                "protein_g": 25.3
+              },
+              {
+                "carb_g": 14.7,
+                "fat_g": 33.9,
+                "food_id": "f_almonds",
+                "food_name": "Almonds",
+                "grams": 68,
+                "kcal": 394,
+                "protein_g": 14.4
+              },
+              {
+                "carb_g": 7.2,
+                "fat_g": 0.4,
+                "food_id": "f_broccoli",
+                "food_name": "Broccoli",
+                "grams": 100,
+                "kcal": 35,
+                "protein_g": 2.4
+              }
+            ],
+            "slot": "lunch",
+            "target_carb_g": 122,
+            "target_fat_g": 34,
+            "target_kcal": 1082,
+            "target_protein_g": 54,
+            "variants": [
+              {
+                "items": [
+                  {
+                    "carb_g": 48.6,
+                    "fat_g": 231.5,
+                    "food_id": "f_walnuts",
+                    "food_name": "Walnuts",
+                    "grams": 355,
+                    "kcal": 2322,
+                    "protein_g": 54
+                  },
+                  {
+                    "carb_g": 122.7,
+                    "fat_g": 1.3,
+                    "food_id": "f_rice",
+                    "food_name": "Jasmine Rice",
+                    "grams": 435,
+                    "kcal": 566,
+                    "protein_g": 11.7
+                  },
+                  {
+                    "carb_g": 0,
+                    "fat_g": 34,
+                    "food_id": "f_olive_oil",
+                    "food_name": "Olive Oil",
+                    "grams": 34,
+                    "kcal": 301,
+                    "protein_g": 0
+                  },
+                  {
+                    "carb_g": 7.2,
+                    "fat_g": 0.4,
+                    "food_id": "f_broccoli",
+                    "food_name": "Broccoli",
+                    "grams": 100,
+                    "kcal": 35,
+                    "protein_g": 2.4
+                  }
+                ]
+              },
+              {
+                "items": [
+                  {
+                    "carb_g": 18.9,
+                    "fat_g": 2.1,
+                    "food_id": "f_yogurt",
+                    "food_name": "Greek Yogurt 0%",
+                    "grams": 525,
+                    "kcal": 310,
+                    "protein_g": 54.1
+                  },
+                  {
+                    "carb_g": 122,
+                    "fat_g": 2.4,
+                    "food_id": "f_lentils",
+                    "food_name": "Lentils",
+                    "grams": 610,
+                    "kcal": 708,
+                    "protein_g": 54.9
+                  },
+                  {
+                    "carb_g": 14.7,
+                    "fat_g": 33.9,
+                    "food_id": "f_almonds",
+                    "food_name": "Almonds",
+                    "grams": 68,
+                    "kcal": 394,
+                    "protein_g": 14.4
+                  },
+                  {
+                    "carb_g": 7.2,
+                    "fat_g": 0.4,
+                    "food_id": "f_broccoli",
+                    "food_name": "Broccoli",
+                    "grams": 100,
+                    "kcal": 35,
+                    "protein_g": 2.4
+                  }
+                ]
+              },
+              {
+                "items": [
+                  {
+                    "carb_g": 4.6,
+                    "fat_g": 45.7,
+                    "food_id": "f_eggs",
+                    "food_name": "Eggs",
+                    "grams": 415,
+                    "kcal": 643,
+                    "protein_g": 54
+                  },
+                  {
+                    "carb_g": 122.5,
+                    "fat_g": 10.9,
+                    "food_id": "f_quinoa",
+                    "food_name": "Quinoa",
+                    "grams": 575,
+                    "kcal": 690,
+                    "protein_g": 25.3
+                  },
+                  {
+                    "carb_g": 14.7,
+                    "fat_g": 33.9,
+                    "food_id": "f_almonds",
+                    "food_name": "Almonds",
+                    "grams": 68,
+                    "kcal": 394,
+                    "protein_g": 14.4
+                  },
+                  {
+                    "carb_g": 7.2,
+                    "fat_g": 0.4,
+                    "food_id": "f_broccoli",
+                    "food_name": "Broccoli",
+                    "grams": 100,
+                    "kcal": 35,
+                    "protein_g": 2.4
+                  }
+                ]
+              }
+            ]
+          },
+          {
+            "items": [
+              {
+                "carb_g": 48.6,
+                "fat_g": 231.5,
+                "food_id": "f_walnuts",
+                "food_name": "Walnuts",
+                "grams": 355,
+                "kcal": 2322,
+                "protein_g": 54
+              },
+              {
+                "carb_g": 91.6,
+                "fat_g": 1,
+                "food_id": "f_rice",
+                "food_name": "Jasmine Rice",
+                "grams": 325,
+                "kcal": 423,
+                "protein_g": 8.8
+              },
+              {
+                "carb_g": 0,
+                "fat_g": 34,
+                "food_id": "f_olive_oil",
+                "food_name": "Olive Oil",
+                "grams": 34,
+                "kcal": 301,
+                "protein_g": 0
+              },
+              {
+                "carb_g": 7.2,
+                "fat_g": 0.4,
+                "food_id": "f_broccoli",
+                "food_name": "Broccoli",
+                "grams": 100,
+                "kcal": 35,
+                "protein_g": 2.4
+              }
+            ],
+            "slot": "dinner",
+            "target_carb_g": 92,
+            "target_fat_g": 34,
+            "target_kcal": 812,
+            "target_protein_g": 54,
+            "variants": [
+              {
+                "items": [
+                  {
+                    "carb_g": 18.9,
+                    "fat_g": 2.1,
+                    "food_id": "f_yogurt",
+                    "food_name": "Greek Yogurt 0%",
+                    "grams": 525,
+                    "kcal": 310,
+                    "protein_g": 54.1
+                  },
+                  {
+                    "carb_g": 92,
+                    "fat_g": 1.8,
+                    "food_id": "f_lentils",
+                    "food_name": "Lentils",
+                    "grams": 460,
+                    "kcal": 534,
+                    "protein_g": 41.4
+                  },
+                  {
+                    "carb_g": 14.7,
+                    "fat_g": 33.9,
+                    "food_id": "f_almonds",
+                    "food_name": "Almonds",
+                    "grams": 68,
+                    "kcal": 394,
+                    "protein_g": 14.4
+                  },
+                  {
+                    "carb_g": 7.2,
+                    "fat_g": 0.4,
+                    "food_id": "f_broccoli",
+                    "food_name": "Broccoli",
+                    "grams": 100,
+                    "kcal": 35,
+                    "protein_g": 2.4
+                  }
+                ]
+              },
+              {
+                "items": [
+                  {
+                    "carb_g": 4.6,
+                    "fat_g": 45.7,
+                    "food_id": "f_eggs",
+                    "food_name": "Eggs",
+                    "grams": 415,
+                    "kcal": 643,
+                    "protein_g": 54
+                  },
+                  {
+                    "carb_g": 91.6,
+                    "fat_g": 8.2,
+                    "food_id": "f_quinoa",
+                    "food_name": "Quinoa",
+                    "grams": 430,
+                    "kcal": 516,
+                    "protein_g": 18.9
+                  },
+                  {
+                    "carb_g": 14.7,
+                    "fat_g": 33.9,
+                    "food_id": "f_almonds",
+                    "food_name": "Almonds",
+                    "grams": 68,
+                    "kcal": 394,
+                    "protein_g": 14.4
+                  },
+                  {
+                    "carb_g": 7.2,
+                    "fat_g": 0.4,
+                    "food_id": "f_broccoli",
+                    "food_name": "Broccoli",
+                    "grams": 100,
+                    "kcal": 35,
+                    "protein_g": 2.4
+                  }
+                ]
+              },
+              {
+                "items": [
+                  {
+                    "carb_g": 48.6,
+                    "fat_g": 231.5,
+                    "food_id": "f_walnuts",
+                    "food_name": "Walnuts",
+                    "grams": 355,
+                    "kcal": 2322,
+                    "protein_g": 54
+                  },
+                  {
+                    "carb_g": 92,
+                    "fat_g": 1.8,
+                    "food_id": "f_lentils",
+                    "food_name": "Lentils",
+                    "grams": 460,
+                    "kcal": 534,
+                    "protein_g": 41.4
+                  },
+                  {
+                    "carb_g": 7.1,
+                    "fat_g": 33.9,
+                    "food_id": "f_walnuts",
+                    "food_name": "Walnuts",
+                    "grams": 52,
+                    "kcal": 340,
+                    "protein_g": 7.9
+                  },
+                  {
+                    "carb_g": 7.2,
+                    "fat_g": 0.4,
+                    "food_id": "f_broccoli",
+                    "food_name": "Broccoli",
+                    "grams": 100,
+                    "kcal": 35,
+                    "protein_g": 2.4
+                  }
+                ]
+              }
+            ]
+          }
+        ],
+        "totals": {
+          "carb_g": 445.59999999999997,
+          "fat_g": 579.5999999999999,
+          "kcal": 7583,
+          "protein_g": 231.90000000000003
+        },
+        "weekday": "thu"
+      },
+      {
+        "is_training_day": true,
+        "meals": [
+          {
+            "items": [
+              {
+                "carb_g": 104,
+                "fat_g": 2.1,
+                "food_id": "f_lentils",
+                "food_name": "Lentils",
+                "grams": 520,
+                "kcal": 603,
+                "protein_g": 46.8
+              },
+              {
+                "carb_g": 59.7,
+                "fat_g": 6.2,
+                "food_id": "f_oats",
+                "food_name": "Rolled Oats",
+                "grams": 90,
+                "kcal": 350,
+                "protein_g": 15.2
+              },
+              {
+                "carb_g": 0,
+                "fat_g": 29,
+                "food_id": "f_olive_oil",
+                "food_name": "Olive Oil",
+                "grams": 29,
+                "kcal": 256,
+                "protein_g": 0
+              },
+              {
+                "carb_g": 7.2,
+                "fat_g": 0.4,
+                "food_id": "f_broccoli",
+                "food_name": "Broccoli",
+                "grams": 100,
+                "kcal": 35,
+                "protein_g": 2.4
+              }
+            ],
+            "slot": "breakfast",
+            "target_carb_g": 61,
+            "target_fat_g": 29,
+            "target_kcal": 677,
+            "target_protein_g": 47,
+            "variants": [
+              {
+                "items": [
+                  {
+                    "carb_g": 104,
+                    "fat_g": 2.1,
+                    "food_id": "f_lentils",
+                    "food_name": "Lentils",
+                    "grams": 520,
+                    "kcal": 603,
+                    "protein_g": 46.8
+                  },
+                  {
+                    "carb_g": 60.6,
+                    "fat_g": 0.6,
+                    "food_id": "f_rice",
+                    "food_name": "Jasmine Rice",
+                    "grams": 215,
+                    "kcal": 280,
+                    "protein_g": 5.8
+                  },
+                  {
+                    "carb_g": 0,
+                    "fat_g": 29,
+                    "food_id": "f_olive_oil",
+                    "food_name": "Olive Oil",
+                    "grams": 29,
+                    "kcal": 256,
+                    "protein_g": 0
+                  },
+                  {
+                    "carb_g": 7.2,
+                    "fat_g": 0.4,
+                    "food_id": "f_broccoli",
+                    "food_name": "Broccoli",
+                    "grams": 100,
+                    "kcal": 35,
+                    "protein_g": 2.4
+                  }
+                ]
+              },
+              {
+                "items": [
+                  {
+                    "carb_g": 0,
+                    "fat_g": 30.6,
+                    "food_id": "f_salmon",
+                    "food_name": "Salmon",
+                    "grams": 235,
+                    "kcal": 489,
+                    "protein_g": 47
+                  },
+                  {
+                    "carb_g": 59.7,
+                    "fat_g": 6.2,
+                    "food_id": "f_oats",
+                    "food_name": "Rolled Oats",
+                    "grams": 90,
+                    "kcal": 350,
+                    "protein_g": 15.2
+                  },
+                  {
+                    "carb_g": 6,
+                    "fat_g": 28.7,
+                    "food_id": "f_walnuts",
+                    "food_name": "Walnuts",
+                    "grams": 44,
+                    "kcal": 288,
+                    "protein_g": 6.7
+                  },
+                  {
+                    "carb_g": 7.2,
+                    "fat_g": 0.4,
+                    "food_id": "f_broccoli",
+                    "food_name": "Broccoli",
+                    "grams": 100,
+                    "kcal": 35,
+                    "protein_g": 2.4
+                  }
+                ]
+              },
+              {
+                "items": [
+                  {
+                    "carb_g": 42.5,
+                    "fat_g": 202.1,
+                    "food_id": "f_walnuts",
+                    "food_name": "Walnuts",
+                    "grams": 310,
+                    "kcal": 2027,
+                    "protein_g": 47.1
+                  },
+                  {
+                    "carb_g": 59.7,
+                    "fat_g": 6.2,
+                    "food_id": "f_oats",
+                    "food_name": "Rolled Oats",
+                    "grams": 90,
+                    "kcal": 350,
+                    "protein_g": 15.2
+                  },
+                  {
+                    "carb_g": 6,
+                    "fat_g": 28.7,
+                    "food_id": "f_walnuts",
+                    "food_name": "Walnuts",
+                    "grams": 44,
+                    "kcal": 288,
+                    "protein_g": 6.7
+                  },
+                  {
+                    "carb_g": 7.2,
+                    "fat_g": 0.4,
+                    "food_id": "f_broccoli",
+                    "food_name": "Broccoli",
+                    "grams": 100,
+                    "kcal": 35,
+                    "protein_g": 2.4
+                  }
+                ]
+              }
+            ]
+          },
+          {
+            "items": [
+              {
+                "carb_g": 120,
+                "fat_g": 2.4,
+                "food_id": "f_lentils",
+                "food_name": "Lentils",
+                "grams": 600,
+                "kcal": 696,
+                "protein_g": 54
+              },
+              {
+                "carb_g": 153.7,
+                "fat_g": 1.6,
+                "food_id": "f_rice",
+                "food_name": "Jasmine Rice",
+                "grams": 545,
+                "kcal": 709,
+                "protein_g": 14.7
+              },
+              {
+                "carb_g": 0,
+                "fat_g": 34,
+                "food_id": "f_olive_oil",
+                "food_name": "Olive Oil",
+                "grams": 34,
+                "kcal": 301,
+                "protein_g": 0
+              },
+              {
+                "carb_g": 7.2,
+                "fat_g": 0.4,
+                "food_id": "f_broccoli",
+                "food_name": "Broccoli",
+                "grams": 100,
+                "kcal": 35,
+                "protein_g": 2.4
+              }
+            ],
+            "slot": "lunch",
+            "target_carb_g": 153,
+            "target_fat_g": 34,
+            "target_kcal": 1218,
+            "target_protein_g": 54,
+            "variants": [
+              {
+                "items": [
+                  {
+                    "carb_g": 0,
+                    "fat_g": 35.1,
+                    "food_id": "f_salmon",
+                    "food_name": "Salmon",
+                    "grams": 270,
+                    "kcal": 562,
+                    "protein_g": 54
+                  },
+                  {
+                    "carb_g": 152.5,
+                    "fat_g": 15.9,
+                    "food_id": "f_oats",
+                    "food_name": "Rolled Oats",
+                    "grams": 230,
+                    "kcal": 895,
+                    "protein_g": 38.9
+                  },
+                  {
+                    "carb_g": 7.1,
+                    "fat_g": 33.9,
+                    "food_id": "f_walnuts",
+                    "food_name": "Walnuts",
+                    "grams": 52,
+                    "kcal": 340,
+                    "protein_g": 7.9
+                  },
+                  {
+                    "carb_g": 7.2,
+                    "fat_g": 0.4,
+                    "food_id": "f_broccoli",
+                    "food_name": "Broccoli",
+                    "grams": 100,
+                    "kcal": 35,
+                    "protein_g": 2.4
+                  }
+                ]
+              },
+              {
+                "items": [
+                  {
+                    "carb_g": 48.6,
+                    "fat_g": 231.5,
+                    "food_id": "f_walnuts",
+                    "food_name": "Walnuts",
+                    "grams": 355,
+                    "kcal": 2322,
+                    "protein_g": 54
+                  },
+                  {
+                    "carb_g": 152.5,
+                    "fat_g": 15.9,
+                    "food_id": "f_oats",
+                    "food_name": "Rolled Oats",
+                    "grams": 230,
+                    "kcal": 895,
+                    "protein_g": 38.9
+                  },
+                  {
+                    "carb_g": 7.1,
+                    "fat_g": 33.9,
+                    "food_id": "f_walnuts",
+                    "food_name": "Walnuts",
+                    "grams": 52,
+                    "kcal": 340,
+                    "protein_g": 7.9
+                  },
+                  {
+                    "carb_g": 7.2,
+                    "fat_g": 0.4,
+                    "food_id": "f_broccoli",
+                    "food_name": "Broccoli",
+                    "grams": 100,
+                    "kcal": 35,
+                    "protein_g": 2.4
+                  }
+                ]
+              },
+              {
+                "items": [
+                  {
+                    "carb_g": 212.2,
+                    "fat_g": 22.1,
+                    "food_id": "f_oats",
+                    "food_name": "Rolled Oats",
+                    "grams": 320,
+                    "kcal": 1245,
+                    "protein_g": 54.1
+                  },
+                  {
+                    "carb_g": 152.5,
+                    "fat_g": 15.9,
+                    "food_id": "f_oats",
+                    "food_name": "Rolled Oats",
+                    "grams": 230,
+                    "kcal": 895,
+                    "protein_g": 38.9
+                  },
+                  {
+                    "carb_g": 14.7,
+                    "fat_g": 33.9,
+                    "food_id": "f_almonds",
+                    "food_name": "Almonds",
+                    "grams": 68,
+                    "kcal": 394,
+                    "protein_g": 14.4
+                  },
+                  {
+                    "carb_g": 7.2,
+                    "fat_g": 0.4,
+                    "food_id": "f_broccoli",
+                    "food_name": "Broccoli",
+                    "grams": 100,
+                    "kcal": 35,
+                    "protein_g": 2.4
+                  }
+                ]
+              }
+            ]
+          },
+          {
+            "items": [
+              {
+                "carb_g": 0,
+                "fat_g": 35.1,
+                "food_id": "f_salmon",
+                "food_name": "Salmon",
+                "grams": 270,
+                "kcal": 562,
+                "protein_g": 54
+              },
+              {
+                "carb_g": 92.8,
+                "fat_g": 9.7,
+                "food_id": "f_oats",
+                "food_name": "Rolled Oats",
+                "grams": 140,
+                "kcal": 545,
+                "protein_g": 23.7
+              },
+              {
+                "carb_g": 7.1,
+                "fat_g": 33.9,
+                "food_id": "f_walnuts",
+                "food_name": "Walnuts",
+                "grams": 52,
+                "kcal": 340,
+                "protein_g": 7.9
+              },
+              {
+                "carb_g": 7.2,
+                "fat_g": 0.4,
+                "food_id": "f_broccoli",
+                "food_name": "Broccoli",
+                "grams": 100,
+                "kcal": 35,
+                "protein_g": 2.4
+              }
+            ],
+            "slot": "dinner",
+            "target_carb_g": 92,
+            "target_fat_g": 34,
+            "target_kcal": 812,
+            "target_protein_g": 54,
+            "variants": [
+              {
+                "items": [
+                  {
+                    "carb_g": 48.6,
+                    "fat_g": 231.5,
+                    "food_id": "f_walnuts",
+                    "food_name": "Walnuts",
+                    "grams": 355,
+                    "kcal": 2322,
+                    "protein_g": 54
+                  },
+                  {
+                    "carb_g": 92.8,
+                    "fat_g": 9.7,
+                    "food_id": "f_oats",
+                    "food_name": "Rolled Oats",
+                    "grams": 140,
+                    "kcal": 545,
+                    "protein_g": 23.7
+                  },
+                  {
+                    "carb_g": 7.1,
+                    "fat_g": 33.9,
+                    "food_id": "f_walnuts",
+                    "food_name": "Walnuts",
+                    "grams": 52,
+                    "kcal": 340,
+                    "protein_g": 7.9
+                  },
+                  {
+                    "carb_g": 7.2,
+                    "fat_g": 0.4,
+                    "food_id": "f_broccoli",
+                    "food_name": "Broccoli",
+                    "grams": 100,
+                    "kcal": 35,
+                    "protein_g": 2.4
+                  }
+                ]
+              },
+              {
+                "items": [
+                  {
+                    "carb_g": 212.2,
+                    "fat_g": 22.1,
+                    "food_id": "f_oats",
+                    "food_name": "Rolled Oats",
+                    "grams": 320,
+                    "kcal": 1245,
+                    "protein_g": 54.1
+                  },
+                  {
+                    "carb_g": 92.8,
+                    "fat_g": 9.7,
+                    "food_id": "f_oats",
+                    "food_name": "Rolled Oats",
+                    "grams": 140,
+                    "kcal": 545,
+                    "protein_g": 23.7
+                  },
+                  {
+                    "carb_g": 14.7,
+                    "fat_g": 33.9,
+                    "food_id": "f_almonds",
+                    "food_name": "Almonds",
+                    "grams": 68,
+                    "kcal": 394,
+                    "protein_g": 14.4
+                  },
+                  {
+                    "carb_g": 7.2,
+                    "fat_g": 0.4,
+                    "food_id": "f_broccoli",
+                    "food_name": "Broccoli",
+                    "grams": 100,
+                    "kcal": 35,
+                    "protein_g": 2.4
+                  }
+                ]
+              },
+              {
+                "items": [
+                  {
+                    "carb_g": 0,
+                    "fat_g": 6.3,
+                    "food_id": "f_chicken",
+                    "food_name": "Chicken Breast",
+                    "grams": 175,
+                    "kcal": 289,
+                    "protein_g": 54.3
+                  },
+                  {
+                    "carb_g": 92.8,
+                    "fat_g": 9.7,
+                    "food_id": "f_oats",
+                    "food_name": "Rolled Oats",
+                    "grams": 140,
+                    "kcal": 545,
+                    "protein_g": 23.7
+                  },
+                  {
+                    "carb_g": 14.7,
+                    "fat_g": 33.9,
+                    "food_id": "f_almonds",
+                    "food_name": "Almonds",
+                    "grams": 68,
+                    "kcal": 394,
+                    "protein_g": 14.4
+                  },
+                  {
+                    "carb_g": 7.2,
+                    "fat_g": 0.4,
+                    "food_id": "f_broccoli",
+                    "food_name": "Broccoli",
+                    "grams": 100,
+                    "kcal": 35,
+                    "protein_g": 2.4
+                  }
+                ]
+              }
+            ]
+          }
+        ],
+        "totals": {
+          "carb_g": 558.9,
+          "fat_g": 155.2,
+          "kcal": 4467,
+          "protein_g": 223.5
+        },
+        "weekday": "fri"
+      },
+      {
+        "is_training_day": false,
+        "meals": [
+          {
+            "items": [
+              {
+                "carb_g": 16.4,
+                "fat_g": 1.8,
+                "food_id": "f_yogurt",
+                "food_name": "Greek Yogurt 0%",
+                "grams": 455,
+                "kcal": 268,
+                "protein_g": 46.9
+              },
+              {
+                "carb_g": 92,
+                "fat_g": 1.8,
+                "food_id": "f_lentils",
+                "food_name": "Lentils",
+                "grams": 460,
+                "kcal": 534,
+                "protein_g": 41.4
+              },
+              {
+                "carb_g": 12.5,
+                "fat_g": 28.9,
+                "food_id": "f_almonds",
+                "food_name": "Almonds",
+                "grams": 58,
+                "kcal": 336,
+                "protein_g": 12.3
+              },
+              {
+                "carb_g": 7.2,
+                "fat_g": 0.4,
+                "food_id": "f_broccoli",
+                "food_name": "Broccoli",
+                "grams": 100,
+                "kcal": 35,
+                "protein_g": 2.4
+              }
+            ],
+            "slot": "breakfast",
+            "target_carb_g": 92,
+            "target_fat_g": 29,
+            "target_kcal": 812,
+            "target_protein_g": 47,
+            "variants": [
+              {
+                "items": [
+                  {
+                    "carb_g": 4,
+                    "fat_g": 39.6,
+                    "food_id": "f_eggs",
+                    "food_name": "Eggs",
+                    "grams": 360,
+                    "kcal": 558,
+                    "protein_g": 46.8
+                  },
+                  {
+                    "carb_g": 91.6,
+                    "fat_g": 8.2,
+                    "food_id": "f_quinoa",
+                    "food_name": "Quinoa",
+                    "grams": 430,
+                    "kcal": 516,
+                    "protein_g": 18.9
+                  },
+                  {
+                    "carb_g": 12.5,
+                    "fat_g": 28.9,
+                    "food_id": "f_almonds",
+                    "food_name": "Almonds",
+                    "grams": 58,
+                    "kcal": 336,
+                    "protein_g": 12.3
+                  },
+                  {
+                    "carb_g": 7.2,
+                    "fat_g": 0.4,
+                    "food_id": "f_broccoli",
+                    "food_name": "Broccoli",
+                    "grams": 100,
+                    "kcal": 35,
+                    "protein_g": 2.4
+                  }
+                ]
+              },
+              {
+                "items": [
+                  {
+                    "carb_g": 42.5,
+                    "fat_g": 202.1,
+                    "food_id": "f_walnuts",
+                    "food_name": "Walnuts",
+                    "grams": 310,
+                    "kcal": 2027,
+                    "protein_g": 47.1
+                  },
+                  {
+                    "carb_g": 92,
+                    "fat_g": 1.8,
+                    "food_id": "f_lentils",
+                    "food_name": "Lentils",
+                    "grams": 460,
+                    "kcal": 534,
+                    "protein_g": 41.4
+                  },
+                  {
+                    "carb_g": 6,
+                    "fat_g": 28.7,
+                    "food_id": "f_walnuts",
+                    "food_name": "Walnuts",
+                    "grams": 44,
+                    "kcal": 288,
+                    "protein_g": 6.7
+                  },
+                  {
+                    "carb_g": 7.2,
+                    "fat_g": 0.4,
+                    "food_id": "f_broccoli",
+                    "food_name": "Broccoli",
+                    "grams": 100,
+                    "kcal": 35,
+                    "protein_g": 2.4
+                  }
+                ]
+              },
+              {
+                "items": [
+                  {
+                    "carb_g": 104,
+                    "fat_g": 2.1,
+                    "food_id": "f_lentils",
+                    "food_name": "Lentils",
+                    "grams": 520,
+                    "kcal": 603,
+                    "protein_g": 46.8
+                  },
+                  {
+                    "carb_g": 92.1,
+                    "fat_g": 0.9,
+                    "food_id": "f_sweet_potato",
+                    "food_name": "Sweet Potato",
+                    "grams": 445,
+                    "kcal": 401,
+                    "protein_g": 8.9
+                  },
+                  {
+                    "carb_g": 6,
+                    "fat_g": 28.7,
+                    "food_id": "f_walnuts",
+                    "food_name": "Walnuts",
+                    "grams": 44,
+                    "kcal": 288,
+                    "protein_g": 6.7
+                  },
+                  {
+                    "carb_g": 7.2,
+                    "fat_g": 0.4,
+                    "food_id": "f_broccoli",
+                    "food_name": "Broccoli",
+                    "grams": 100,
+                    "kcal": 35,
+                    "protein_g": 2.4
+                  }
+                ]
+              }
+            ]
+          },
+          {
+            "items": [
+              {
+                "carb_g": 4.6,
+                "fat_g": 45.7,
+                "food_id": "f_eggs",
+                "food_name": "Eggs",
+                "grams": 415,
+                "kcal": 643,
+                "protein_g": 54
+              },
+              {
+                "carb_g": 122.5,
+                "fat_g": 10.9,
+                "food_id": "f_quinoa",
+                "food_name": "Quinoa",
+                "grams": 575,
+                "kcal": 690,
+                "protein_g": 25.3
+              },
+              {
+                "carb_g": 14.7,
+                "fat_g": 33.9,
+                "food_id": "f_almonds",
+                "food_name": "Almonds",
+                "grams": 68,
+                "kcal": 394,
+                "protein_g": 14.4
+              },
+              {
+                "carb_g": 7.2,
+                "fat_g": 0.4,
+                "food_id": "f_broccoli",
+                "food_name": "Broccoli",
+                "grams": 100,
+                "kcal": 35,
+                "protein_g": 2.4
+              }
+            ],
+            "slot": "lunch",
+            "target_carb_g": 122,
+            "target_fat_g": 34,
+            "target_kcal": 1082,
+            "target_protein_g": 54,
+            "variants": [
+              {
+                "items": [
+                  {
+                    "carb_g": 48.6,
+                    "fat_g": 231.5,
+                    "food_id": "f_walnuts",
+                    "food_name": "Walnuts",
+                    "grams": 355,
+                    "kcal": 2322,
+                    "protein_g": 54
+                  },
+                  {
+                    "carb_g": 122,
+                    "fat_g": 2.4,
+                    "food_id": "f_lentils",
+                    "food_name": "Lentils",
+                    "grams": 610,
+                    "kcal": 708,
+                    "protein_g": 54.9
+                  },
+                  {
+                    "carb_g": 7.1,
+                    "fat_g": 33.9,
+                    "food_id": "f_walnuts",
+                    "food_name": "Walnuts",
+                    "grams": 52,
+                    "kcal": 340,
+                    "protein_g": 7.9
+                  },
+                  {
+                    "carb_g": 7.2,
+                    "fat_g": 0.4,
+                    "food_id": "f_broccoli",
+                    "food_name": "Broccoli",
+                    "grams": 100,
+                    "kcal": 35,
+                    "protein_g": 2.4
+                  }
+                ]
+              },
+              {
+                "items": [
+                  {
+                    "carb_g": 120,
+                    "fat_g": 2.4,
+                    "food_id": "f_lentils",
+                    "food_name": "Lentils",
+                    "grams": 600,
+                    "kcal": 696,
+                    "protein_g": 54
+                  },
+                  {
+                    "carb_g": 122.1,
+                    "fat_g": 1.2,
+                    "food_id": "f_sweet_potato",
+                    "food_name": "Sweet Potato",
+                    "grams": 590,
+                    "kcal": 531,
+                    "protein_g": 11.8
+                  },
+                  {
+                    "carb_g": 7.1,
+                    "fat_g": 33.9,
+                    "food_id": "f_walnuts",
+                    "food_name": "Walnuts",
+                    "grams": 52,
+                    "kcal": 340,
+                    "protein_g": 7.9
+                  },
+                  {
+                    "carb_g": 7.2,
+                    "fat_g": 0.4,
+                    "food_id": "f_broccoli",
+                    "food_name": "Broccoli",
+                    "grams": 100,
+                    "kcal": 35,
+                    "protein_g": 2.4
+                  }
+                ]
+              },
+              {
+                "items": [
+                  {
+                    "carb_g": 48.6,
+                    "fat_g": 231.5,
+                    "food_id": "f_walnuts",
+                    "food_name": "Walnuts",
+                    "grams": 355,
+                    "kcal": 2322,
+                    "protein_g": 54
+                  },
+                  {
+                    "carb_g": 122.5,
+                    "fat_g": 10.9,
+                    "food_id": "f_quinoa",
+                    "food_name": "Quinoa",
+                    "grams": 575,
+                    "kcal": 690,
+                    "protein_g": 25.3
+                  },
+                  {
+                    "carb_g": 7.1,
+                    "fat_g": 33.9,
+                    "food_id": "f_walnuts",
+                    "food_name": "Walnuts",
+                    "grams": 52,
+                    "kcal": 340,
+                    "protein_g": 7.9
+                  },
+                  {
+                    "carb_g": 7.2,
+                    "fat_g": 0.4,
+                    "food_id": "f_broccoli",
+                    "food_name": "Broccoli",
+                    "grams": 100,
+                    "kcal": 35,
+                    "protein_g": 2.4
+                  }
+                ]
+              }
+            ]
+          },
+          {
+            "items": [
+              {
+                "carb_g": 48.6,
+                "fat_g": 231.5,
+                "food_id": "f_walnuts",
+                "food_name": "Walnuts",
+                "grams": 355,
+                "kcal": 2322,
+                "protein_g": 54
+              },
+              {
+                "carb_g": 92,
+                "fat_g": 1.8,
+                "food_id": "f_lentils",
+                "food_name": "Lentils",
+                "grams": 460,
+                "kcal": 534,
+                "protein_g": 41.4
+              },
+              {
+                "carb_g": 7.1,
+                "fat_g": 33.9,
+                "food_id": "f_walnuts",
+                "food_name": "Walnuts",
+                "grams": 52,
+                "kcal": 340,
+                "protein_g": 7.9
+              },
+              {
+                "carb_g": 7.2,
+                "fat_g": 0.4,
+                "food_id": "f_broccoli",
+                "food_name": "Broccoli",
+                "grams": 100,
+                "kcal": 35,
+                "protein_g": 2.4
+              }
+            ],
+            "slot": "dinner",
+            "target_carb_g": 92,
+            "target_fat_g": 34,
+            "target_kcal": 812,
+            "target_protein_g": 54,
+            "variants": [
+              {
+                "items": [
+                  {
+                    "carb_g": 120,
+                    "fat_g": 2.4,
+                    "food_id": "f_lentils",
+                    "food_name": "Lentils",
+                    "grams": 600,
+                    "kcal": 696,
+                    "protein_g": 54
+                  },
+                  {
+                    "carb_g": 92.1,
+                    "fat_g": 0.9,
+                    "food_id": "f_sweet_potato",
+                    "food_name": "Sweet Potato",
+                    "grams": 445,
+                    "kcal": 401,
+                    "protein_g": 8.9
+                  },
+                  {
+                    "carb_g": 7.1,
+                    "fat_g": 33.9,
+                    "food_id": "f_walnuts",
+                    "food_name": "Walnuts",
+                    "grams": 52,
+                    "kcal": 340,
+                    "protein_g": 7.9
+                  },
+                  {
+                    "carb_g": 7.2,
+                    "fat_g": 0.4,
+                    "food_id": "f_broccoli",
+                    "food_name": "Broccoli",
+                    "grams": 100,
+                    "kcal": 35,
+                    "protein_g": 2.4
+                  }
+                ]
+              },
+              {
+                "items": [
+                  {
+                    "carb_g": 48.6,
+                    "fat_g": 231.5,
+                    "food_id": "f_walnuts",
+                    "food_name": "Walnuts",
+                    "grams": 355,
+                    "kcal": 2322,
+                    "protein_g": 54
+                  },
+                  {
+                    "carb_g": 91.6,
+                    "fat_g": 8.2,
+                    "food_id": "f_quinoa",
+                    "food_name": "Quinoa",
+                    "grams": 430,
+                    "kcal": 516,
+                    "protein_g": 18.9
+                  },
+                  {
+                    "carb_g": 7.1,
+                    "fat_g": 33.9,
+                    "food_id": "f_walnuts",
+                    "food_name": "Walnuts",
+                    "grams": 52,
+                    "kcal": 340,
+                    "protein_g": 7.9
+                  },
+                  {
+                    "carb_g": 7.2,
+                    "fat_g": 0.4,
+                    "food_id": "f_broccoli",
+                    "food_name": "Broccoli",
+                    "grams": 100,
+                    "kcal": 35,
+                    "protein_g": 2.4
+                  }
+                ]
+              },
+              {
+                "items": [
+                  {
+                    "carb_g": 212.2,
+                    "fat_g": 22.1,
+                    "food_id": "f_oats",
+                    "food_name": "Rolled Oats",
+                    "grams": 320,
+                    "kcal": 1245,
+                    "protein_g": 54.1
+                  },
+                  {
+                    "carb_g": 92.1,
+                    "fat_g": 0.9,
+                    "food_id": "f_sweet_potato",
+                    "food_name": "Sweet Potato",
+                    "grams": 445,
+                    "kcal": 401,
+                    "protein_g": 8.9
+                  },
+                  {
+                    "carb_g": 14.7,
+                    "fat_g": 33.9,
+                    "food_id": "f_almonds",
+                    "food_name": "Almonds",
+                    "grams": 68,
+                    "kcal": 394,
+                    "protein_g": 14.4
+                  },
+                  {
+                    "carb_g": 7.2,
+                    "fat_g": 0.4,
+                    "food_id": "f_broccoli",
+                    "food_name": "Broccoli",
+                    "grams": 100,
+                    "kcal": 35,
+                    "protein_g": 2.4
+                  }
+                ]
+              }
+            ]
+          }
+        ],
+        "totals": {
+          "carb_g": 432,
+          "fat_g": 391.4,
+          "kcal": 6166,
+          "protein_g": 304.79999999999995
+        },
+        "weekday": "sat"
+      },
+      {
+        "is_training_day": false,
+        "meals": [
+          {
+            "items": [
+              {
+                "carb_g": 104,
+                "fat_g": 2.1,
+                "food_id": "f_lentils",
+                "food_name": "Lentils",
+                "grams": 520,
+                "kcal": 603,
+                "protein_g": 46.8
+              },
+              {
+                "carb_g": 92.1,
+                "fat_g": 0.9,
+                "food_id": "f_sweet_potato",
+                "food_name": "Sweet Potato",
+                "grams": 445,
+                "kcal": 401,
+                "protein_g": 8.9
+              },
+              {
+                "carb_g": 6,
+                "fat_g": 28.7,
+                "food_id": "f_walnuts",
+                "food_name": "Walnuts",
+                "grams": 44,
+                "kcal": 288,
+                "protein_g": 6.7
+              },
+              {
+                "carb_g": 7.2,
+                "fat_g": 0.4,
+                "food_id": "f_broccoli",
+                "food_name": "Broccoli",
+                "grams": 100,
+                "kcal": 35,
+                "protein_g": 2.4
+              }
+            ],
+            "slot": "breakfast",
+            "target_carb_g": 92,
+            "target_fat_g": 29,
+            "target_kcal": 812,
+            "target_protein_g": 47,
+            "variants": [
+              {
+                "items": [
+                  {
+                    "carb_g": 42.5,
+                    "fat_g": 202.1,
+                    "food_id": "f_walnuts",
+                    "food_name": "Walnuts",
+                    "grams": 310,
+                    "kcal": 2027,
+                    "protein_g": 47.1
+                  },
+                  {
+                    "carb_g": 91.6,
+                    "fat_g": 8.2,
+                    "food_id": "f_quinoa",
+                    "food_name": "Quinoa",
+                    "grams": 430,
+                    "kcal": 516,
+                    "protein_g": 18.9
+                  },
+                  {
+                    "carb_g": 6,
+                    "fat_g": 28.7,
+                    "food_id": "f_walnuts",
+                    "food_name": "Walnuts",
+                    "grams": 44,
+                    "kcal": 288,
+                    "protein_g": 6.7
+                  },
+                  {
+                    "carb_g": 7.2,
+                    "fat_g": 0.4,
+                    "food_id": "f_broccoli",
+                    "food_name": "Broccoli",
+                    "grams": 100,
+                    "kcal": 35,
+                    "protein_g": 2.4
+                  }
+                ]
+              },
+              {
+                "items": [
+                  {
+                    "carb_g": 185.6,
+                    "fat_g": 19.3,
+                    "food_id": "f_oats",
+                    "food_name": "Rolled Oats",
+                    "grams": 280,
+                    "kcal": 1089,
+                    "protein_g": 47.3
+                  },
+                  {
+                    "carb_g": 92.1,
+                    "fat_g": 0.9,
+                    "food_id": "f_sweet_potato",
+                    "food_name": "Sweet Potato",
+                    "grams": 445,
+                    "kcal": 401,
+                    "protein_g": 8.9
+                  },
+                  {
+                    "carb_g": 12.5,
+                    "fat_g": 28.9,
+                    "food_id": "f_almonds",
+                    "food_name": "Almonds",
+                    "grams": 58,
+                    "kcal": 336,
+                    "protein_g": 12.3
+                  },
+                  {
+                    "carb_g": 7.2,
+                    "fat_g": 0.4,
+                    "food_id": "f_broccoli",
+                    "food_name": "Broccoli",
+                    "grams": 100,
+                    "kcal": 35,
+                    "protein_g": 2.4
+                  }
+                ]
+              },
+              {
+                "items": [
+                  {
+                    "carb_g": 16.4,
+                    "fat_g": 1.8,
+                    "food_id": "f_yogurt",
+                    "food_name": "Greek Yogurt 0%",
+                    "grams": 455,
+                    "kcal": 268,
+                    "protein_g": 46.9
+                  },
+                  {
+                    "carb_g": 92.1,
+                    "fat_g": 0.9,
+                    "food_id": "f_sweet_potato",
+                    "food_name": "Sweet Potato",
+                    "grams": 445,
+                    "kcal": 401,
+                    "protein_g": 8.9
+                  },
+                  {
+                    "carb_g": 0,
+                    "fat_g": 29,
+                    "food_id": "f_olive_oil",
+                    "food_name": "Olive Oil",
+                    "grams": 29,
+                    "kcal": 256,
+                    "protein_g": 0
+                  },
+                  {
+                    "carb_g": 7.2,
+                    "fat_g": 0.4,
+                    "food_id": "f_broccoli",
+                    "food_name": "Broccoli",
+                    "grams": 100,
+                    "kcal": 35,
+                    "protein_g": 2.4
+                  }
+                ]
+              }
+            ]
+          },
+          {
+            "items": [
+              {
+                "carb_g": 48.6,
+                "fat_g": 231.5,
+                "food_id": "f_walnuts",
+                "food_name": "Walnuts",
+                "grams": 355,
+                "kcal": 2322,
+                "protein_g": 54
+              },
+              {
+                "carb_g": 122.5,
+                "fat_g": 10.9,
+                "food_id": "f_quinoa",
+                "food_name": "Quinoa",
+                "grams": 575,
+                "kcal": 690,
+                "protein_g": 25.3
+              },
+              {
+                "carb_g": 7.1,
+                "fat_g": 33.9,
+                "food_id": "f_walnuts",
+                "food_name": "Walnuts",
+                "grams": 52,
+                "kcal": 340,
+                "protein_g": 7.9
+              },
+              {
+                "carb_g": 7.2,
+                "fat_g": 0.4,
+                "food_id": "f_broccoli",
+                "food_name": "Broccoli",
+                "grams": 100,
+                "kcal": 35,
+                "protein_g": 2.4
+              }
+            ],
+            "slot": "lunch",
+            "target_carb_g": 122,
+            "target_fat_g": 34,
+            "target_kcal": 1082,
+            "target_protein_g": 54,
+            "variants": [
+              {
+                "items": [
+                  {
+                    "carb_g": 212.2,
+                    "fat_g": 22.1,
+                    "food_id": "f_oats",
+                    "food_name": "Rolled Oats",
+                    "grams": 320,
+                    "kcal": 1245,
+                    "protein_g": 54.1
+                  },
+                  {
+                    "carb_g": 122.1,
+                    "fat_g": 1.2,
+                    "food_id": "f_sweet_potato",
+                    "food_name": "Sweet Potato",
+                    "grams": 590,
+                    "kcal": 531,
+                    "protein_g": 11.8
+                  },
+                  {
+                    "carb_g": 14.7,
+                    "fat_g": 33.9,
+                    "food_id": "f_almonds",
+                    "food_name": "Almonds",
+                    "grams": 68,
+                    "kcal": 394,
+                    "protein_g": 14.4
+                  },
+                  {
+                    "carb_g": 7.2,
+                    "fat_g": 0.4,
+                    "food_id": "f_broccoli",
+                    "food_name": "Broccoli",
+                    "grams": 100,
+                    "kcal": 35,
+                    "protein_g": 2.4
+                  }
+                ]
+              },
+              {
+                "items": [
+                  {
+                    "carb_g": 18.9,
+                    "fat_g": 2.1,
+                    "food_id": "f_yogurt",
+                    "food_name": "Greek Yogurt 0%",
+                    "grams": 525,
+                    "kcal": 310,
+                    "protein_g": 54.1
+                  },
+                  {
+                    "carb_g": 122.1,
+                    "fat_g": 1.2,
+                    "food_id": "f_sweet_potato",
+                    "food_name": "Sweet Potato",
+                    "grams": 590,
+                    "kcal": 531,
+                    "protein_g": 11.8
+                  },
+                  {
+                    "carb_g": 0,
+                    "fat_g": 34,
+                    "food_id": "f_olive_oil",
+                    "food_name": "Olive Oil",
+                    "grams": 34,
+                    "kcal": 301,
+                    "protein_g": 0
+                  },
+                  {
+                    "carb_g": 7.2,
+                    "fat_g": 0.4,
+                    "food_id": "f_broccoli",
+                    "food_name": "Broccoli",
+                    "grams": 100,
+                    "kcal": 35,
+                    "protein_g": 2.4
+                  }
+                ]
+              },
+              {
+                "items": [
+                  {
+                    "carb_g": 48.6,
+                    "fat_g": 231.5,
+                    "food_id": "f_walnuts",
+                    "food_name": "Walnuts",
+                    "grams": 355,
+                    "kcal": 2322,
+                    "protein_g": 54
+                  },
+                  {
+                    "carb_g": 122.7,
+                    "fat_g": 12.8,
+                    "food_id": "f_oats",
+                    "food_name": "Rolled Oats",
+                    "grams": 185,
+                    "kcal": 720,
+                    "protein_g": 31.3
+                  },
+                  {
+                    "carb_g": 7.1,
+                    "fat_g": 33.9,
+                    "food_id": "f_walnuts",
+                    "food_name": "Walnuts",
+                    "grams": 52,
+                    "kcal": 340,
+                    "protein_g": 7.9
+                  },
+                  {
+                    "carb_g": 7.2,
+                    "fat_g": 0.4,
+                    "food_id": "f_broccoli",
+                    "food_name": "Broccoli",
+                    "grams": 100,
+                    "kcal": 35,
+                    "protein_g": 2.4
+                  }
+                ]
+              }
+            ]
+          },
+          {
+            "items": [
+              {
+                "carb_g": 212.2,
+                "fat_g": 22.1,
+                "food_id": "f_oats",
+                "food_name": "Rolled Oats",
+                "grams": 320,
+                "kcal": 1245,
+                "protein_g": 54.1
+              },
+              {
+                "carb_g": 92.1,
+                "fat_g": 0.9,
+                "food_id": "f_sweet_potato",
+                "food_name": "Sweet Potato",
+                "grams": 445,
+                "kcal": 401,
+                "protein_g": 8.9
+              },
+              {
+                "carb_g": 14.7,
+                "fat_g": 33.9,
+                "food_id": "f_almonds",
+                "food_name": "Almonds",
+                "grams": 68,
+                "kcal": 394,
+                "protein_g": 14.4
+              },
+              {
+                "carb_g": 7.2,
+                "fat_g": 0.4,
+                "food_id": "f_broccoli",
+                "food_name": "Broccoli",
+                "grams": 100,
+                "kcal": 35,
+                "protein_g": 2.4
+              }
+            ],
+            "slot": "dinner",
+            "target_carb_g": 92,
+            "target_fat_g": 34,
+            "target_kcal": 812,
+            "target_protein_g": 54,
+            "variants": [
+              {
+                "items": [
+                  {
+                    "carb_g": 18.9,
+                    "fat_g": 2.1,
+                    "food_id": "f_yogurt",
+                    "food_name": "Greek Yogurt 0%",
+                    "grams": 525,
+                    "kcal": 310,
+                    "protein_g": 54.1
+                  },
+                  {
+                    "carb_g": 92.1,
+                    "fat_g": 0.9,
+                    "food_id": "f_sweet_potato",
+                    "food_name": "Sweet Potato",
+                    "grams": 445,
+                    "kcal": 401,
+                    "protein_g": 8.9
+                  },
+                  {
+                    "carb_g": 0,
+                    "fat_g": 34,
+                    "food_id": "f_olive_oil",
+                    "food_name": "Olive Oil",
+                    "grams": 34,
+                    "kcal": 301,
+                    "protein_g": 0
+                  },
+                  {
+                    "carb_g": 7.2,
+                    "fat_g": 0.4,
+                    "food_id": "f_broccoli",
+                    "food_name": "Broccoli",
+                    "grams": 100,
+                    "kcal": 35,
+                    "protein_g": 2.4
+                  }
+                ]
+              },
+              {
+                "items": [
+                  {
+                    "carb_g": 48.6,
+                    "fat_g": 231.5,
+                    "food_id": "f_walnuts",
+                    "food_name": "Walnuts",
+                    "grams": 355,
+                    "kcal": 2322,
+                    "protein_g": 54
+                  },
+                  {
+                    "carb_g": 92.8,
+                    "fat_g": 9.7,
+                    "food_id": "f_oats",
+                    "food_name": "Rolled Oats",
+                    "grams": 140,
+                    "kcal": 545,
+                    "protein_g": 23.7
+                  },
+                  {
+                    "carb_g": 7.1,
+                    "fat_g": 33.9,
+                    "food_id": "f_walnuts",
+                    "food_name": "Walnuts",
+                    "grams": 52,
+                    "kcal": 340,
+                    "protein_g": 7.9
+                  },
+                  {
+                    "carb_g": 7.2,
+                    "fat_g": 0.4,
+                    "food_id": "f_broccoli",
+                    "food_name": "Broccoli",
+                    "grams": 100,
+                    "kcal": 35,
+                    "protein_g": 2.4
+                  }
+                ]
+              },
+              {
+                "items": [
+                  {
+                    "carb_g": 48.6,
+                    "fat_g": 231.5,
+                    "food_id": "f_walnuts",
+                    "food_name": "Walnuts",
+                    "grams": 355,
+                    "kcal": 2322,
+                    "protein_g": 54
+                  },
+                  {
+                    "carb_g": 92,
+                    "fat_g": 1.8,
+                    "food_id": "f_lentils",
+                    "food_name": "Lentils",
+                    "grams": 460,
+                    "kcal": 534,
+                    "protein_g": 41.4
+                  },
+                  {
+                    "carb_g": 0,
+                    "fat_g": 34,
+                    "food_id": "f_olive_oil",
+                    "food_name": "Olive Oil",
+                    "grams": 34,
+                    "kcal": 301,
+                    "protein_g": 0
+                  },
+                  {
+                    "carb_g": 7.2,
+                    "fat_g": 0.4,
+                    "food_id": "f_broccoli",
+                    "food_name": "Broccoli",
+                    "grams": 100,
+                    "kcal": 35,
+                    "protein_g": 2.4
+                  }
+                ]
+              }
+            ]
+          }
+        ],
+        "totals": {
+          "carb_g": 720.9000000000001,
+          "fat_g": 366.0999999999999,
+          "kcal": 6789,
+          "protein_g": 234.20000000000002
+        },
+        "weekday": "sun"
+      }
+    ],
+    "spec_seed": "94c2861810eaa830",
+    "workout_days": [
+      {
+        "estimated_minutes": 48,
+        "exercises": [
+          {
+            "category": "primary",
+            "exercise_id": "ex_bench",
+            "exercise_name": "Barbell Bench Press",
+            "movement_pattern": "horizontal_press",
+            "order": 0,
+            "prescription_unit": "reps",
+            "primary_muscles": [
+              "chest"
+            ],
+            "reps_max": 8,
+            "reps_min": 5,
+            "rest_seconds": 150,
+            "rir_max": 3,
+            "rir_min": 2,
+            "sets": 4,
+            "tempo": null
+          },
+          {
+            "category": "primary",
+            "exercise_id": "ex_row",
+            "exercise_name": "Barbell Row",
+            "movement_pattern": "horizontal_pull",
+            "order": 1,
+            "prescription_unit": "reps",
+            "primary_muscles": [
+              "back_upper"
+            ],
+            "reps_max": 8,
+            "reps_min": 5,
+            "rest_seconds": 150,
+            "rir_max": 3,
+            "rir_min": 2,
+            "sets": 4,
+            "tempo": null
+          },
+          {
+            "category": "primary",
+            "exercise_id": "ex_ohp",
+            "exercise_name": "Overhead Press",
+            "movement_pattern": "vertical_press",
+            "order": 2,
+            "prescription_unit": "reps",
+            "primary_muscles": [
+              "shoulders_lateral"
+            ],
+            "reps_max": 8,
+            "reps_min": 5,
+            "rest_seconds": 150,
+            "rir_max": 3,
+            "rir_min": 2,
+            "sets": 4,
+            "tempo": null
+          },
+          {
+            "category": "primary",
+            "exercise_id": "ex_pullup",
+            "exercise_name": "Pull Up",
+            "movement_pattern": "vertical_pull",
+            "order": 3,
+            "prescription_unit": "reps",
+            "primary_muscles": [
+              "back_lats"
+            ],
+            "reps_max": 8,
+            "reps_min": 5,
+            "rest_seconds": 150,
+            "rir_max": 3,
+            "rir_min": 2,
+            "sets": 4,
+            "tempo": null
+          }
+        ],
+        "focus": "Full Body — back_lats + back_upper + chest + shoulders_lateral",
+        "warmup": {
+          "general_minutes": 6,
+          "ramp_set_pattern": [
+            {
+              "percent_of_working": 40,
+              "reps": 8
+            },
+            {
+              "percent_of_working": 60,
+              "reps": 5
+            },
+            {
+              "percent_of_working": 80,
+              "reps": 3
+            }
+          ]
+        },
+        "weekday": "mon"
+      },
+      {
+        "estimated_minutes": 38,
+        "exercises": [
+          {
+            "category": "primary",
+            "exercise_id": "ex_back_squat",
+            "exercise_name": "Back Squat",
+            "movement_pattern": "squat",
+            "order": 0,
+            "prescription_unit": "reps",
+            "primary_muscles": [
+              "quads"
+            ],
+            "reps_max": 8,
+            "reps_min": 5,
+            "rest_seconds": 150,
+            "rir_max": 3,
+            "rir_min": 2,
+            "sets": 4,
+            "tempo": null
+          },
+          {
+            "category": "primary",
+            "exercise_id": "ex_dl",
+            "exercise_name": "Deadlift",
+            "movement_pattern": "hinge",
+            "order": 1,
+            "prescription_unit": "reps",
+            "primary_muscles": [
+              "hamstrings"
+            ],
+            "reps_max": 8,
+            "reps_min": 5,
+            "rest_seconds": 150,
+            "rir_max": 3,
+            "rir_min": 2,
+            "sets": 4,
+            "tempo": null
+          },
+          {
+            "category": "isolation",
+            "exercise_id": "ex_plank",
+            "exercise_name": "Plank",
+            "movement_pattern": "core_anti_extension",
+            "order": 2,
+            "prescription_unit": "time_seconds",
+            "primary_muscles": [
+              "core"
+            ],
+            "reps_max": 15,
+            "reps_min": 10,
+            "rest_seconds": 60,
+            "rir_max": 2,
+            "rir_min": 1,
+            "sets": 3,
+            "tempo": null,
+            "unit_max": 45,
+            "unit_min": 30
+          },
+          {
+            "category": "isolation",
+            "exercise_id": "ex_pallof",
+            "exercise_name": "Pallof Press",
+            "movement_pattern": "core_anti_rotation",
+            "order": 3,
+            "prescription_unit": "reps",
+            "primary_muscles": [
+              "core"
+            ],
+            "reps_max": 15,
+            "reps_min": 10,
+            "rest_seconds": 60,
+            "rir_max": 2,
+            "rir_min": 1,
+            "sets": 3,
+            "tempo": null
+          },
+          {
+            "category": "isolation",
+            "exercise_id": "ex_curl",
+            "exercise_name": "Dumbbell Curl",
+            "movement_pattern": "horizontal_pull",
+            "order": 4,
+            "prescription_unit": "reps",
+            "primary_muscles": [
+              "biceps"
+            ],
+            "reps_max": 15,
+            "reps_min": 10,
+            "rest_seconds": 60,
+            "rir_max": 2,
+            "rir_min": 1,
+            "sets": 3,
+            "tempo": null
+          }
+        ],
+        "focus": "Full Body — biceps + core + hamstrings + quads",
+        "warmup": {
+          "general_minutes": 6,
+          "ramp_set_pattern": [
+            {
+              "percent_of_working": 40,
+              "reps": 8
+            },
+            {
+              "percent_of_working": 60,
+              "reps": 5
+            },
+            {
+              "percent_of_working": 80,
+              "reps": 3
+            }
+          ]
+        },
+        "weekday": "wed"
+      },
+      {
+        "estimated_minutes": 32,
+        "exercises": [
+          {
+            "category": "isolation",
+            "exercise_id": "ex_tri_pushdown",
+            "exercise_name": "Triceps Pushdown",
+            "movement_pattern": "vertical_press",
+            "order": 0,
+            "prescription_unit": "reps",
+            "primary_muscles": [
+              "triceps"
+            ],
+            "reps_max": 15,
+            "reps_min": 10,
+            "rest_seconds": 60,
+            "rir_max": 2,
+            "rir_min": 1,
+            "sets": 3,
+            "tempo": null
+          },
+          {
+            "category": "isolation",
+            "exercise_id": "ex_calf_raise",
+            "exercise_name": "Calf Raise",
+            "movement_pattern": "squat",
+            "order": 1,
+            "prescription_unit": "reps",
+            "primary_muscles": [
+              "calves"
+            ],
+            "reps_max": 15,
+            "reps_min": 10,
+            "rest_seconds": 60,
+            "rir_max": 2,
+            "rir_min": 1,
+            "sets": 3,
+            "tempo": null
+          },
+          {
+            "category": "secondary",
+            "exercise_id": "ex_db_bench",
+            "exercise_name": "Dumbbell Bench Press",
+            "movement_pattern": "horizontal_press",
+            "order": 2,
+            "prescription_unit": "reps",
+            "primary_muscles": [
+              "chest"
+            ],
+            "reps_max": 10,
+            "reps_min": 6,
+            "rest_seconds": 120,
+            "rir_max": 3,
+            "rir_min": 2,
+            "sets": 3,
+            "tempo": null
+          },
+          {
+            "category": "secondary",
+            "exercise_id": "ex_db_row",
+            "exercise_name": "Dumbbell Row",
+            "movement_pattern": "horizontal_pull",
+            "order": 3,
+            "prescription_unit": "reps",
+            "primary_muscles": [
+              "back_upper"
+            ],
+            "reps_max": 10,
+            "reps_min": 6,
+            "rest_seconds": 120,
+            "rir_max": 3,
+            "rir_min": 2,
+            "sets": 3,
+            "tempo": null
+          },
+          {
+            "category": "secondary",
+            "exercise_id": "ex_lunge",
+            "exercise_name": "Walking Lunge",
+            "movement_pattern": "lunge",
+            "order": 4,
+            "prescription_unit": "reps",
+            "primary_muscles": [
+              "quads"
+            ],
+            "reps_max": 10,
+            "reps_min": 6,
+            "rest_seconds": 120,
+            "rir_max": 3,
+            "rir_min": 2,
+            "sets": 3,
+            "tempo": null
+          }
+        ],
+        "focus": "Full Body — back_upper + calves + chest + quads",
+        "warmup": {
+          "general_minutes": 6,
+          "ramp_set_pattern": [
+            {
+              "percent_of_working": 40,
+              "reps": 8
+            },
+            {
+              "percent_of_working": 60,
+              "reps": 5
+            },
+            {
+              "percent_of_working": 80,
+              "reps": 3
+            }
+          ]
+        },
+        "weekday": "fri"
+      }
+    ],
+    "workout_weeks": [
+      {
+        "is_deload": false,
+        "week_index": 1,
+        "weekly_volume_actual": {
+          "back_lats": 4,
+          "back_upper": 7,
+          "biceps": 3,
+          "calves": 3,
+          "chest": 7,
+          "core": 6,
+          "glutes": 0,
+          "hamstrings": 4,
+          "quads": 7,
+          "shoulders_lateral": 4,
+          "shoulders_rear": 0,
+          "triceps": 3
+        },
+        "workout_days": [
+          {
+            "estimated_minutes": 48,
+            "exercises": [
+              {
+                "category": "primary",
+                "exercise_id": "ex_bench",
+                "exercise_name": "Barbell Bench Press",
+                "movement_pattern": "horizontal_press",
+                "order": 0,
+                "prescription_unit": "reps",
+                "primary_muscles": [
+                  "chest"
+                ],
+                "reps_max": 8,
+                "reps_min": 5,
+                "rest_seconds": 150,
+                "rir_max": 3,
+                "rir_min": 2,
+                "sets": 4,
+                "tempo": null
+              },
+              {
+                "category": "primary",
+                "exercise_id": "ex_row",
+                "exercise_name": "Barbell Row",
+                "movement_pattern": "horizontal_pull",
+                "order": 1,
+                "prescription_unit": "reps",
+                "primary_muscles": [
+                  "back_upper"
+                ],
+                "reps_max": 8,
+                "reps_min": 5,
+                "rest_seconds": 150,
+                "rir_max": 3,
+                "rir_min": 2,
+                "sets": 4,
+                "tempo": null
+              },
+              {
+                "category": "primary",
+                "exercise_id": "ex_ohp",
+                "exercise_name": "Overhead Press",
+                "movement_pattern": "vertical_press",
+                "order": 2,
+                "prescription_unit": "reps",
+                "primary_muscles": [
+                  "shoulders_lateral"
+                ],
+                "reps_max": 8,
+                "reps_min": 5,
+                "rest_seconds": 150,
+                "rir_max": 3,
+                "rir_min": 2,
+                "sets": 4,
+                "tempo": null
+              },
+              {
+                "category": "primary",
+                "exercise_id": "ex_pullup",
+                "exercise_name": "Pull Up",
+                "movement_pattern": "vertical_pull",
+                "order": 3,
+                "prescription_unit": "reps",
+                "primary_muscles": [
+                  "back_lats"
+                ],
+                "reps_max": 8,
+                "reps_min": 5,
+                "rest_seconds": 150,
+                "rir_max": 3,
+                "rir_min": 2,
+                "sets": 4,
+                "tempo": null
+              }
+            ],
+            "focus": "Full Body — back_lats + back_upper + chest + shoulders_lateral",
+            "warmup": {
+              "general_minutes": 6,
+              "ramp_set_pattern": [
+                {
+                  "percent_of_working": 40,
+                  "reps": 8
+                },
+                {
+                  "percent_of_working": 60,
+                  "reps": 5
+                },
+                {
+                  "percent_of_working": 80,
+                  "reps": 3
+                }
+              ]
+            },
+            "weekday": "mon"
+          },
+          {
+            "estimated_minutes": 38,
+            "exercises": [
+              {
+                "category": "primary",
+                "exercise_id": "ex_back_squat",
+                "exercise_name": "Back Squat",
+                "movement_pattern": "squat",
+                "order": 0,
+                "prescription_unit": "reps",
+                "primary_muscles": [
+                  "quads"
+                ],
+                "reps_max": 8,
+                "reps_min": 5,
+                "rest_seconds": 150,
+                "rir_max": 3,
+                "rir_min": 2,
+                "sets": 4,
+                "tempo": null
+              },
+              {
+                "category": "primary",
+                "exercise_id": "ex_dl",
+                "exercise_name": "Deadlift",
+                "movement_pattern": "hinge",
+                "order": 1,
+                "prescription_unit": "reps",
+                "primary_muscles": [
+                  "hamstrings"
+                ],
+                "reps_max": 8,
+                "reps_min": 5,
+                "rest_seconds": 150,
+                "rir_max": 3,
+                "rir_min": 2,
+                "sets": 4,
+                "tempo": null
+              },
+              {
+                "category": "isolation",
+                "exercise_id": "ex_plank",
+                "exercise_name": "Plank",
+                "movement_pattern": "core_anti_extension",
+                "order": 2,
+                "prescription_unit": "time_seconds",
+                "primary_muscles": [
+                  "core"
+                ],
+                "reps_max": 15,
+                "reps_min": 10,
+                "rest_seconds": 60,
+                "rir_max": 2,
+                "rir_min": 1,
+                "sets": 3,
+                "tempo": null,
+                "unit_max": 45,
+                "unit_min": 30
+              },
+              {
+                "category": "isolation",
+                "exercise_id": "ex_pallof",
+                "exercise_name": "Pallof Press",
+                "movement_pattern": "core_anti_rotation",
+                "order": 3,
+                "prescription_unit": "reps",
+                "primary_muscles": [
+                  "core"
+                ],
+                "reps_max": 15,
+                "reps_min": 10,
+                "rest_seconds": 60,
+                "rir_max": 2,
+                "rir_min": 1,
+                "sets": 3,
+                "tempo": null
+              },
+              {
+                "category": "isolation",
+                "exercise_id": "ex_curl",
+                "exercise_name": "Dumbbell Curl",
+                "movement_pattern": "horizontal_pull",
+                "order": 4,
+                "prescription_unit": "reps",
+                "primary_muscles": [
+                  "biceps"
+                ],
+                "reps_max": 15,
+                "reps_min": 10,
+                "rest_seconds": 60,
+                "rir_max": 2,
+                "rir_min": 1,
+                "sets": 3,
+                "tempo": null
+              }
+            ],
+            "focus": "Full Body — biceps + core + hamstrings + quads",
+            "warmup": {
+              "general_minutes": 6,
+              "ramp_set_pattern": [
+                {
+                  "percent_of_working": 40,
+                  "reps": 8
+                },
+                {
+                  "percent_of_working": 60,
+                  "reps": 5
+                },
+                {
+                  "percent_of_working": 80,
+                  "reps": 3
+                }
+              ]
+            },
+            "weekday": "wed"
+          },
+          {
+            "estimated_minutes": 32,
+            "exercises": [
+              {
+                "category": "isolation",
+                "exercise_id": "ex_tri_pushdown",
+                "exercise_name": "Triceps Pushdown",
+                "movement_pattern": "vertical_press",
+                "order": 0,
+                "prescription_unit": "reps",
+                "primary_muscles": [
+                  "triceps"
+                ],
+                "reps_max": 15,
+                "reps_min": 10,
+                "rest_seconds": 60,
+                "rir_max": 2,
+                "rir_min": 1,
+                "sets": 3,
+                "tempo": null
+              },
+              {
+                "category": "isolation",
+                "exercise_id": "ex_calf_raise",
+                "exercise_name": "Calf Raise",
+                "movement_pattern": "squat",
+                "order": 1,
+                "prescription_unit": "reps",
+                "primary_muscles": [
+                  "calves"
+                ],
+                "reps_max": 15,
+                "reps_min": 10,
+                "rest_seconds": 60,
+                "rir_max": 2,
+                "rir_min": 1,
+                "sets": 3,
+                "tempo": null
+              },
+              {
+                "category": "secondary",
+                "exercise_id": "ex_db_bench",
+                "exercise_name": "Dumbbell Bench Press",
+                "movement_pattern": "horizontal_press",
+                "order": 2,
+                "prescription_unit": "reps",
+                "primary_muscles": [
+                  "chest"
+                ],
+                "reps_max": 10,
+                "reps_min": 6,
+                "rest_seconds": 120,
+                "rir_max": 3,
+                "rir_min": 2,
+                "sets": 3,
+                "tempo": null
+              },
+              {
+                "category": "secondary",
+                "exercise_id": "ex_db_row",
+                "exercise_name": "Dumbbell Row",
+                "movement_pattern": "horizontal_pull",
+                "order": 3,
+                "prescription_unit": "reps",
+                "primary_muscles": [
+                  "back_upper"
+                ],
+                "reps_max": 10,
+                "reps_min": 6,
+                "rest_seconds": 120,
+                "rir_max": 3,
+                "rir_min": 2,
+                "sets": 3,
+                "tempo": null
+              },
+              {
+                "category": "secondary",
+                "exercise_id": "ex_lunge",
+                "exercise_name": "Walking Lunge",
+                "movement_pattern": "lunge",
+                "order": 4,
+                "prescription_unit": "reps",
+                "primary_muscles": [
+                  "quads"
+                ],
+                "reps_max": 10,
+                "reps_min": 6,
+                "rest_seconds": 120,
+                "rir_max": 3,
+                "rir_min": 2,
+                "sets": 3,
+                "tempo": null
+              }
+            ],
+            "focus": "Full Body — back_upper + calves + chest + quads",
+            "warmup": {
+              "general_minutes": 6,
+              "ramp_set_pattern": [
+                {
+                  "percent_of_working": 40,
+                  "reps": 8
+                },
+                {
+                  "percent_of_working": 60,
+                  "reps": 5
+                },
+                {
+                  "percent_of_working": 80,
+                  "reps": 3
+                }
+              ]
+            },
+            "weekday": "fri"
+          }
+        ]
+      },
+      {
+        "is_deload": false,
+        "week_index": 2,
+        "weekly_volume_actual": {
+          "back_lats": 4,
+          "back_upper": 7,
+          "biceps": 3,
+          "calves": 3,
+          "chest": 7,
+          "core": 6,
+          "glutes": 0,
+          "hamstrings": 4,
+          "quads": 7,
+          "shoulders_lateral": 4,
+          "shoulders_rear": 0,
+          "triceps": 3
+        },
+        "workout_days": [
+          {
+            "estimated_minutes": 48,
+            "exercises": [
+              {
+                "category": "primary",
+                "exercise_id": "ex_bench",
+                "exercise_name": "Barbell Bench Press",
+                "movement_pattern": "horizontal_press",
+                "order": 0,
+                "prescription_unit": "reps",
+                "primary_muscles": [
+                  "chest"
+                ],
+                "reps_max": 8,
+                "reps_min": 5,
+                "rest_seconds": 150,
+                "rir_max": 3,
+                "rir_min": 2,
+                "sets": 4,
+                "tempo": null
+              },
+              {
+                "category": "primary",
+                "exercise_id": "ex_row",
+                "exercise_name": "Barbell Row",
+                "movement_pattern": "horizontal_pull",
+                "order": 1,
+                "prescription_unit": "reps",
+                "primary_muscles": [
+                  "back_upper"
+                ],
+                "reps_max": 8,
+                "reps_min": 5,
+                "rest_seconds": 150,
+                "rir_max": 3,
+                "rir_min": 2,
+                "sets": 4,
+                "tempo": null
+              },
+              {
+                "category": "primary",
+                "exercise_id": "ex_ohp",
+                "exercise_name": "Overhead Press",
+                "movement_pattern": "vertical_press",
+                "order": 2,
+                "prescription_unit": "reps",
+                "primary_muscles": [
+                  "shoulders_lateral"
+                ],
+                "reps_max": 8,
+                "reps_min": 5,
+                "rest_seconds": 150,
+                "rir_max": 3,
+                "rir_min": 2,
+                "sets": 4,
+                "tempo": null
+              },
+              {
+                "category": "primary",
+                "exercise_id": "ex_pullup",
+                "exercise_name": "Pull Up",
+                "movement_pattern": "vertical_pull",
+                "order": 3,
+                "prescription_unit": "reps",
+                "primary_muscles": [
+                  "back_lats"
+                ],
+                "reps_max": 8,
+                "reps_min": 5,
+                "rest_seconds": 150,
+                "rir_max": 3,
+                "rir_min": 2,
+                "sets": 4,
+                "tempo": null
+              }
+            ],
+            "focus": "Full Body — back_lats + back_upper + chest + shoulders_lateral",
+            "warmup": {
+              "general_minutes": 6,
+              "ramp_set_pattern": [
+                {
+                  "percent_of_working": 40,
+                  "reps": 8
+                },
+                {
+                  "percent_of_working": 60,
+                  "reps": 5
+                },
+                {
+                  "percent_of_working": 80,
+                  "reps": 3
+                }
+              ]
+            },
+            "weekday": "mon"
+          },
+          {
+            "estimated_minutes": 38,
+            "exercises": [
+              {
+                "category": "primary",
+                "exercise_id": "ex_back_squat",
+                "exercise_name": "Back Squat",
+                "movement_pattern": "squat",
+                "order": 0,
+                "prescription_unit": "reps",
+                "primary_muscles": [
+                  "quads"
+                ],
+                "reps_max": 8,
+                "reps_min": 5,
+                "rest_seconds": 150,
+                "rir_max": 3,
+                "rir_min": 2,
+                "sets": 4,
+                "tempo": null
+              },
+              {
+                "category": "primary",
+                "exercise_id": "ex_dl",
+                "exercise_name": "Deadlift",
+                "movement_pattern": "hinge",
+                "order": 1,
+                "prescription_unit": "reps",
+                "primary_muscles": [
+                  "hamstrings"
+                ],
+                "reps_max": 8,
+                "reps_min": 5,
+                "rest_seconds": 150,
+                "rir_max": 3,
+                "rir_min": 2,
+                "sets": 4,
+                "tempo": null
+              },
+              {
+                "category": "isolation",
+                "exercise_id": "ex_plank",
+                "exercise_name": "Plank",
+                "movement_pattern": "core_anti_extension",
+                "order": 2,
+                "prescription_unit": "time_seconds",
+                "primary_muscles": [
+                  "core"
+                ],
+                "reps_max": 15,
+                "reps_min": 10,
+                "rest_seconds": 60,
+                "rir_max": 2,
+                "rir_min": 1,
+                "sets": 3,
+                "tempo": null,
+                "unit_max": 45,
+                "unit_min": 30
+              },
+              {
+                "category": "isolation",
+                "exercise_id": "ex_pallof",
+                "exercise_name": "Pallof Press",
+                "movement_pattern": "core_anti_rotation",
+                "order": 3,
+                "prescription_unit": "reps",
+                "primary_muscles": [
+                  "core"
+                ],
+                "reps_max": 15,
+                "reps_min": 10,
+                "rest_seconds": 60,
+                "rir_max": 2,
+                "rir_min": 1,
+                "sets": 3,
+                "tempo": null
+              },
+              {
+                "category": "isolation",
+                "exercise_id": "ex_curl",
+                "exercise_name": "Dumbbell Curl",
+                "movement_pattern": "horizontal_pull",
+                "order": 4,
+                "prescription_unit": "reps",
+                "primary_muscles": [
+                  "biceps"
+                ],
+                "reps_max": 15,
+                "reps_min": 10,
+                "rest_seconds": 60,
+                "rir_max": 2,
+                "rir_min": 1,
+                "sets": 3,
+                "tempo": null
+              }
+            ],
+            "focus": "Full Body — biceps + core + hamstrings + quads",
+            "warmup": {
+              "general_minutes": 6,
+              "ramp_set_pattern": [
+                {
+                  "percent_of_working": 40,
+                  "reps": 8
+                },
+                {
+                  "percent_of_working": 60,
+                  "reps": 5
+                },
+                {
+                  "percent_of_working": 80,
+                  "reps": 3
+                }
+              ]
+            },
+            "weekday": "wed"
+          },
+          {
+            "estimated_minutes": 32,
+            "exercises": [
+              {
+                "category": "isolation",
+                "exercise_id": "ex_tri_pushdown",
+                "exercise_name": "Triceps Pushdown",
+                "movement_pattern": "vertical_press",
+                "order": 0,
+                "prescription_unit": "reps",
+                "primary_muscles": [
+                  "triceps"
+                ],
+                "reps_max": 15,
+                "reps_min": 10,
+                "rest_seconds": 60,
+                "rir_max": 2,
+                "rir_min": 1,
+                "sets": 3,
+                "tempo": null
+              },
+              {
+                "category": "isolation",
+                "exercise_id": "ex_calf_raise",
+                "exercise_name": "Calf Raise",
+                "movement_pattern": "squat",
+                "order": 1,
+                "prescription_unit": "reps",
+                "primary_muscles": [
+                  "calves"
+                ],
+                "reps_max": 15,
+                "reps_min": 10,
+                "rest_seconds": 60,
+                "rir_max": 2,
+                "rir_min": 1,
+                "sets": 3,
+                "tempo": null
+              },
+              {
+                "category": "secondary",
+                "exercise_id": "ex_db_bench",
+                "exercise_name": "Dumbbell Bench Press",
+                "movement_pattern": "horizontal_press",
+                "order": 2,
+                "prescription_unit": "reps",
+                "primary_muscles": [
+                  "chest"
+                ],
+                "reps_max": 10,
+                "reps_min": 6,
+                "rest_seconds": 120,
+                "rir_max": 3,
+                "rir_min": 2,
+                "sets": 3,
+                "tempo": null
+              },
+              {
+                "category": "secondary",
+                "exercise_id": "ex_db_row",
+                "exercise_name": "Dumbbell Row",
+                "movement_pattern": "horizontal_pull",
+                "order": 3,
+                "prescription_unit": "reps",
+                "primary_muscles": [
+                  "back_upper"
+                ],
+                "reps_max": 10,
+                "reps_min": 6,
+                "rest_seconds": 120,
+                "rir_max": 3,
+                "rir_min": 2,
+                "sets": 3,
+                "tempo": null
+              },
+              {
+                "category": "secondary",
+                "exercise_id": "ex_lunge",
+                "exercise_name": "Walking Lunge",
+                "movement_pattern": "lunge",
+                "order": 4,
+                "prescription_unit": "reps",
+                "primary_muscles": [
+                  "quads"
+                ],
+                "reps_max": 10,
+                "reps_min": 6,
+                "rest_seconds": 120,
+                "rir_max": 3,
+                "rir_min": 2,
+                "sets": 3,
+                "tempo": null
+              }
+            ],
+            "focus": "Full Body — back_upper + calves + chest + quads",
+            "warmup": {
+              "general_minutes": 6,
+              "ramp_set_pattern": [
+                {
+                  "percent_of_working": 40,
+                  "reps": 8
+                },
+                {
+                  "percent_of_working": 60,
+                  "reps": 5
+                },
+                {
+                  "percent_of_working": 80,
+                  "reps": 3
+                }
+              ]
+            },
+            "weekday": "fri"
+          }
+        ]
+      },
+      {
+        "is_deload": false,
+        "week_index": 3,
+        "weekly_volume_actual": {
+          "back_lats": 4,
+          "back_upper": 7,
+          "biceps": 3,
+          "calves": 3,
+          "chest": 7,
+          "core": 6,
+          "glutes": 0,
+          "hamstrings": 4,
+          "quads": 7,
+          "shoulders_lateral": 4,
+          "shoulders_rear": 0,
+          "triceps": 3
+        },
+        "workout_days": [
+          {
+            "estimated_minutes": 48,
+            "exercises": [
+              {
+                "category": "primary",
+                "exercise_id": "ex_bench",
+                "exercise_name": "Barbell Bench Press",
+                "movement_pattern": "horizontal_press",
+                "order": 0,
+                "prescription_unit": "reps",
+                "primary_muscles": [
+                  "chest"
+                ],
+                "reps_max": 8,
+                "reps_min": 5,
+                "rest_seconds": 150,
+                "rir_max": 3,
+                "rir_min": 2,
+                "sets": 4,
+                "tempo": null
+              },
+              {
+                "category": "primary",
+                "exercise_id": "ex_row",
+                "exercise_name": "Barbell Row",
+                "movement_pattern": "horizontal_pull",
+                "order": 1,
+                "prescription_unit": "reps",
+                "primary_muscles": [
+                  "back_upper"
+                ],
+                "reps_max": 8,
+                "reps_min": 5,
+                "rest_seconds": 150,
+                "rir_max": 3,
+                "rir_min": 2,
+                "sets": 4,
+                "tempo": null
+              },
+              {
+                "category": "primary",
+                "exercise_id": "ex_ohp",
+                "exercise_name": "Overhead Press",
+                "movement_pattern": "vertical_press",
+                "order": 2,
+                "prescription_unit": "reps",
+                "primary_muscles": [
+                  "shoulders_lateral"
+                ],
+                "reps_max": 8,
+                "reps_min": 5,
+                "rest_seconds": 150,
+                "rir_max": 3,
+                "rir_min": 2,
+                "sets": 4,
+                "tempo": null
+              },
+              {
+                "category": "primary",
+                "exercise_id": "ex_pullup",
+                "exercise_name": "Pull Up",
+                "movement_pattern": "vertical_pull",
+                "order": 3,
+                "prescription_unit": "reps",
+                "primary_muscles": [
+                  "back_lats"
+                ],
+                "reps_max": 8,
+                "reps_min": 5,
+                "rest_seconds": 150,
+                "rir_max": 3,
+                "rir_min": 2,
+                "sets": 4,
+                "tempo": null
+              }
+            ],
+            "focus": "Full Body — back_lats + back_upper + chest + shoulders_lateral",
+            "warmup": {
+              "general_minutes": 6,
+              "ramp_set_pattern": [
+                {
+                  "percent_of_working": 40,
+                  "reps": 8
+                },
+                {
+                  "percent_of_working": 60,
+                  "reps": 5
+                },
+                {
+                  "percent_of_working": 80,
+                  "reps": 3
+                }
+              ]
+            },
+            "weekday": "mon"
+          },
+          {
+            "estimated_minutes": 38,
+            "exercises": [
+              {
+                "category": "primary",
+                "exercise_id": "ex_back_squat",
+                "exercise_name": "Back Squat",
+                "movement_pattern": "squat",
+                "order": 0,
+                "prescription_unit": "reps",
+                "primary_muscles": [
+                  "quads"
+                ],
+                "reps_max": 8,
+                "reps_min": 5,
+                "rest_seconds": 150,
+                "rir_max": 3,
+                "rir_min": 2,
+                "sets": 4,
+                "tempo": null
+              },
+              {
+                "category": "primary",
+                "exercise_id": "ex_dl",
+                "exercise_name": "Deadlift",
+                "movement_pattern": "hinge",
+                "order": 1,
+                "prescription_unit": "reps",
+                "primary_muscles": [
+                  "hamstrings"
+                ],
+                "reps_max": 8,
+                "reps_min": 5,
+                "rest_seconds": 150,
+                "rir_max": 3,
+                "rir_min": 2,
+                "sets": 4,
+                "tempo": null
+              },
+              {
+                "category": "isolation",
+                "exercise_id": "ex_plank",
+                "exercise_name": "Plank",
+                "movement_pattern": "core_anti_extension",
+                "order": 2,
+                "prescription_unit": "time_seconds",
+                "primary_muscles": [
+                  "core"
+                ],
+                "reps_max": 15,
+                "reps_min": 10,
+                "rest_seconds": 60,
+                "rir_max": 2,
+                "rir_min": 1,
+                "sets": 3,
+                "tempo": null,
+                "unit_max": 45,
+                "unit_min": 30
+              },
+              {
+                "category": "isolation",
+                "exercise_id": "ex_pallof",
+                "exercise_name": "Pallof Press",
+                "movement_pattern": "core_anti_rotation",
+                "order": 3,
+                "prescription_unit": "reps",
+                "primary_muscles": [
+                  "core"
+                ],
+                "reps_max": 15,
+                "reps_min": 10,
+                "rest_seconds": 60,
+                "rir_max": 2,
+                "rir_min": 1,
+                "sets": 3,
+                "tempo": null
+              },
+              {
+                "category": "isolation",
+                "exercise_id": "ex_curl",
+                "exercise_name": "Dumbbell Curl",
+                "movement_pattern": "horizontal_pull",
+                "order": 4,
+                "prescription_unit": "reps",
+                "primary_muscles": [
+                  "biceps"
+                ],
+                "reps_max": 15,
+                "reps_min": 10,
+                "rest_seconds": 60,
+                "rir_max": 2,
+                "rir_min": 1,
+                "sets": 3,
+                "tempo": null
+              }
+            ],
+            "focus": "Full Body — biceps + core + hamstrings + quads",
+            "warmup": {
+              "general_minutes": 6,
+              "ramp_set_pattern": [
+                {
+                  "percent_of_working": 40,
+                  "reps": 8
+                },
+                {
+                  "percent_of_working": 60,
+                  "reps": 5
+                },
+                {
+                  "percent_of_working": 80,
+                  "reps": 3
+                }
+              ]
+            },
+            "weekday": "wed"
+          },
+          {
+            "estimated_minutes": 32,
+            "exercises": [
+              {
+                "category": "isolation",
+                "exercise_id": "ex_tri_pushdown",
+                "exercise_name": "Triceps Pushdown",
+                "movement_pattern": "vertical_press",
+                "order": 0,
+                "prescription_unit": "reps",
+                "primary_muscles": [
+                  "triceps"
+                ],
+                "reps_max": 15,
+                "reps_min": 10,
+                "rest_seconds": 60,
+                "rir_max": 2,
+                "rir_min": 1,
+                "sets": 3,
+                "tempo": null
+              },
+              {
+                "category": "isolation",
+                "exercise_id": "ex_calf_raise",
+                "exercise_name": "Calf Raise",
+                "movement_pattern": "squat",
+                "order": 1,
+                "prescription_unit": "reps",
+                "primary_muscles": [
+                  "calves"
+                ],
+                "reps_max": 15,
+                "reps_min": 10,
+                "rest_seconds": 60,
+                "rir_max": 2,
+                "rir_min": 1,
+                "sets": 3,
+                "tempo": null
+              },
+              {
+                "category": "secondary",
+                "exercise_id": "ex_db_bench",
+                "exercise_name": "Dumbbell Bench Press",
+                "movement_pattern": "horizontal_press",
+                "order": 2,
+                "prescription_unit": "reps",
+                "primary_muscles": [
+                  "chest"
+                ],
+                "reps_max": 10,
+                "reps_min": 6,
+                "rest_seconds": 120,
+                "rir_max": 3,
+                "rir_min": 2,
+                "sets": 3,
+                "tempo": null
+              },
+              {
+                "category": "secondary",
+                "exercise_id": "ex_db_row",
+                "exercise_name": "Dumbbell Row",
+                "movement_pattern": "horizontal_pull",
+                "order": 3,
+                "prescription_unit": "reps",
+                "primary_muscles": [
+                  "back_upper"
+                ],
+                "reps_max": 10,
+                "reps_min": 6,
+                "rest_seconds": 120,
+                "rir_max": 3,
+                "rir_min": 2,
+                "sets": 3,
+                "tempo": null
+              },
+              {
+                "category": "secondary",
+                "exercise_id": "ex_lunge",
+                "exercise_name": "Walking Lunge",
+                "movement_pattern": "lunge",
+                "order": 4,
+                "prescription_unit": "reps",
+                "primary_muscles": [
+                  "quads"
+                ],
+                "reps_max": 10,
+                "reps_min": 6,
+                "rest_seconds": 120,
+                "rir_max": 3,
+                "rir_min": 2,
+                "sets": 3,
+                "tempo": null
+              }
+            ],
+            "focus": "Full Body — back_upper + calves + chest + quads",
+            "warmup": {
+              "general_minutes": 6,
+              "ramp_set_pattern": [
+                {
+                  "percent_of_working": 40,
+                  "reps": 8
+                },
+                {
+                  "percent_of_working": 60,
+                  "reps": 5
+                },
+                {
+                  "percent_of_working": 80,
+                  "reps": 3
+                }
+              ]
+            },
+            "weekday": "fri"
+          }
+        ]
+      },
+      {
+        "is_deload": false,
+        "week_index": 4,
+        "weekly_volume_actual": {
+          "back_lats": 4,
+          "back_upper": 7,
+          "biceps": 3,
+          "calves": 3,
+          "chest": 7,
+          "core": 6,
+          "glutes": 0,
+          "hamstrings": 4,
+          "quads": 7,
+          "shoulders_lateral": 4,
+          "shoulders_rear": 0,
+          "triceps": 3
+        },
+        "workout_days": [
+          {
+            "estimated_minutes": 48,
+            "exercises": [
+              {
+                "category": "primary",
+                "exercise_id": "ex_bench",
+                "exercise_name": "Barbell Bench Press",
+                "movement_pattern": "horizontal_press",
+                "order": 0,
+                "prescription_unit": "reps",
+                "primary_muscles": [
+                  "chest"
+                ],
+                "reps_max": 8,
+                "reps_min": 5,
+                "rest_seconds": 150,
+                "rir_max": 3,
+                "rir_min": 2,
+                "sets": 4,
+                "tempo": null
+              },
+              {
+                "category": "primary",
+                "exercise_id": "ex_row",
+                "exercise_name": "Barbell Row",
+                "movement_pattern": "horizontal_pull",
+                "order": 1,
+                "prescription_unit": "reps",
+                "primary_muscles": [
+                  "back_upper"
+                ],
+                "reps_max": 8,
+                "reps_min": 5,
+                "rest_seconds": 150,
+                "rir_max": 3,
+                "rir_min": 2,
+                "sets": 4,
+                "tempo": null
+              },
+              {
+                "category": "primary",
+                "exercise_id": "ex_ohp",
+                "exercise_name": "Overhead Press",
+                "movement_pattern": "vertical_press",
+                "order": 2,
+                "prescription_unit": "reps",
+                "primary_muscles": [
+                  "shoulders_lateral"
+                ],
+                "reps_max": 8,
+                "reps_min": 5,
+                "rest_seconds": 150,
+                "rir_max": 3,
+                "rir_min": 2,
+                "sets": 4,
+                "tempo": null
+              },
+              {
+                "category": "primary",
+                "exercise_id": "ex_pullup",
+                "exercise_name": "Pull Up",
+                "movement_pattern": "vertical_pull",
+                "order": 3,
+                "prescription_unit": "reps",
+                "primary_muscles": [
+                  "back_lats"
+                ],
+                "reps_max": 8,
+                "reps_min": 5,
+                "rest_seconds": 150,
+                "rir_max": 3,
+                "rir_min": 2,
+                "sets": 4,
+                "tempo": null
+              }
+            ],
+            "focus": "Full Body — back_lats + back_upper + chest + shoulders_lateral",
+            "warmup": {
+              "general_minutes": 6,
+              "ramp_set_pattern": [
+                {
+                  "percent_of_working": 40,
+                  "reps": 8
+                },
+                {
+                  "percent_of_working": 60,
+                  "reps": 5
+                },
+                {
+                  "percent_of_working": 80,
+                  "reps": 3
+                }
+              ]
+            },
+            "weekday": "mon"
+          },
+          {
+            "estimated_minutes": 38,
+            "exercises": [
+              {
+                "category": "primary",
+                "exercise_id": "ex_back_squat",
+                "exercise_name": "Back Squat",
+                "movement_pattern": "squat",
+                "order": 0,
+                "prescription_unit": "reps",
+                "primary_muscles": [
+                  "quads"
+                ],
+                "reps_max": 8,
+                "reps_min": 5,
+                "rest_seconds": 150,
+                "rir_max": 3,
+                "rir_min": 2,
+                "sets": 4,
+                "tempo": null
+              },
+              {
+                "category": "primary",
+                "exercise_id": "ex_dl",
+                "exercise_name": "Deadlift",
+                "movement_pattern": "hinge",
+                "order": 1,
+                "prescription_unit": "reps",
+                "primary_muscles": [
+                  "hamstrings"
+                ],
+                "reps_max": 8,
+                "reps_min": 5,
+                "rest_seconds": 150,
+                "rir_max": 3,
+                "rir_min": 2,
+                "sets": 4,
+                "tempo": null
+              },
+              {
+                "category": "isolation",
+                "exercise_id": "ex_plank",
+                "exercise_name": "Plank",
+                "movement_pattern": "core_anti_extension",
+                "order": 2,
+                "prescription_unit": "time_seconds",
+                "primary_muscles": [
+                  "core"
+                ],
+                "reps_max": 15,
+                "reps_min": 10,
+                "rest_seconds": 60,
+                "rir_max": 2,
+                "rir_min": 1,
+                "sets": 3,
+                "tempo": null,
+                "unit_max": 45,
+                "unit_min": 30
+              },
+              {
+                "category": "isolation",
+                "exercise_id": "ex_pallof",
+                "exercise_name": "Pallof Press",
+                "movement_pattern": "core_anti_rotation",
+                "order": 3,
+                "prescription_unit": "reps",
+                "primary_muscles": [
+                  "core"
+                ],
+                "reps_max": 15,
+                "reps_min": 10,
+                "rest_seconds": 60,
+                "rir_max": 2,
+                "rir_min": 1,
+                "sets": 3,
+                "tempo": null
+              },
+              {
+                "category": "isolation",
+                "exercise_id": "ex_curl",
+                "exercise_name": "Dumbbell Curl",
+                "movement_pattern": "horizontal_pull",
+                "order": 4,
+                "prescription_unit": "reps",
+                "primary_muscles": [
+                  "biceps"
+                ],
+                "reps_max": 15,
+                "reps_min": 10,
+                "rest_seconds": 60,
+                "rir_max": 2,
+                "rir_min": 1,
+                "sets": 3,
+                "tempo": null
+              }
+            ],
+            "focus": "Full Body — biceps + core + hamstrings + quads",
+            "warmup": {
+              "general_minutes": 6,
+              "ramp_set_pattern": [
+                {
+                  "percent_of_working": 40,
+                  "reps": 8
+                },
+                {
+                  "percent_of_working": 60,
+                  "reps": 5
+                },
+                {
+                  "percent_of_working": 80,
+                  "reps": 3
+                }
+              ]
+            },
+            "weekday": "wed"
+          },
+          {
+            "estimated_minutes": 32,
+            "exercises": [
+              {
+                "category": "isolation",
+                "exercise_id": "ex_tri_pushdown",
+                "exercise_name": "Triceps Pushdown",
+                "movement_pattern": "vertical_press",
+                "order": 0,
+                "prescription_unit": "reps",
+                "primary_muscles": [
+                  "triceps"
+                ],
+                "reps_max": 15,
+                "reps_min": 10,
+                "rest_seconds": 60,
+                "rir_max": 2,
+                "rir_min": 1,
+                "sets": 3,
+                "tempo": null
+              },
+              {
+                "category": "isolation",
+                "exercise_id": "ex_calf_raise",
+                "exercise_name": "Calf Raise",
+                "movement_pattern": "squat",
+                "order": 1,
+                "prescription_unit": "reps",
+                "primary_muscles": [
+                  "calves"
+                ],
+                "reps_max": 15,
+                "reps_min": 10,
+                "rest_seconds": 60,
+                "rir_max": 2,
+                "rir_min": 1,
+                "sets": 3,
+                "tempo": null
+              },
+              {
+                "category": "secondary",
+                "exercise_id": "ex_db_bench",
+                "exercise_name": "Dumbbell Bench Press",
+                "movement_pattern": "horizontal_press",
+                "order": 2,
+                "prescription_unit": "reps",
+                "primary_muscles": [
+                  "chest"
+                ],
+                "reps_max": 10,
+                "reps_min": 6,
+                "rest_seconds": 120,
+                "rir_max": 3,
+                "rir_min": 2,
+                "sets": 3,
+                "tempo": null
+              },
+              {
+                "category": "secondary",
+                "exercise_id": "ex_db_row",
+                "exercise_name": "Dumbbell Row",
+                "movement_pattern": "horizontal_pull",
+                "order": 3,
+                "prescription_unit": "reps",
+                "primary_muscles": [
+                  "back_upper"
+                ],
+                "reps_max": 10,
+                "reps_min": 6,
+                "rest_seconds": 120,
+                "rir_max": 3,
+                "rir_min": 2,
+                "sets": 3,
+                "tempo": null
+              },
+              {
+                "category": "secondary",
+                "exercise_id": "ex_lunge",
+                "exercise_name": "Walking Lunge",
+                "movement_pattern": "lunge",
+                "order": 4,
+                "prescription_unit": "reps",
+                "primary_muscles": [
+                  "quads"
+                ],
+                "reps_max": 10,
+                "reps_min": 6,
+                "rest_seconds": 120,
+                "rir_max": 3,
+                "rir_min": 2,
+                "sets": 3,
+                "tempo": null
+              }
+            ],
+            "focus": "Full Body — back_upper + calves + chest + quads",
+            "warmup": {
+              "general_minutes": 6,
+              "ramp_set_pattern": [
+                {
+                  "percent_of_working": 40,
+                  "reps": 8
+                },
+                {
+                  "percent_of_working": 60,
+                  "reps": 5
+                },
+                {
+                  "percent_of_working": 80,
+                  "reps": 3
+                }
+              ]
+            },
+            "weekday": "fri"
+          }
+        ]
+      }
+    ]
+  },
+  "spec": {
+    "decisions": [
+      {
+        "field": "workout.volume_targets.chest.target",
+        "inputs": [
+          "experience_level",
+          "goal_type",
+          "sex"
+        ],
+        "source": "volume_targets@1#beginner_maintain_male_chest",
+        "value": 8
+      },
+      {
+        "field": "workout.volume_targets.back_lats.target",
+        "inputs": [
+          "experience_level",
+          "goal_type",
+          "sex"
+        ],
+        "source": "volume_targets@1#beginner_maintain_male_back_lats",
+        "value": 10
+      },
+      {
+        "field": "workout.volume_targets.back_upper.target",
+        "inputs": [
+          "experience_level",
+          "goal_type",
+          "sex"
+        ],
+        "source": "volume_targets@1#beginner_maintain_male_back_upper",
+        "value": 8
+      },
+      {
+        "field": "workout.volume_targets.shoulders_lateral.target",
+        "inputs": [
+          "experience_level",
+          "goal_type",
+          "sex"
+        ],
+        "source": "volume_targets@1#beginner_maintain_male_shoulders_lateral",
+        "value": 8
+      },
+      {
+        "field": "workout.volume_targets.shoulders_rear.target",
+        "inputs": [
+          "experience_level",
+          "goal_type",
+          "sex"
+        ],
+        "source": "volume_targets@1#beginner_maintain_male_shoulders_rear",
+        "value": 6
+      },
+      {
+        "field": "workout.volume_targets.biceps.target",
+        "inputs": [
+          "experience_level",
+          "goal_type",
+          "sex"
+        ],
+        "source": "volume_targets@1#beginner_maintain_male_biceps",
+        "value": 6
+      },
+      {
+        "field": "workout.volume_targets.triceps.target",
+        "inputs": [
+          "experience_level",
+          "goal_type",
+          "sex"
+        ],
+        "source": "volume_targets@1#beginner_maintain_male_triceps",
+        "value": 6
+      },
+      {
+        "field": "workout.volume_targets.quads.target",
+        "inputs": [
+          "experience_level",
+          "goal_type",
+          "sex"
+        ],
+        "source": "volume_targets@1#beginner_maintain_male_quads",
+        "value": 8
+      },
+      {
+        "field": "workout.volume_targets.hamstrings.target",
+        "inputs": [
+          "experience_level",
+          "goal_type",
+          "sex"
+        ],
+        "source": "volume_targets@1#beginner_maintain_male_hamstrings",
+        "value": 6
+      },
+      {
+        "field": "workout.volume_targets.glutes.target",
+        "inputs": [
+          "experience_level",
+          "goal_type",
+          "sex"
+        ],
+        "source": "volume_targets@1#beginner_maintain_male_glutes",
+        "value": 6
+      },
+      {
+        "field": "workout.volume_targets.calves.target",
+        "inputs": [
+          "experience_level",
+          "goal_type",
+          "sex"
+        ],
+        "source": "volume_targets@1#beginner_maintain_male_calves",
+        "value": 6
+      },
+      {
+        "field": "workout.volume_targets.core.target",
+        "inputs": [
+          "experience_level",
+          "goal_type",
+          "sex"
+        ],
+        "source": "volume_targets@1#beginner_maintain_male_core",
+        "value": 4
+      },
+      {
+        "field": "workout.intensity_by_category.primary.rir_target",
+        "inputs": [
+          "goal_type"
+        ],
+        "source": "intensity_targets@1#maintain_primary",
+        "value": "2-3"
+      },
+      {
+        "field": "workout.intensity_by_category.secondary.rir_target",
+        "inputs": [
+          "goal_type"
+        ],
+        "source": "intensity_targets@1#maintain_secondary",
+        "value": "2-3"
+      },
+      {
+        "field": "workout.intensity_by_category.accessory.rir_target",
+        "inputs": [
+          "goal_type"
+        ],
+        "source": "intensity_targets@1#maintain_accessory",
+        "value": "1-3"
+      },
+      {
+        "field": "workout.intensity_by_category.isolation.rir_target",
+        "inputs": [
+          "goal_type"
+        ],
+        "source": "intensity_targets@1#maintain_isolation",
+        "value": "1-2"
+      },
+      {
+        "field": "workout.calendar",
+        "inputs": [
+          "training_days",
+          "preferred_days_off",
+          "training_days_per_week"
+        ],
+        "rationale": "honored user training_days exactly",
+        "source": "derived",
+        "value": "workout,rest,workout,rest,workout,rest,rest"
+      },
+      {
+        "field": "workout.session_minutes_target",
+        "inputs": [
+          "minutes_per_workout"
+        ],
+        "source": "derived",
+        "value": 45
+      },
+      {
+        "field": "workout.split_template",
+        "inputs": [
+          "training_days_per_week",
+          "experience_level",
+          "preferred_split_family"
+        ],
+        "rationale": "beginner default — full body builds movement-pattern mastery before specialization",
+        "source": "derived",
+        "value": "full_body:full_body,full_body,full_body"
+      },
+      {
+        "field": "nutrition.protein_g",
+        "inputs": [
+          "goal_type",
+          "age_years",
+          "sex",
+          "current_weight_kg"
+        ],
+        "rationale": "1.9 g/kg × 81.6 kg",
+        "source": "protein_targets@1#maintain_40_to_59_male",
+        "value": 155
+      },
+      {
+        "field": "nutrition.fat_pct",
+        "inputs": [
+          "goal_type",
+          "age_years",
+          "sex",
+          "dietary_preference"
+        ],
+        "rationale": "+2% for male age 40+ hormonal support",
+        "source": "derived",
+        "value": 0.32
+      },
+      {
+        "field": "nutrition.training_day.kcal",
+        "inputs": [
+          "goal_type"
+        ],
+        "source": "carb_cycling@1#maintain",
+        "value": 2706
+      },
+      {
+        "field": "nutrition.rest_day.kcal",
+        "inputs": [
+          "goal_type"
+        ],
+        "source": "carb_cycling@1#maintain",
+        "value": 2706
+      }
+    ],
+    "generated_at": "FIXED",
+    "nutrition": {
+      "hard_exclude_tags": [],
+      "horizon_weeks": 4,
+      "max_repeats_of_template_per_week": 2,
+      "meals_per_day": 3,
+      "micronutrient_gates": [
+        {
+          "nutrient": "omega_3",
+          "source": {
+            "confidence": "high",
+            "source": "NIH ODS — Omega-3 Fatty Acids (Dietary Reference Intakes)",
+            "url": "https://ods.od.nih.gov/factsheets/Omega3FattyAcids-HealthProfessional/",
+            "year": 2025
+          },
+          "weekly_min": 1750,
+          "weekly_unit": "mg"
+        },
+        {
+          "nutrient": "vitamin_d",
+          "source": {
+            "confidence": "high",
+            "source": "NIH ODS — Vitamin D (Dietary Reference Intakes)",
+            "url": "https://ods.od.nih.gov/factsheets/VitaminD-HealthProfessional/",
+            "year": 2025
+          },
+          "weekly_min": 105,
+          "weekly_unit": "mcg"
+        },
+        {
+          "nutrient": "iron",
+          "source": {
+            "confidence": "high",
+            "source": "NIH ODS — Iron (Dietary Reference Intakes)",
+            "url": "https://ods.od.nih.gov/factsheets/Iron-HealthProfessional/",
+            "year": 2025
+          },
+          "weekly_min": 56,
+          "weekly_unit": "mg"
+        },
+        {
+          "nutrient": "calcium",
+          "source": {
+            "confidence": "high",
+            "source": "NIH ODS — Calcium (Dietary Reference Intakes)",
+            "url": "https://ods.od.nih.gov/factsheets/Calcium-HealthProfessional/",
+            "year": 2025
+          },
+          "weekly_min": 7000,
+          "weekly_unit": "mg"
+        },
+        {
+          "nutrient": "choline",
+          "source": {
+            "confidence": "high",
+            "source": "NIH ODS — Choline (Dietary Reference Intakes)",
+            "url": "https://ods.od.nih.gov/factsheets/Choline-HealthProfessional/",
+            "year": 2025
+          },
+          "weekly_min": 3850,
+          "weekly_unit": "mg"
+        },
+        {
+          "nutrient": "magnesium",
+          "source": {
+            "confidence": "high",
+            "source": "NIH ODS — Magnesium (Dietary Reference Intakes)",
+            "url": "https://ods.od.nih.gov/factsheets/Magnesium-HealthProfessional/",
+            "year": 2025
+          },
+          "weekly_min": 2940,
+          "weekly_unit": "mg"
+        },
+        {
+          "nutrient": "zinc",
+          "source": {
+            "confidence": "high",
+            "source": "NIH ODS — Zinc (Dietary Reference Intakes)",
+            "url": "https://ods.od.nih.gov/factsheets/Zinc-HealthProfessional/",
+            "year": 2025
+          },
+          "weekly_min": 77,
+          "weekly_unit": "mg"
+        },
+        {
+          "nutrient": "vitamin_b12",
+          "source": {
+            "confidence": "high",
+            "source": "NIH ODS — Vitamin B12 (Dietary Reference Intakes)",
+            "url": "https://ods.od.nih.gov/factsheets/VitaminB12-HealthProfessional/",
+            "year": 2025
+          },
+          "weekly_min": 16.8,
+          "weekly_unit": "mcg"
+        }
+      ],
+      "min_unique_templates_per_slot_per_week": 3,
+      "rest_day": {
+        "carbs_g": 305,
+        "fat_g": 96,
+        "fiber_g": 38,
+        "kcal": 2706,
+        "protein_g": 155,
+        "slots": [
+          {
+            "carb_density": "medium",
+            "fat_density": "medium",
+            "is_snack": false,
+            "required_food_categories": [],
+            "slot": "breakfast",
+            "target_carb_share": 0.3,
+            "target_fat_share": 0.3,
+            "target_kcal_share": 0.3,
+            "target_protein_share": 0.3
+          },
+          {
+            "carb_density": "high",
+            "fat_density": "medium",
+            "is_snack": false,
+            "required_food_categories": [],
+            "slot": "lunch",
+            "target_carb_share": 0.4,
+            "target_fat_share": 0.35,
+            "target_kcal_share": 0.4,
+            "target_protein_share": 0.35
+          },
+          {
+            "carb_density": "medium",
+            "fat_density": "medium",
+            "is_snack": false,
+            "required_food_categories": [],
+            "slot": "dinner",
+            "target_carb_share": 0.3,
+            "target_fat_share": 0.35,
+            "target_kcal_share": 0.3,
+            "target_protein_share": 0.35
+          }
+        ],
+        "source": {
+          "confidence": "high",
+          "source": "Aragon & Schoenfeld (2013); Kerksick et al. ISSN (2017)"
+        },
+        "water_ml": 2744
+      },
+      "training_calendar": {
+        "fri": "workout",
+        "mon": "workout",
+        "sat": "rest",
+        "sun": "rest",
+        "thu": "rest",
+        "tue": "rest",
+        "wed": "workout"
+      },
+      "training_day": {
+        "carbs_g": 305,
+        "fat_g": 96,
+        "fiber_g": 38,
+        "kcal": 2706,
+        "protein_g": 155,
+        "slots": [
+          {
+            "carb_density": "medium",
+            "fat_density": "medium",
+            "is_snack": false,
+            "required_food_categories": [],
+            "slot": "breakfast",
+            "target_carb_share": 0.2,
+            "target_fat_share": 0.3,
+            "target_kcal_share": 0.25,
+            "target_protein_share": 0.3
+          },
+          {
+            "carb_density": "high",
+            "fat_density": "medium",
+            "is_snack": false,
+            "required_food_categories": [],
+            "slot": "lunch",
+            "target_carb_share": 0.5,
+            "target_fat_share": 0.35,
+            "target_kcal_share": 0.45,
+            "target_protein_share": 0.35
+          },
+          {
+            "carb_density": "medium",
+            "fat_density": "medium",
+            "is_snack": false,
+            "required_food_categories": [],
+            "slot": "dinner",
+            "target_carb_share": 0.3,
+            "target_fat_share": 0.35,
+            "target_kcal_share": 0.3,
+            "target_protein_share": 0.35
+          }
+        ],
+        "source": {
+          "confidence": "high",
+          "source": "Aragon & Schoenfeld (2013); Kerksick et al. ISSN (2017)"
+        },
+        "water_ml": 3049
+      },
+      "weekly_food_minimums": [
+        {
+          "min_appearances": 2,
+          "origin": "preference",
+          "tag": "chicken"
+        },
+        {
+          "min_appearances": 2,
+          "origin": "preference",
+          "tag": "eggs"
+        },
+        {
+          "min_appearances": 2,
+          "origin": "preference",
+          "tag": "greek_yogurt"
+        },
+        {
+          "min_appearances": 2,
+          "origin": "preference",
+          "tag": "oats"
+        },
+        {
+          "min_appearances": 2,
+          "origin": "preference",
+          "tag": "rice"
+        },
+        {
+          "min_appearances": 2,
+          "origin": "preference",
+          "tag": "sweet_potato"
+        },
+        {
+          "min_appearances": 2,
+          "origin": "preference",
+          "tag": "almonds"
+        },
+        {
+          "min_appearances": 2,
+          "origin": "preference",
+          "tag": "avocado"
+        },
+        {
+          "min_appearances": 2,
+          "origin": "preference",
+          "tag": "olive_oil"
+        },
+        {
+          "min_appearances": 2,
+          "origin": "science",
+          "tag": "fish"
+        },
+        {
+          "min_appearances": 3,
+          "origin": "science",
+          "tag": "eggs"
+        },
+        {
+          "min_appearances": 5,
+          "origin": "science",
+          "tag": "leafy_green"
+        },
+        {
+          "min_appearances": 3,
+          "origin": "science",
+          "tag": "cruciferous"
+        }
+      ]
+    },
+    "plan_spec_version": 1,
+    "science_table_versions": {
+      "carb_cycling": 1,
+      "hydration": 1,
+      "intensity": 1,
+      "micronutrient_minimums": 1,
+      "protein_targets": 1,
+      "slot_ratios": 1,
+      "volume": 1
+    },
+    "seed": "94c2861810eaa830",
+    "user_state_version": 1,
+    "workout": {
+      "calendar": {
+        "fri": "workout",
+        "mon": "workout",
+        "sat": "rest",
+        "sun": "rest",
+        "thu": "rest",
+        "tue": "rest",
+        "wed": "workout"
+      },
+      "days_per_week": 3,
+      "exclude_exercise_tags": [
+        "contraindicated_for_none"
+      ],
+      "exclude_movement_patterns": [],
+      "horizon_weeks": 4,
+      "intensity_by_category": {
+        "accessory": {
+          "category": "accessory",
+          "rep_range": [
+            8,
+            12
+          ],
+          "rest_seconds": 90,
+          "rir_target": [
+            1,
+            3
+          ]
+        },
+        "isolation": {
+          "category": "isolation",
+          "rep_range": [
+            10,
+            15
+          ],
+          "rest_seconds": 60,
+          "rir_target": [
+            1,
+            2
+          ]
+        },
+        "primary": {
+          "category": "primary",
+          "rep_range": [
+            5,
+            8
+          ],
+          "rest_seconds": 150,
+          "rir_target": [
+            2,
+            3
+          ]
+        },
+        "secondary": {
+          "category": "secondary",
+          "rep_range": [
+            6,
+            10
+          ],
+          "rest_seconds": 120,
+          "rir_target": [
+            2,
+            3
+          ]
+        }
+      },
+      "required_movement_patterns": [
+        {
+          "min_per_week": 1,
+          "pattern": "horizontal_press"
+        },
+        {
+          "min_per_week": 1,
+          "pattern": "horizontal_pull"
+        },
+        {
+          "min_per_week": 1,
+          "pattern": "vertical_press"
+        },
+        {
+          "min_per_week": 1,
+          "pattern": "vertical_pull"
+        },
+        {
+          "min_per_week": 1,
+          "pattern": "squat"
+        },
+        {
+          "min_per_week": 1,
+          "pattern": "hinge"
+        },
+        {
+          "min_per_week": 1,
+          "pattern": "core_anti_extension"
+        },
+        {
+          "min_per_week": 1,
+          "pattern": "core_anti_rotation"
+        }
+      ],
+      "session_minutes_min": 36,
+      "session_minutes_target": 45,
+      "split_family": "full_body",
+      "split_template": [
+        "full_body",
+        "full_body",
+        "full_body"
+      ],
+      "volume_targets": {
+        "back_lats": {
+          "mav": 25,
+          "mev": 10,
+          "source": {
+            "confidence": "medium",
+            "source": "Israetel, Hoffmann, Smith (Renaissance Periodization). MEV/MAV practical framework anchored to Schoenfeld 2017.",
+            "year": 2019
+          },
+          "target": 10
+        },
+        "back_upper": {
+          "mav": 22,
+          "mev": 8,
+          "source": {
+            "confidence": "medium",
+            "source": "Israetel, Hoffmann, Smith (Renaissance Periodization). MEV/MAV practical framework anchored to Schoenfeld 2017.",
+            "year": 2019
+          },
+          "target": 8
+        },
+        "biceps": {
+          "mav": 20,
+          "mev": 6,
+          "source": {
+            "confidence": "medium",
+            "source": "Israetel, Hoffmann, Smith (Renaissance Periodization). MEV/MAV practical framework anchored to Schoenfeld 2017.",
+            "year": 2019
+          },
+          "target": 6
+        },
+        "calves": {
+          "mav": 18,
+          "mev": 6,
+          "source": {
+            "confidence": "medium",
+            "source": "Israetel, Hoffmann, Smith (Renaissance Periodization). MEV/MAV practical framework anchored to Schoenfeld 2017.",
+            "year": 2019
+          },
+          "target": 6
+        },
+        "chest": {
+          "mav": 22,
+          "mev": 8,
+          "source": {
+            "confidence": "medium",
+            "source": "Israetel, Hoffmann, Smith (Renaissance Periodization). MEV/MAV practical framework anchored to Schoenfeld 2017.",
+            "year": 2019
+          },
+          "target": 8
+        },
+        "core": {
+          "mav": 16,
+          "mev": 4,
+          "source": {
+            "confidence": "medium",
+            "source": "Israetel, Hoffmann, Smith (Renaissance Periodization). MEV/MAV practical framework anchored to Schoenfeld 2017.",
+            "year": 2019
+          },
+          "target": 4
+        },
+        "glutes": {
+          "mav": 22,
+          "mev": 6,
+          "source": {
+            "confidence": "medium",
+            "source": "Israetel, Hoffmann, Smith (Renaissance Periodization). MEV/MAV practical framework anchored to Schoenfeld 2017.",
+            "year": 2019
+          },
+          "target": 6
+        },
+        "hamstrings": {
+          "mav": 18,
+          "mev": 6,
+          "source": {
+            "confidence": "medium",
+            "source": "Israetel, Hoffmann, Smith (Renaissance Periodization). MEV/MAV practical framework anchored to Schoenfeld 2017.",
+            "year": 2019
+          },
+          "target": 6
+        },
+        "quads": {
+          "mav": 20,
+          "mev": 8,
+          "source": {
+            "confidence": "medium",
+            "source": "Israetel, Hoffmann, Smith (Renaissance Periodization). MEV/MAV practical framework anchored to Schoenfeld 2017.",
+            "year": 2019
+          },
+          "target": 8
+        },
+        "shoulders_lateral": {
+          "mav": 22,
+          "mev": 8,
+          "source": {
+            "confidence": "medium",
+            "source": "Israetel, Hoffmann, Smith (Renaissance Periodization). MEV/MAV practical framework anchored to Schoenfeld 2017.",
+            "year": 2019
+          },
+          "target": 8
+        },
+        "shoulders_rear": {
+          "mav": 20,
+          "mev": 6,
+          "source": {
+            "confidence": "medium",
+            "source": "Israetel, Hoffmann, Smith (Renaissance Periodization). MEV/MAV practical framework anchored to Schoenfeld 2017.",
+            "year": 2019
+          },
+          "target": 6
+        },
+        "triceps": {
+          "mav": 20,
+          "mev": 6,
+          "source": {
+            "confidence": "medium",
+            "source": "Israetel, Hoffmann, Smith (Renaissance Periodization). MEV/MAV practical framework anchored to Schoenfeld 2017.",
+            "year": 2019
+          },
+          "target": 6
+        }
+      },
+      "warmup": {
+        "general_minutes": 6,
+        "ramp_set_pattern": [
+          {
+            "percent_of_working": 40,
+            "reps": 8
+          },
+          {
+            "percent_of_working": 60,
+            "reps": 5
+          },
+          {
+            "percent_of_working": 80,
+            "reps": 3
+          }
+        ]
+      }
+    }
+  },
+  "state": {
+    "activity_level": "moderately_active",
+    "age_years": 40,
+    "allergies_exclusions": [
+      "none"
+    ],
+    "allergies_other_text": null,
+    "carb_tolerance": null,
+    "cooking_level": "basic",
+    "current_weight_kg": 81.6,
+    "dietary_preference": "anything",
+    "dietary_preference_other_text": null,
+    "equipment_access": "home_gym",
+    "equipment_other_text": null,
+    "experience_level": "beginner",
+    "first_meal_delay": "immediate",
+    "goal_timeline_weeks": 12,
+    "goal_type": "maintain",
+    "height_cm": 180,
+    "injuries": [
+      "none"
+    ],
+    "injuries_other_text": null,
+    "last_meal_before_bed": "2hrs",
+    "meals_per_day": 3,
+    "minutes_per_workout": 45,
+    "preferred_carbs": [
+      "oats",
+      "rice",
+      "sweet_potato"
+    ],
+    "preferred_days_off": [
+      "tue",
+      "thu",
+      "sat",
+      "sun"
+    ],
+    "preferred_fats": [
+      "almonds",
+      "avocado",
+      "olive_oil"
+    ],
+    "preferred_proteins": [
+      "chicken",
+      "eggs",
+      "greek_yogurt"
+    ],
+    "preferred_split_family": null,
+    "prep_auto_adjust_enabled": false,
+    "prep_discipline": null,
+    "prep_mode_enabled": false,
+    "prep_phase": null,
+    "progression_preference": "linear",
+    "refused_foods": [],
+    "refused_foods_other_text": null,
+    "session_emphasis": "general",
+    "sex": "male",
+    "sleep_hours": 7,
+    "state_version": 1,
+    "step_target_daily": null,
+    "target_date_iso": null,
+    "target_weight_kg": null,
+    "technique_preferences": [],
+    "traditional_meals": true,
+    "training_days": [
+      "mon",
+      "wed",
+      "fri"
+    ],
+    "training_days_per_week": 3,
+    "training_style_preferences": [],
+    "training_time": "morning",
+    "wake_time": "6_7am"
+  }
+}

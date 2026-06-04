@@ -1,9 +1,10 @@
 import React from 'react';
-import { View, Text, ScrollView, StyleSheet, Pressable, Platform } from 'react-native';
+import { View, Text, ScrollView, StyleSheet, Platform } from 'react-native';
 import { MotiView } from 'moti';
 import { useTokens } from '../../lib/theme';
 import { TabBarIcon } from '../../components/navigation/TabBarIcon';
 import { GlassCard } from '../../components/premium/GlassCard';
+import { PressableScale } from '@/components/common/PressableScale';
 
 interface Insight {
   id: string;
@@ -122,9 +123,9 @@ export function SmartInsightsCarousel({
             </View>
           )}
           {/* Ring button */}
-          <Pressable
+          <PressableScale
             onPress={onViewAll}
-            style={({ pressed }) => [
+            style={(pressed) => [
               styles.viewAllButton,
               {
                 borderWidth: 2,
@@ -143,7 +144,7 @@ export function SmartInsightsCarousel({
             >
               View All
             </Text>
-          </Pressable>
+          </PressableScale>
         </View>
       </View>
 

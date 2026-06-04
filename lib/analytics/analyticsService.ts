@@ -73,18 +73,6 @@ export function initAnalytics() {
   if (analyticsInitialized) return;
   analyticsInitialized = true;
 
-  if (isSupabaseConfigured) {
-    supabase.auth.getSession()
-      .then(({ data: { session } }) => {
-        analyticsUserId = session?.user?.id ?? null;
-      })
-      .catch((error) => {
-        if (__DEV__) {
-          console.warn('📊 Analytics session bootstrap failed:', error);
-        }
-      });
-  }
-
   if (__DEV__) {
     console.log('📊 Analytics initialized (development mode)');
   }

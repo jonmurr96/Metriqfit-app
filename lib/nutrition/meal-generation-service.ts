@@ -57,6 +57,12 @@ export interface GeneratedMealPlan {
       carbs: number;
       fat: number;
     };
+    dailyTotals: {
+      calories: number;
+      protein: number;
+      carbs: number;
+      fat: number;
+    };
     // Legacy recipe matching (optional)
     recipes?: RecipeMatchResult[];
   }[];
@@ -213,6 +219,7 @@ export function generateWeeklyMealPlan(
     isTrainingDay: day.isTrainingDay,
     meals: day.meals,
     totals: day.dailyTotals,
+    dailyTotals: day.dailyTotals,
   }));
 
   // Calculate summary stats
@@ -343,6 +350,7 @@ export function generateLegacyWeeklyMealPlan(
       isTrainingDay,
       meals,
       totals: dayPlan.totals,
+      dailyTotals: dayPlan.totals,
       recipes: matchedRecipes,
     };
   });

@@ -95,7 +95,6 @@ function AppContent() {
 
   return (
     <GlobalErrorBoundary
-      includeUnhandledRejections
       fallback={({ error, resetError }: any) => (
         <ThemeProvider value={runtimeTheme}>
           <View style={{ flex: 1, backgroundColor: runtimeTheme.colors.bg, justifyContent: 'center', padding: 24 }}>

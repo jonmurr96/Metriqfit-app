@@ -1,6 +1,7 @@
 import React from 'react';
-import { View, Text, Pressable, StyleSheet, ActivityIndicator } from 'react-native';
+import { View, Text, StyleSheet, ActivityIndicator } from 'react-native';
 import { metriqfitTheme } from '../../lib/theme';
+import { PressableScale } from '@/components/common/PressableScale';
 
 const { colors: c, radius: r, spacing: s, type: ty } = metriqfitTheme;
 
@@ -25,8 +26,8 @@ export function OnboardingFooter({
     <View style={[styles.footer, { paddingHorizontal: s.xl }]}>
       <View style={styles.buttonRow}>
         {showBack && onBack && (
-          <Pressable
-            style={({ pressed }) => [
+          <PressableScale
+            style={(pressed) => [
               styles.backButton,
               { borderColor: c.border, opacity: pressed ? 0.8 : 1 },
             ]}
@@ -34,10 +35,10 @@ export function OnboardingFooter({
             disabled={isLoading}
           >
             <Text style={[styles.backButtonText, { color: c.textMuted }]}>Back</Text>
-          </Pressable>
+          </PressableScale>
         )}
-        <Pressable
-          style={({ pressed }) => [
+        <PressableScale
+          style={(pressed) => [
             styles.continueButton,
             {
               backgroundColor: canContinue ? c.primary : c.surface,
@@ -55,7 +56,7 @@ export function OnboardingFooter({
               {continueLabel}
             </Text>
           )}
-        </Pressable>
+        </PressableScale>
       </View>
     </View>
   );

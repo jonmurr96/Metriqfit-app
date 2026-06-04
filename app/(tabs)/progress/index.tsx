@@ -12,6 +12,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useRouter } from 'expo-router';
 import { MotiView } from 'moti';
 
+import { PressableScale } from '@/components/common/PressableScale';
 import { TabBarIcon } from '../../../components/navigation/TabBarIcon';
 import { GlassCard } from '../../../components/premium/GlassCard';
 import { SubscriptionFeatureGate } from '../../../components/premium/SubscriptionFeatureGate';
@@ -127,12 +128,12 @@ function MetricCard({ label, value, meta, icon, tone = 'primary', onPress }: Met
     return <View style={styles.metricPressable}>{Content}</View>;
   }
   return (
-    <Pressable
+    <PressableScale
       onPress={onPress}
-      style={({ pressed }) => [{ borderRadius: r.lg, opacity: pressed ? 0.78 : 1 }, styles.metricPressable]}
+      style={(pressed) => [{ borderRadius: r.lg, opacity: pressed ? 0.78 : 1 }, styles.metricPressable]}
     >
       {Content}
-    </Pressable>
+    </PressableScale>
   );
 }
 
@@ -529,13 +530,13 @@ export default function ProgressHomeScreen() {
           </Text>
           <View style={[styles.detailGrid, { gap: s.sm, marginTop: s.md }]}>
             {detailCards.map((item) => (
-              <Pressable
+              <PressableScale
                 key={item.id}
                 onPress={() => {
                   trackProgressCtaTapped({ cta_id: `progress_open_${item.id}` });
                   router.push(item.route as any);
                 }}
-                style={({ pressed }) => [
+                style={(pressed) => [
                   styles.detailCard,
                   {
                     backgroundColor: c.surface,
@@ -554,7 +555,7 @@ export default function ProgressHomeScreen() {
                 <Text style={{ color: c.textMuted, fontFamily: ty.body.family, fontSize: ty.sizes.xs, marginTop: 4 }}>
                   {item.meta}
                 </Text>
-              </Pressable>
+              </PressableScale>
             ))}
           </View>
         </MotiView>

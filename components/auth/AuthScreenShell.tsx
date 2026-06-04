@@ -3,7 +3,6 @@ import {
   KeyboardAvoidingView,
   Platform,
   ScrollView,
-  StyleSheet,
   Text,
   View,
 } from 'react-native';
@@ -32,25 +31,29 @@ export function AuthScreenShell({
   const { c, ty, s } = useTokens();
 
   return (
-    <SafeAreaView style={styles.container}>
-      {/* Animated background layer */}
+    <SafeAreaView className="flex-1">
       <AuthBackground />
 
       <KeyboardAvoidingView
-        style={styles.keyboardView}
+        className="flex-1"
         behavior={Platform.OS === 'ios' ? 'padding' : undefined}
         keyboardVerticalOffset={Platform.OS === 'ios' ? 24 : 0}
       >
         <ScrollView
-          contentContainerStyle={styles.scrollContent}
+          contentContainerStyle={{
+            flexGrow: 1,
+            justifyContent: 'center',
+            paddingHorizontal: 24,
+            paddingTop: 28,
+            paddingBottom: 60,
+          }}
           keyboardShouldPersistTaps="handled"
           showsVerticalScrollIndicator={false}
           contentInset={{ bottom: 40 }}
           scrollIndicatorInsets={{ bottom: 40 }}
         >
           {/* Hero Section */}
-          <View style={styles.hero}>
-            {/* Pulsing logo */}
+          <View className="items-center mb-8 gap-[10px]">
             <MotiView
               from={{ scale: 1 }}
               animate={{ scale: [1, 1.03, 1] }}
@@ -66,10 +69,8 @@ export function AuthScreenShell({
 
             {/* Logo glow backdrop */}
             <View
-              style={[
-                styles.logoGlow,
-                { backgroundColor: `${c.primary}15` },
-              ]}
+              className="absolute w-[200px] h-[200px] rounded-full"
+              style={{ top: -20, zIndex: -1, backgroundColor: `${c.primary}15` }}
               pointerEvents="none"
             />
 
@@ -81,16 +82,17 @@ export function AuthScreenShell({
                 transition={{ type: 'timing', duration: 600, delay: 200 }}
               >
                 <Text
-                  style={[
-                    styles.title,
-                    {
-                      color: c.primary,
-                      fontFamily: ty.heading.family,
-                      textShadowColor: `${c.primary}40`,
-                      textShadowRadius: 20,
-                      textShadowOffset: { width: 0, height: 0 },
-                    },
-                  ]}
+                  style={{
+                    fontSize: 32,
+                    textAlign: 'center',
+                    letterSpacing: -0.5,
+                    marginTop: 4,
+                    color: c.primary,
+                    fontFamily: ty.heading.family,
+                    textShadowColor: `${c.primary}40`,
+                    textShadowRadius: 20,
+                    textShadowOffset: { width: 0, height: 0 },
+                  }}
                 >
                   {title}
                 </Text>
@@ -102,10 +104,14 @@ export function AuthScreenShell({
                 transition={{ type: 'timing', duration: 600, delay: 200 }}
               >
                 <Text
-                  style={[
-                    styles.title,
-                    { color: c.text, fontFamily: ty.heading.family },
-                  ]}
+                  style={{
+                    fontSize: 32,
+                    textAlign: 'center',
+                    letterSpacing: -0.5,
+                    marginTop: 4,
+                    color: c.text,
+                    fontFamily: ty.heading.family,
+                  }}
                 >
                   {title}
                 </Text>
@@ -119,10 +125,8 @@ export function AuthScreenShell({
               transition={{ type: 'timing', duration: 600, delay: 350 }}
             >
               <Text
-                style={[
-                  styles.subtitle,
-                  { color: c.textMuted, fontFamily: ty.body.family },
-                ]}
+                className="text-sm text-center leading-[22px]"
+                style={{ letterSpacing: 0.2, color: c.textMuted, fontFamily: ty.body.family }}
               >
                 {subtitle}
               </Text>
@@ -134,7 +138,7 @@ export function AuthScreenShell({
             from={{ opacity: 0, translateY: 20 }}
             animate={{ opacity: 1, translateY: 0 }}
             transition={{ type: 'timing', duration: 600, delay: 450 }}
-            style={styles.formContainer}
+            className="w-full max-w-[420px] self-center"
           >
             <View style={{ gap: s.md }}>{children}</View>
           </MotiView>
@@ -145,7 +149,7 @@ export function AuthScreenShell({
               from={{ opacity: 0 }}
               animate={{ opacity: 1 }}
               transition={{ type: 'timing', duration: 500, delay: 700 }}
-              style={styles.footer}
+              className="mt-6 items-center"
             >
               {footer}
             </MotiView>
@@ -155,54 +159,3 @@ export function AuthScreenShell({
     </SafeAreaView>
   );
 }
-
-const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-  },
-  keyboardView: {
-    flex: 1,
-  },
-  scrollContent: {
-    flexGrow: 1,
-    justifyContent: 'center',
-    paddingHorizontal: 24,
-    paddingTop: 28,
-    paddingBottom: 60,
-  },
-  hero: {
-    alignItems: 'center',
-    marginBottom: 32,
-    gap: 10,
-    position: 'relative',
-  },
-  logoGlow: {
-    position: 'absolute',
-    width: 200,
-    height: 200,
-    borderRadius: 100,
-    top: -20,
-    zIndex: -1,
-  },
-  title: {
-    fontSize: 32,
-    textAlign: 'center',
-    letterSpacing: -0.5,
-    marginTop: 4,
-  },
-  subtitle: {
-    fontSize: 14,
-    textAlign: 'center',
-    lineHeight: 22,
-    letterSpacing: 0.2,
-  },
-  formContainer: {
-    width: '100%',
-    maxWidth: 420,
-    alignSelf: 'center',
-  },
-  footer: {
-    marginTop: 24,
-    alignItems: 'center',
-  },
-});

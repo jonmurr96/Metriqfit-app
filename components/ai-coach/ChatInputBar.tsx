@@ -1,7 +1,8 @@
 import React, { useState } from 'react';
-import { View, TextInput, Pressable, Text, StyleSheet, Keyboard } from 'react-native';
+import { View, TextInput, Text, StyleSheet, Keyboard } from 'react-native';
 import { MotiView } from 'moti';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { PressableScale } from '@/components/common/PressableScale';
 import { useTokens } from '../../lib/theme';
 import { TabBarIcon } from '../../components/navigation/TabBarIcon';
 
@@ -63,11 +64,11 @@ export function ChatInputBar({
         ]}
       >
         {onQuickActionsPress ? (
-          <Pressable
+          <PressableScale
             accessibilityRole="button"
             accessibilityLabel={quickActionLabel}
             onPress={onQuickActionsPress}
-            style={({ pressed }) => [
+            style={(pressed) => [
               styles.quickActionButton,
               {
                 borderRadius: r.pill,
@@ -82,7 +83,7 @@ export function ChatInputBar({
               color={c.textMuted}
               size={18}
             />
-          </Pressable>
+          </PressableScale>
         ) : null}
         <TextInput
           style={[
@@ -108,10 +109,10 @@ export function ChatInputBar({
           }}
           transition={{ type: 'spring' as const, damping: 15, stiffness: 200 } as any}
         >
-          <Pressable
+          <PressableScale
             accessibilityRole="button"
             accessibilityLabel={hasMessage ? 'Send message to coach' : 'Enter a message to enable send'}
-            style={({ pressed }) => [
+            style={(pressed) => [
               styles.sendButton,
               {
                 backgroundColor: hasMessage ? c.primary : c.surface2,
@@ -127,7 +128,7 @@ export function ChatInputBar({
               color={hasMessage ? c.bg : c.textSubtle}
               size={18}
             />
-          </Pressable>
+          </PressableScale>
         </MotiView>
       </View>
 

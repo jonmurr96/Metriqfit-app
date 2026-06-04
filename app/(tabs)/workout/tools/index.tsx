@@ -3,6 +3,7 @@ import { useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useTokens } from '../../../../lib/theme';
 import { TabBarIcon } from '../../../../components/navigation/TabBarIcon';
+import { PressableScale } from '@/components/common/PressableScale';
 
 type ToolCard = {
   title: string;
@@ -73,10 +74,10 @@ export default function WorkoutToolsScreen() {
 
       <ScrollView contentContainerStyle={{ padding: s.lg, gap: s.md, paddingBottom: insets.bottom + 110 }}>
         {TOOL_CARDS.map((card) => (
-          <Pressable
+          <PressableScale
             key={card.title}
             onPress={() => router.push(card.route as any)}
-            style={({ pressed }) => [
+            style={(pressed) => [
               styles.card,
               {
                 backgroundColor: c.surface,
@@ -97,7 +98,7 @@ export default function WorkoutToolsScreen() {
               </Text>
             </View>
             <TabBarIcon name="chevron-forward" color={c.textMuted} size={16} />
-          </Pressable>
+          </PressableScale>
         ))}
       </ScrollView>
     </View>

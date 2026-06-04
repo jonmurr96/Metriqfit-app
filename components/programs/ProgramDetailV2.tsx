@@ -62,8 +62,11 @@ export default function ProgramDetailV2({ programId }: ProgramDetailV2Props) {
   const startProgram = () => {
     // Navigate to program activation or preview
     router.push({
-      pathname: '/(tabs)/workout/program-preview',
-      params: { programId: program.id },
+      pathname: '/(tabs)/workout/program-builder',
+      params: {
+        templateId: program.id,
+        templateName: program.name,
+      },
     });
   };
 

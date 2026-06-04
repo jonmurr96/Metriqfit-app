@@ -1,5 +1,5 @@
 import React from 'react';
-import { StyleSheet, Text, TextInput, type TextInputProps, View } from 'react-native';
+import { Text, TextInput, type TextInputProps, View } from 'react-native';
 
 import { useTokens } from '../../lib/theme';
 
@@ -13,12 +13,14 @@ export function AuthTextField({ label, hint, error, ...inputProps }: AuthTextFie
   const { c, ty, s, r, theme } = useTokens();
 
   return (
-    <View style={{ gap: 7 }}>
-      <Text style={[styles.label, { color: c.text, fontFamily: ty.body.familySemibold }]}>{label}</Text>
+    <View className="gap-[7px]">
+      <Text className="text-[13px]" style={{ color: c.text, fontFamily: ty.body.familySemibold }}>
+        {label}
+      </Text>
       <TextInput
         {...inputProps}
+        className="h-[52px] border text-[15px]"
         style={[
-          styles.input,
           {
             backgroundColor: `${c.surface2}C0`,
             borderColor: error ? c.danger : `${c.primary}${theme.auth.inputBorderOpacity}`,
@@ -32,25 +34,14 @@ export function AuthTextField({ label, hint, error, ...inputProps }: AuthTextFie
         placeholderTextColor={c.textSubtle}
       />
       {error ? (
-        <Text style={[styles.helper, { color: c.danger, fontFamily: ty.body.family }]}>{error}</Text>
+        <Text className="text-xs leading-[18px]" style={{ color: c.danger, fontFamily: ty.body.family }}>
+          {error}
+        </Text>
       ) : hint ? (
-        <Text style={[styles.helper, { color: c.textMuted, fontFamily: ty.body.family }]}>{hint}</Text>
+        <Text className="text-xs leading-[18px]" style={{ color: c.textMuted, fontFamily: ty.body.family }}>
+          {hint}
+        </Text>
       ) : null}
     </View>
   );
 }
-
-const styles = StyleSheet.create({
-  label: {
-    fontSize: 13,
-  },
-  input: {
-    height: 52,
-    borderWidth: 1,
-    fontSize: 15,
-  },
-  helper: {
-    fontSize: 12,
-    lineHeight: 18,
-  },
-});

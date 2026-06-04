@@ -6,6 +6,7 @@
 
 import { supabase } from '../lib/supabase';
 import { Database } from '../lib/supabase/types';
+import { getClerkSupabaseToken, getClerkUserId } from '../lib/auth/getClerkToken';
 import { invokeFunction } from '../lib/supabase/invokeFunction';
 import {
   assertExerciseMatchesPlanDayFocus,
@@ -128,7 +129,7 @@ export interface PlanGenerationOptions {
   activation_mode?: 'preview' | 'activate';
   workout_regeneration?: WorkoutRegenerationRequest;
   nutrition_regeneration?: NutritionRegenerationRequest;
-  generation_version?: 'v1' | 'v2';
+  generation_version?: 'v1' | 'v2' | 'v3';
 }
 
 export type WorkoutRegenerationReason =
@@ -1175,13 +1176,10 @@ export async function applyMealPlanChange(input: ApplyMealPlanChangeInput): Prom
   const meal = await getNutritionPlanMeal(input.planMealId);
   if (!meal) throw new Error('Meal not found after change');
 
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-  if (!user) throw new Error('Authentication required');
+  const userId = await getClerkUserId();
 
   const day = await getNutritionPlanMealsForDay(
-    user.id,
+    userId,
     meal.day_of_week || 0,
     meal.plan_id,
   );
@@ -1703,18 +1701,12 @@ export async function regeneratePlans(
     );
   }
 
-  const {
-    data: { session },
-  } = await supabase.auth.getSession();
-
-  if (!session) {
-    throw new Error('Authentication required. Please sign in again.');
-  }
+  const token = await getClerkSupabaseToken();
 
   const { data, parsedError, rawError } = await invokeFunction(() =>
     supabase.functions.invoke('generate-user-plans', {
-      headers: { Authorization: `Bearer ${session.access_token}` },
-      body: { user_id: userId, ...options },
+      headers: { Authorization: `Bearer ${token}` },
+      body: { user_id: userId, generation_version: 'v3', ...options },
     })
   );
 
@@ -1912,13 +1904,7 @@ export async function triggerPlanGeneration(
     );
   }
 
-  const {
-    data: { session },
-  } = await supabase.auth.getSession();
-
-  if (!session) {
-    throw new Error('Authentication required. Please sign in again.');
-  }
+  const token = await getClerkSupabaseToken();
 
   // Pre-flight: verify required DB rows exist AND content is valid before invoking
   // the Edge Function. This surfaces actionable errors immediately rather than letting
@@ -2000,13 +1986,13 @@ export async function triggerPlanGeneration(
 
       const { data, error } = await supabase.functions.invoke('generate-user-plans', {
         headers: {
-          Authorization: `Bearer ${session.access_token}`,
+          Authorization: `Bearer ${token}`,
           'X-Correlation-Id': correlationId,
         },
         body: {
           user_id: userId,
           plan_type: planType,
-          generation_version: options.generation_version || 'v1',
+          generation_version: options.generation_version || 'v3',
           correlation_id: correlationId,
           ...options,
         },
@@ -2293,20 +2279,15 @@ export async function generateNutritionPlanPreview(
     throw new Error('No active nutrition plan to regenerate');
   }
 
-  const {
-    data: { session },
-  } = await supabase.auth.getSession();
-
-  if (!session) {
-    throw new Error('Authentication required. Please sign in again.');
-  }
+  const token = await getClerkSupabaseToken();
 
   const { data, parsedError, rawError } = await invokeFunction(() =>
     supabase.functions.invoke('generate-user-plans', {
-      headers: { Authorization: `Bearer ${session.access_token}` },
+      headers: { Authorization: `Bearer ${token}` },
       body: {
         user_id: userId,
         plan_type: 'nutrition',
+        generation_version: 'v3',
         generation_horizon_days: { nutrition: 7 },
         generation_mode: 'regenerate',
         activation_mode: 'preview',
@@ -2536,20 +2517,15 @@ export async function generateWorkoutPlanPreview(
     throw new Error('No active workout plan to regenerate');
   }
 
-  const {
-    data: { session },
-  } = await supabase.auth.getSession();
-
-  if (!session) {
-    throw new Error('Authentication required. Please sign in again.');
-  }
+  const token = await getClerkSupabaseToken();
 
   const { data, parsedError, rawError } = await invokeFunction(() =>
     supabase.functions.invoke('generate-user-plans', {
-      headers: { Authorization: `Bearer ${session.access_token}` },
+      headers: { Authorization: `Bearer ${token}` },
       body: {
         user_id: userId,
         plan_type: 'workout',
+        generation_version: 'v3',
         generation_horizon_days: { workout: 28 },
         generation_mode: 'regenerate',
         activation_mode: 'preview',
@@ -2644,16 +2620,11 @@ export async function getWorkoutPlanCoherenceReport(
 }
 
 async function getAuthenticatedUserId() {
-  const {
-    data: { user },
-    error,
-  } = await supabase.auth.getUser();
-
-  if (error || !user) {
+  try {
+    return await getClerkUserId();
+  } catch (err: any) {
     throw new Error('Authentication required. Please sign in again.');
   }
-
-  return user.id;
 }
 
 export async function repairWorkoutPlanCoherencePreview(
@@ -2666,17 +2637,11 @@ export async function repairWorkoutPlanCoherencePreview(
     throw new Error('Workout plan not found');
   }
 
-  const {
-    data: { session },
-  } = await supabase.auth.getSession();
-
-  if (!session) {
-    throw new Error('Authentication required. Please sign in again.');
-  }
+  const token = await getClerkSupabaseToken();
 
   const { data, parsedError, rawError } = await invokeFunction(() =>
     supabase.functions.invoke('repair-workout-plan-coherence', {
-      headers: { Authorization: `Bearer ${session.access_token}` },
+      headers: { Authorization: `Bearer ${token}` },
       body: { plan_id: planId, mode: 'preview' },
     })
   );

@@ -1,9 +1,10 @@
 import React from 'react';
-import { ActivityIndicator, type DimensionValue, Pressable, StyleSheet, Text, View } from 'react-native';
+import { ActivityIndicator, type DimensionValue, StyleSheet, Text, View } from 'react-native';
 import { MotiView } from 'moti';
 
 import type { HomeMealPreviewCardMeal } from '../../lib/nutrition/home-meal-preview';
 import { useTokens } from '../../lib/theme';
+import { PressableScale } from '@/components/common/PressableScale';
 import { TabBarIcon } from '../navigation/TabBarIcon';
 import { GlassCard } from '../premium/GlassCard';
 import { MacroRow } from '../nutrition/MacroRow';
@@ -334,9 +335,9 @@ export function HomeMealPreviewCard({
       : activeMeal.mealSummary?.trim() || 'Meal items ready to log.';
 
     return (
-      <Pressable
+      <PressableScale
         onPress={onOpenMealDetail}
-        style={({ pressed }) => [
+        style={(pressed) => [
           styles.contentShell,
           {
             borderRadius: r.md,
@@ -385,7 +386,7 @@ export function HomeMealPreviewCard({
           </View>
 
           <View style={styles.heroActionWrap}>
-            <Pressable
+            <PressableScale
               hitSlop={8}
               onPress={(event) => {
                 event.stopPropagation();
@@ -398,7 +399,7 @@ export function HomeMealPreviewCard({
 
                 onOpenMealDetail();
               }}
-              style={({ pressed }) => [
+              style={(pressed) => [
                 styles.heroActionButton,
                 {
                   borderColor: actionTone.borderColor,
@@ -430,7 +431,7 @@ export function HomeMealPreviewCard({
                   size={24}
                 />
               )}
-            </Pressable>
+            </PressableScale>
             <Text
               style={{
                 color: actionTone.color,
@@ -457,7 +458,7 @@ export function HomeMealPreviewCard({
             { macro: 'fat', value: Math.round(Number(activeMeal.targetFat ?? 0)), unit: 'g' },
           ]}
         />
-      </Pressable>
+      </PressableScale>
     );
   };
 
@@ -480,10 +481,10 @@ export function HomeMealPreviewCard({
         ]}
       >
         <View style={styles.footerTopRow}>
-          <Pressable
+          <PressableScale
             onPress={onPrevious}
             disabled={!hasPrev || isDayComplete}
-            style={({ pressed }) => [
+            style={(pressed) => [
               styles.navButton,
               {
                 borderRadius: r.pill,
@@ -499,7 +500,7 @@ export function HomeMealPreviewCard({
               color={hasPrev && !isDayComplete ? c.primary : c.textMuted}
               size={18}
             />
-          </Pressable>
+          </PressableScale>
 
           <View style={styles.footerCenter}>
             <Text
@@ -516,10 +517,10 @@ export function HomeMealPreviewCard({
             </Text>
           </View>
 
-          <Pressable
+          <PressableScale
             onPress={onNext}
             disabled={!hasNext || isDayComplete}
-            style={({ pressed }) => [
+            style={(pressed) => [
               styles.navButton,
               {
                 borderRadius: r.pill,
@@ -535,7 +536,7 @@ export function HomeMealPreviewCard({
               color={hasNext && !isDayComplete ? c.primary : c.textMuted}
               size={18}
             />
-          </Pressable>
+          </PressableScale>
         </View>
 
         <View style={[styles.progressRow, { marginTop: s.sm }]}>
@@ -597,9 +598,9 @@ export function HomeMealPreviewCard({
           </View>
         </View>
 
-        <Pressable
+        <PressableScale
           onPress={onOpenPlan}
-          style={({ pressed }) => [
+          style={(pressed) => [
             styles.planButton,
             {
               borderRadius: r.pill,
@@ -619,7 +620,7 @@ export function HomeMealPreviewCard({
           >
             Plan
           </Text>
-        </Pressable>
+        </PressableScale>
       </View>
 
       {loading

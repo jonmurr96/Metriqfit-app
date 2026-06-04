@@ -1,9 +1,10 @@
 import React from 'react';
-import { Platform, Pressable, StyleSheet, Text, View } from 'react-native';
+import { Platform, StyleSheet, Text, View } from 'react-native';
 
 import { useTokens } from '../../lib/theme';
 import { TabBarIcon } from '../navigation/TabBarIcon';
 import { GlassCard } from '../premium/GlassCard';
+import { PressableScale } from '@/components/common/PressableScale';
 
 type HomeTomorrowPreviewCardProps = {
   title: string;
@@ -24,9 +25,9 @@ export function HomeTomorrowPreviewCard({
 
   return (
     <GlassCard intensity="light" animated delay={delay}>
-      <Pressable
+      <PressableScale
         onPress={onPress}
-        style={({ pressed }) => [
+        style={(pressed) => [
           styles.row,
           {
             transform: [{ scale: pressed ? 0.99 : 1 }],
@@ -94,7 +95,7 @@ export function HomeTomorrowPreviewCard({
         >
           <TabBarIcon name="arrow-forward" color={c.primary} size={16} />
         </View>
-      </Pressable>
+      </PressableScale>
     </GlassCard>
   );
 }

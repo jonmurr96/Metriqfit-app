@@ -27,7 +27,7 @@ import {
 import { MealPlanDayView } from '@/components/nutrition';
 
 export default function IntelligentPlanScreen() {
-  const { onboardingData } = useOnboarding();
+  const { data: onboardingData } = useOnboarding();
   const [plan, setPlan] = useState<GeneratedMealPlan | null>(null);
   const [isLoading, setIsLoading] = useState(false);
   const [selectedDay, setSelectedDay] = useState(0);

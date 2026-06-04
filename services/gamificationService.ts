@@ -239,7 +239,7 @@ export async function getLevelProgressDisplay(
     return {
       current_level: xpLevel.current_level,
       level_name: levelInfo.level_name,
-      tier_name: levelInfo.tier_name,
+      tier_name: levelInfo.tier_name as any,
       tier_number: levelInfo.tier_number,
       current_xp: xpLevel.total_xp_earned,
       xp_to_next_level: xpToNextLevel,
@@ -413,21 +413,13 @@ export async function useFreezeToken(
   streakType: StreakType,
   date: string
 ): Promise<boolean> {
-  try {
-    // Call Edge Function to handle freeze token logic
-    const { data, parsedError, rawError } = await invokeFunction(() =>
-      supabase.functions.invoke('use-freeze-token', {
-        body: { userId, streakType, date },
-      })
-    );
-
-    if (rawError) throw new Error(parsedError?.error || parsedError?.message || rawError?.message || 'Failed to use freeze token');
-
-    return data?.success || false;
-  } catch (error) {
-    console.error('[GamificationService] Error using freeze token:', error);
-    return false;
-  }
+  // TODO: streak-freeze feature is not implemented yet — the `use-freeze-token`
+  // edge function does not exist remotely or locally. Calling it previously returned
+  // a 404 and the catch silently no-op'd; this no-op skips the wasted round-trip.
+  // Build the edge function (or move the logic into a Postgres RPC) before enabling
+  // freeze tokens in the UI.
+  void userId; void streakType; void date;
+  return false;
 }
 
 // =====================================================

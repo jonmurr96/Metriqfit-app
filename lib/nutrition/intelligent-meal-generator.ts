@@ -17,7 +17,7 @@ import type {
   CarbTolerance,
   CookingLevel 
 } from '../onboarding/OnboardingContext';
-import type { MacroTargets } from './target-calculator';
+import type { MacroTargets } from './meal-generator';
 import {
   type FoodItem,
   type MealTiming,

@@ -1,5 +1,6 @@
 import React from 'react';
-import { Pressable, StyleSheet, Text, View } from 'react-native';
+import { StyleSheet, Text, View } from 'react-native';
+import { PressableScale } from '@/components/common/PressableScale';
 import { useTokens } from '../../lib/theme';
 import { GlassCard } from '../premium/GlassCard';
 import { TabBarIcon } from '../navigation/TabBarIcon';
@@ -60,12 +61,12 @@ export function CoachConversationEmptyState({ onPrompt }: CoachConversationEmpty
 
       <View style={{ gap: s.sm, marginTop: s.lg }}>
         {PROMPTS.map((prompt) => (
-          <Pressable
+          <PressableScale
             key={prompt}
             accessibilityRole="button"
             accessibilityLabel={prompt}
             onPress={() => onPrompt(prompt)}
-            style={({ pressed }) => [
+            style={(pressed) => [
               styles.prompt,
               {
                 minHeight: 44,
@@ -85,7 +86,7 @@ export function CoachConversationEmptyState({ onPrompt }: CoachConversationEmpty
             >
               {prompt}
             </Text>
-          </Pressable>
+          </PressableScale>
         ))}
       </View>
     </GlassCard>

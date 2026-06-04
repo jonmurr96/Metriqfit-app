@@ -7,7 +7,7 @@
  * to generate complete, periodized training programs.
  */
 
-import type { UserTrainingProfile, ExperienceLevel, PrimaryGoal } from './training-profile.ts';
+import { type UserTrainingProfile, type ExperienceLevel, type PrimaryGoal, normalizeUserTrainingProfile } from './training-profile.ts';
 import type { DayRecipe } from './exercise-recipes-by-experience.ts';
 import { selectRecipesForPlan } from './recipe-selection.ts';
 import {
@@ -17,6 +17,7 @@ import {
   getPeriodizationConfig,
   getCurrentWeekStructure,
   isDeloadWeek,
+  shouldDeload,
   PROGRESSIVE_OVERLOAD_PROTOCOLS,
   DELOAD_STRATEGIES,
 } from './periodization-models.ts';
@@ -86,7 +87,7 @@ export function generatePeriodizedProgram(
     experienceLevel: profile.experienceLevel,
     primaryGoal: profile.primaryGoal,
     daysPerWeek: profile.daysPerWeek,
-    sessionDurationMin: profile.sessionDurationMin,
+    sessionDurationMin: profile.sessionDurationMin || 60,
     equipmentAccess: profile.equipmentAccess,
     recoveryBurden: profile.injuries && profile.injuries.length > 0 ? 'high' : 'moderate',
   });
@@ -180,7 +181,7 @@ function selectProtocolForProfile(
     return PROGRESSIVE_OVERLOAD_PROTOCOLS.find((p) => p.name === 'Linear Weight Addition')!;
   }
 
-  if (profile.primaryGoal === 'build_strength') {
+  if (profile.primaryGoal === 'get_stronger') {
     return PROGRESSIVE_OVERLOAD_PROTOCOLS.find((p) => p.name === 'APRE (Autoregulated)')!;
   }
 
@@ -298,14 +299,14 @@ export function checkFatigueStatus(
     program.periodizationConfig
   );
 
-  const shouldDeload =
+  const needsDeload =
     assessment.level === 'high' ||
     isDeloadWeek(program.periodizationConfig) ||
     program.periodizationConfig.currentWeekInBlock > 0
       ? shouldDeload(program.periodizationConfig, assessment.indicators)
       : false;
 
-  return { assessment, shouldDeload };
+  return { assessment, shouldDeload: needsDeload };
 }
 
 // ---------------------------------------------------------------------------
@@ -373,7 +374,7 @@ export function forceDeload(program: PeriodizedProgram): PeriodizedProgram {
     experienceLevel: program.profile.experienceLevel,
     primaryGoal: program.profile.primaryGoal,
     daysPerWeek: program.profile.daysPerWeek,
-    sessionDurationMin: program.profile.sessionDurationMin,
+    sessionDurationMin: program.profile.sessionDurationMin || 60,
     equipmentAccess: program.profile.equipmentAccess,
     recoveryBurden: 'high',
   });
@@ -434,29 +435,29 @@ export function adjustProgramIntensity(
 
 export const PRESET_PROGRAMS = {
   beginner_strength: (userId: string) =>
-    generatePeriodizedProgram(userId, {
+    generatePeriodizedProgram(userId, normalizeUserTrainingProfile({
       experienceLevel: 'beginner',
-      primaryGoal: 'build_strength',
+      primaryGoal: 'get_stronger',
       daysPerWeek: 3,
-      sessionDurationMin: 45,
+      sessionDurationTargetMin: 45,
       equipmentAccess: 'full_gym',
-    } as UserTrainingProfile, { weeks: 8 }),
+    }), { weeks: 8 }),
 
   intermediate_hypertrophy: (userId: string) =>
-    generatePeriodizedProgram(userId, {
+    generatePeriodizedProgram(userId, normalizeUserTrainingProfile({
       experienceLevel: 'intermediate',
       primaryGoal: 'build_muscle',
       daysPerWeek: 4,
-      sessionDurationMin: 60,
+      sessionDurationTargetMin: 60,
       equipmentAccess: 'full_gym',
-    } as UserTrainingProfile, { weeks: 12 }),
+    }), { weeks: 12 }),
 
   advanced_undulating: (userId: string) =>
-    generatePeriodizedProgram(userId, {
+    generatePeriodizedProgram(userId, normalizeUserTrainingProfile({
       experienceLevel: 'advanced',
       primaryGoal: 'build_muscle',
       daysPerWeek: 5,
-      sessionDurationMin: 75,
+      sessionDurationTargetMin: 75,
       equipmentAccess: 'full_gym',
-    } as UserTrainingProfile, { weeks: 16, protocolName: 'RPE' }),
+    }), { weeks: 16, protocolName: 'RPE' }),
 };

@@ -1,6 +1,7 @@
 import React from 'react';
 import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { MotiView } from 'moti';
+import { PressableScale } from '@/components/common/PressableScale';
 import { useTokens } from '../../lib/theme';
 import type { AICoachIntervention } from '../../services/aiCoachService';
 import { TabBarIcon } from '../navigation/TabBarIcon';
@@ -55,11 +56,11 @@ export function CoachQueueStrip({ items, onSelect, onOpenAll }: CoachQueueStripP
             animate={{ opacity: 1, translateX: 0 }}
             transition={{ type: 'timing', duration: 220, delay: 80 + index * 40 }}
           >
-            <Pressable
+            <PressableScale
               accessibilityRole="button"
               accessibilityLabel={item.title}
               onPress={() => onSelect(item)}
-              style={({ pressed }) => [
+              style={(pressed) => [
                 styles.card,
                 {
                   width: 220,
@@ -121,7 +122,7 @@ export function CoachQueueStrip({ items, onSelect, onOpenAll }: CoachQueueStripP
               >
                 {item.summary}
               </Text>
-            </Pressable>
+            </PressableScale>
           </MotiView>
         ))}
       </ScrollView>

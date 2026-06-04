@@ -9,7 +9,7 @@ import * as Sentry from '@sentry/react-native';
  * contains the parsed JSON body from the Edge Function on failure.
  */
 export async function invokeFunction<T = any>(
-  invokeFn: () => Promise<{ data: T | null; error: any }>,
+  invokeFn: () => Promise<{ data: any; error: any }>,
 ): Promise<{ data: T | null; parsedError: Record<string, any> | null; rawError: any }> {
   const { data, error } = await Sentry.startSpan(
     { name: 'Supabase Edge Function', op: 'supabase.function.invoke' },

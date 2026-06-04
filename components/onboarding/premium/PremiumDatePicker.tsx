@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { View, Text, Pressable, StyleSheet, Platform } from 'react-native';
+import { View, Text, Pressable, Platform } from 'react-native';
 import DateTimePicker from '@react-native-community/datetimepicker';
 import { Ionicons } from '@expo/vector-icons';
 import { metriqfitTheme } from '../../../lib/theme';
@@ -25,10 +25,8 @@ export function PremiumDatePicker({
 }: PremiumDatePickerProps) {
   const [showPicker, setShowPicker] = useState(false);
 
-  // Convert ISO string to Date object
   const dateValue = value ? new Date(value) : new Date();
 
-  // Format date for display (e.g., "Jan 15, 1990")
   const formatDate = (isoString: string): string => {
     const date = new Date(isoString);
     return date.toLocaleDateString('en-US', {
@@ -44,7 +42,6 @@ export function PremiumDatePicker({
     }
 
     if (selectedDate) {
-      // Convert to ISO format (YYYY-MM-DD)
       const year = selectedDate.getFullYear();
       const month = String(selectedDate.getMonth() + 1).padStart(2, '0');
       const day = String(selectedDate.getDate()).padStart(2, '0');
@@ -63,12 +60,14 @@ export function PremiumDatePicker({
     setShowPicker(false);
   };
 
-  // Web uses native HTML5 date input
   if (Platform.OS === 'web') {
     return (
-      <View style={styles.container}>
-        <Text style={styles.label}>{label}</Text>
-        <View style={styles.dateButtonWeb}>
+      <View style={{ marginBottom: s.lg }}>
+        <Text style={{ fontSize: 14, fontFamily: 'Sora_600SemiBold', color: c.text, marginBottom: s.sm }}>{label}</Text>
+        <View
+          className="relative flex-row items-center border h-[52px]"
+          style={{ backgroundColor: glass.background, borderColor: c.border, borderRadius: r.sm }}
+        >
           <Ionicons
             name="calendar-outline"
             size={20}
@@ -100,13 +99,16 @@ export function PremiumDatePicker({
     );
   }
 
-  // iOS/Android uses native modal picker
   return (
-    <View style={styles.container}>
-      <Text style={styles.label}>{label}</Text>
-      <Pressable style={styles.dateButton} onPress={handlePress}>
+    <View style={{ marginBottom: s.lg }}>
+      <Text style={{ fontSize: 14, fontFamily: 'Sora_600SemiBold', color: c.text, marginBottom: s.sm }}>{label}</Text>
+      <Pressable
+        className="flex-row items-center border"
+        style={{ backgroundColor: glass.background, borderColor: c.border, borderRadius: r.sm, paddingHorizontal: 16, paddingVertical: 14, gap: s.sm }}
+        onPress={handlePress}
+      >
         <Ionicons name="calendar-outline" size={20} color={c.primary} />
-        <Text style={[styles.dateText, !value && styles.placeholder]}>
+        <Text style={{ fontSize: 15, fontFamily: 'Sora_400Regular', color: value ? c.text : c.textSubtle }}>
           {value ? formatDate(value) : placeholder}
         </Text>
       </Pressable>
@@ -114,10 +116,16 @@ export function PremiumDatePicker({
       {showPicker && (
         <>
           {Platform.OS === 'ios' ? (
-            <View style={styles.iosPickerContainer}>
-              <View style={styles.iosPickerHeader}>
+            <View
+              className="overflow-hidden"
+              style={{ backgroundColor: c.surface, borderRadius: r.lg, marginTop: s.md }}
+            >
+              <View
+                className="flex-row justify-end border-b"
+                style={{ paddingHorizontal: s.lg, paddingVertical: s.md, borderBottomColor: c.border }}
+              >
                 <Pressable onPress={handleDismiss}>
-                  <Text style={styles.iosPickerButton}>Done</Text>
+                  <Text style={{ fontSize: 16, fontFamily: 'Sora_600SemiBold', color: c.primary }}>Done</Text>
                 </Pressable>
               </View>
               <DateTimePicker
@@ -146,63 +154,3 @@ export function PremiumDatePicker({
     </View>
   );
 }
-
-const styles = StyleSheet.create({
-  container: {
-    marginBottom: s.lg,
-  },
-  label: {
-    fontSize: 14,
-    fontFamily: 'Sora_600SemiBold',
-    color: c.text,
-    marginBottom: s.sm,
-  },
-  dateButton: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: glass.background,
-    borderWidth: 1,
-    borderColor: c.border,
-    borderRadius: r.sm,
-    paddingHorizontal: 16,
-    paddingVertical: 14,
-    gap: s.sm,
-  },
-  dateButtonWeb: {
-    position: 'relative',
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: glass.background,
-    borderWidth: 1,
-    borderColor: c.border,
-    borderRadius: r.sm,
-    height: 52,
-  },
-  dateText: {
-    fontSize: 15,
-    fontFamily: 'Sora_400Regular',
-    color: c.text,
-  },
-  placeholder: {
-    color: c.textSubtle,
-  },
-  iosPickerContainer: {
-    backgroundColor: c.surface,
-    borderRadius: r.lg,
-    marginTop: s.md,
-    overflow: 'hidden',
-  },
-  iosPickerHeader: {
-    flexDirection: 'row',
-    justifyContent: 'flex-end',
-    paddingHorizontal: s.lg,
-    paddingVertical: s.md,
-    borderBottomWidth: 1,
-    borderBottomColor: c.border,
-  },
-  iosPickerButton: {
-    fontSize: 16,
-    fontFamily: 'Sora_600SemiBold',
-    color: c.primary,
-  },
-});

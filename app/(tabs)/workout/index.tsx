@@ -408,7 +408,7 @@ export default function WorkoutHomeScreen() {
                     letterSpacing: 1.2,
                   }}
                 >
-                  TODAY'S WORKOUT
+                  TODAY&apos;S WORKOUT
                 </Text>
                 <WorkoutPrimaryActionCard
                   state={dashboard.state.compact.primaryCard}

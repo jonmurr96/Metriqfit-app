@@ -25,6 +25,7 @@ import {
   ExperienceLevel
 } from '../../../types/v1_engine';
 import { coreExercises } from '../../../loaders/seeds/exercises';
+import { PressableScale } from '@/components/common/PressableScale';
 
 interface SmartSubstitutionPickerProps {
   originalExercise: V1Exercise;
@@ -234,7 +235,7 @@ export function SmartSubstitutionPicker({
                   ))}
                   {manualFlatList.length === 0 && (
                     <Text style={[styles.emptyText, { color: c.textMuted }]}>
-                      No matches found for "{searchQuery}"
+                      No matches found for &quot;{searchQuery}&quot;
                     </Text>
                   )}
                 </View>
@@ -250,9 +251,9 @@ export function SmartSubstitutionPicker({
 function ReasonChip({ label, reason, onPress }: { label: string; reason: SwapReason; onPress: (r: SwapReason) => void }) {
   const { c, s, ty, r } = useTokens();
   return (
-    <Pressable
+    <PressableScale
       onPress={() => onPress(reason)}
-      style={({ pressed }) => [
+      style={(pressed) => [
         styles.chip,
         {
           backgroundColor: pressed ? c.primary + '20' : c.surface,
@@ -264,7 +265,7 @@ function ReasonChip({ label, reason, onPress }: { label: string; reason: SwapRea
       <Text style={[styles.chipText, { color: c.text, fontFamily: ty.body.familyMedium }]}>
         {label}
       </Text>
-    </Pressable>
+    </PressableScale>
   );
 }
 
@@ -287,9 +288,9 @@ function V1SwapOptionCard({ alternative, rank, onSelect }: V1SwapOptionCardProps
     'Fresh Track';
 
   return (
-    <Pressable
+    <PressableScale
       onPress={onSelect}
-      style={({ pressed }) => [
+      style={(pressed) => [
         styles.optionCard,
         {
           backgroundColor: pressed ? c.surface2 : c.surface,
@@ -332,7 +333,7 @@ function V1SwapOptionCard({ alternative, rank, onSelect }: V1SwapOptionCardProps
           {continuityLabel}
         </Text>
       </View>
-    </Pressable>
+    </PressableScale>
   );
 }
 

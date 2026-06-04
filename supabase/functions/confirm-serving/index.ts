@@ -18,6 +18,7 @@
 
 import { serve } from "https://deno.land/std@0.224.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.49.1";
+import { verifyClerkRequest } from "../_shared/clerkAuth.ts";
 
 type ReqBody = {
   food_item_id?: string;
@@ -48,7 +49,7 @@ async function requireUser(req: Request, supabaseUrl: string) {
     global: { headers: { Authorization: authHeader } },
     auth: { persistSession: false },
   });
-  const { data, error } = await userClient.auth.getUser();
+  const { data, error } = await verifyClerkRequest(req);
   if (error || !data.user) {
     return { user: null, error: "Unauthorized" };
   }

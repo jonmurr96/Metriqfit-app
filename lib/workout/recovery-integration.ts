@@ -8,7 +8,8 @@
  */
 
 import type { ExperienceLevel, PrimaryGoal } from './training-profile.ts';
-import type { PeriodizedProgram, WeekPlan } from './periodization-integration.ts';
+import type { PeriodizedProgram } from './periodization-integration.ts';
+import type { WeekPlan } from './week-progression.ts';
 import {
   type RecoveryMetric,
   type RecoveryScore,

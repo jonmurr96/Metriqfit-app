@@ -1,5 +1,5 @@
 import React, { forwardRef, useState } from 'react';
-import { Pressable, StyleSheet, Text, TextInput, type TextInputProps, View } from 'react-native';
+import { Pressable, Text, TextInput, type TextInputProps, View } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 
 import { useTokens } from '../../lib/theme';
@@ -18,18 +18,18 @@ export const AuthPasswordField = forwardRef<TextInput, AuthPasswordFieldProps>(f
   const [showPassword, setShowPassword] = useState(false);
 
   return (
-    <View style={{ gap: 7 }}>
-      <Text style={[styles.label, { color: c.text, fontFamily: ty.body.familySemibold }]}>{label}</Text>
+    <View className="gap-[7px]">
+      <Text className="text-[13px]" style={{ color: c.text, fontFamily: ty.body.familySemibold }}>
+        {label}
+      </Text>
       <View
-        style={[
-          styles.inputWrap,
-          {
-            backgroundColor: `${c.surface2}C0`,
-            borderColor: error ? c.danger : `${c.primary}${theme.auth.inputBorderOpacity}`,
-            borderRadius: r.md,
-            paddingHorizontal: s.md,
-          },
-        ]}
+        className="h-[52px] border flex-row items-center gap-[10px]"
+        style={{
+          backgroundColor: `${c.surface2}C0`,
+          borderColor: error ? c.danger : `${c.primary}${theme.auth.inputBorderOpacity}`,
+          borderRadius: r.md,
+          paddingHorizontal: s.md,
+        }}
       >
         <TextInput
           {...inputProps}
@@ -37,18 +37,12 @@ export const AuthPasswordField = forwardRef<TextInput, AuthPasswordFieldProps>(f
           secureTextEntry={!showPassword}
           textContentType="oneTimeCode"
           editable={inputProps.editable !== false}
-          style={[
-            styles.input,
-            {
-              color: c.text,
-              fontFamily: ty.body.family,
-            },
-            inputProps.style,
-          ]}
+          className="flex-1 text-[15px] py-3"
+          style={[{ color: c.text, fontFamily: ty.body.family }, inputProps.style]}
           placeholderTextColor={c.textSubtle}
         />
         <Pressable
-          onPress={() => setShowPassword((value) => !value)}
+          onPress={() => setShowPassword((v) => !v)}
           accessibilityRole="button"
           accessibilityLabel={showPassword ? 'Hide password' : 'Show password'}
           accessibilityHint="Toggles password visibility"
@@ -58,32 +52,14 @@ export const AuthPasswordField = forwardRef<TextInput, AuthPasswordFieldProps>(f
         </Pressable>
       </View>
       {error ? (
-        <Text style={[styles.helper, { color: c.danger, fontFamily: ty.body.family }]}>{error}</Text>
+        <Text className="text-xs leading-[18px]" style={{ color: c.danger, fontFamily: ty.body.family }}>
+          {error}
+        </Text>
       ) : hint ? (
-        <Text style={[styles.helper, { color: c.textMuted, fontFamily: ty.body.family }]}>{hint}</Text>
+        <Text className="text-xs leading-[18px]" style={{ color: c.textMuted, fontFamily: ty.body.family }}>
+          {hint}
+        </Text>
       ) : null}
     </View>
   );
-});
-
-const styles = StyleSheet.create({
-  label: {
-    fontSize: 13,
-  },
-  inputWrap: {
-    height: 52,
-    borderWidth: 1,
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 10,
-  },
-  input: {
-    flex: 1,
-    fontSize: 15,
-    paddingVertical: 12,
-  },
-  helper: {
-    fontSize: 12,
-    lineHeight: 18,
-  },
 });

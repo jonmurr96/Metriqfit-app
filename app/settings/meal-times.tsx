@@ -20,6 +20,7 @@ import { useMealTimes, formatTime12h, DEFAULT_MEAL_TIMES, type MealTimes } from 
 import { isValidTime } from '../../services/mealTimesService';
 import { useProfile } from '../../hooks/useUser';
 import { rescheduleEnabledNotifications } from '../../services/notificationService';
+import { PressableScale } from '@/components/common/PressableScale';
 
 type MealType = 'breakfast' | 'lunch' | 'dinner' | 'snack';
 
@@ -257,10 +258,10 @@ export default function MealTimesScreen() {
           animate={{ opacity: 1, translateY: 0 }}
           style={[styles.footer, { paddingBottom: insets.bottom + s.lg, backgroundColor: c.bg }]}
         >
-          <Pressable
+          <PressableScale
             onPress={handleSave}
             disabled={isUpdating}
-            style={({ pressed }) => [
+            style={(pressed) => [
               styles.saveButton,
               {
                 backgroundColor: c.primary,
@@ -279,7 +280,7 @@ export default function MealTimesScreen() {
                 <TabBarIcon name="checkmark" color={c.bg} size={18} />
               </>
             )}
-          </Pressable>
+          </PressableScale>
         </MotiView>
       )}
     </View>

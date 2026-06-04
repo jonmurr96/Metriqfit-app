@@ -108,7 +108,7 @@ export default function GoalsScreen() {
         >
           {/* Title */}
           <View style={styles.titleBlock}>
-            <Text style={styles.titleLine1}>What's your</Text>
+            <Text style={styles.titleLine1}>What&apos;s your</Text>
             <Text style={[styles.titleAccent, { color: CYAN }]}>main goal?</Text>
           </View>
 

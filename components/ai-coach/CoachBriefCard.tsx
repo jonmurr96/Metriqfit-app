@@ -1,5 +1,6 @@
 import React from 'react';
-import { Pressable, StyleSheet, Text, View } from 'react-native';
+import { StyleSheet, Text, View } from 'react-native';
+import { PressableScale } from '@/components/common/PressableScale';
 import { GlassCard } from '../premium/GlassCard';
 import { TabBarIcon } from '../navigation/TabBarIcon';
 import { useTokens } from '../../lib/theme';
@@ -109,11 +110,11 @@ export function CoachBriefCard({ state, onAction }: CoachBriefCardProps) {
 
       <View style={[styles.actions, { gap: s.sm, marginTop: s.lg }]}>
         {state.primaryAction ? (
-          <Pressable
+          <PressableScale
             accessibilityRole="button"
             accessibilityLabel={state.primaryAction.label}
             onPress={() => onAction(state.primaryAction!)}
-            style={({ pressed }) => [
+            style={(pressed) => [
               styles.primaryAction,
               {
                 minHeight: 46,
@@ -131,15 +132,15 @@ export function CoachBriefCard({ state, onAction }: CoachBriefCardProps) {
             >
               {state.primaryAction.label}
             </Text>
-          </Pressable>
+          </PressableScale>
         ) : null}
 
         {state.secondaryAction ? (
-          <Pressable
+          <PressableScale
             accessibilityRole="button"
             accessibilityLabel={state.secondaryAction.label}
             onPress={() => onAction(state.secondaryAction!)}
-            style={({ pressed }) => [
+            style={(pressed) => [
               styles.secondaryAction,
               {
                 minHeight: 46,
@@ -159,7 +160,7 @@ export function CoachBriefCard({ state, onAction }: CoachBriefCardProps) {
             >
               {state.secondaryAction.label}
             </Text>
-          </Pressable>
+          </PressableScale>
         ) : null}
       </View>
     </GlassCard>

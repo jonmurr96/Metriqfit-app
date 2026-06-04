@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { Alert, StyleSheet, View, Text, ScrollView, Pressable } from 'react-native';
+import { Alert, View, Text, ScrollView, Pressable } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useFocusEffect, useRouter } from 'expo-router';
@@ -155,10 +155,8 @@ export default function HomeScreen() {
     mealTimesDisplay.snack,
   ]);
 
-  // Use shared utility to ensure sync between Home and Nutrition tabs
   const plannedMeals = useMemo(() => {
     const previewItems = buildHomeMealPreviewItems(dayPlan?.meals, dailyMeals);
-    // Add scheduledTimeLabel which is specific to Home Screen layout
     return previewItems.map(item => ({
       ...item,
       scheduledTimeLabel: slotTimeLabelMap[item.slot as keyof typeof slotTimeLabelMap]
@@ -181,7 +179,6 @@ export default function HomeScreen() {
       : null
   ), [tomorrowSchedule]);
 
-  // Derive workout status from live schedule data (not stale homeSnapshot)
   const workoutStatus = useMemo(() => {
     if (todaySchedule?.session_type === 'workout') {
       return todaySchedule.status === 'completed' ? 'completed' : 'planned';
@@ -484,8 +481,8 @@ export default function HomeScreen() {
   return (
     <PremiumBackground>
       <ScrollView
-        style={styles.container}
-        contentContainerStyle={[styles.content, { paddingTop: insets.top + s.lg, paddingBottom: 120 }]}
+        className="flex-1"
+        contentContainerStyle={{ flexGrow: 1, paddingTop: insets.top + s.lg, paddingBottom: 120 }}
         showsVerticalScrollIndicator={false}
       >
 
@@ -493,53 +490,46 @@ export default function HomeScreen() {
           from={{ opacity: 0, translateY: -20 }}
           animate={{ opacity: 1, translateY: 0 }}
           transition={{ type: 'timing', duration: 500 }}
-          style={[styles.header, { paddingHorizontal: s.xl }]}
+          style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingHorizontal: s.xl }}
         >
           <View>
             <Text
-              style={[
-                styles.greeting,
-                {
-                  color: c.textMuted,
-                  fontFamily: ty.body.familyMedium,
-                  fontSize: 11,
-                  letterSpacing: 1.5,
-                  textTransform: 'uppercase',
-                },
-              ]}
+              style={{
+                color: c.textMuted,
+                fontFamily: ty.body.familyMedium,
+                fontSize: 11,
+                letterSpacing: 1.5,
+                textTransform: 'uppercase',
+                marginBottom: 2,
+              }}
             >
               {now.getHours() < 12 ? 'Good Morning' : now.getHours() < 17 ? 'Good Afternoon' : 'Good Evening'}
             </Text>
             <Text
               numberOfLines={1}
               adjustsFontSizeToFit
-              style={[
-                styles.title,
-                {
-                  color: c.text,
-                  fontFamily: ty.heading.family,
-                  fontSize: ty.sizes.h2,
-                  maxWidth: 240,
-                },
-              ]}
+              style={{
+                color: c.text,
+                fontFamily: ty.heading.family,
+                fontSize: ty.sizes.h2,
+                maxWidth: 240,
+                letterSpacing: -0.5,
+              }}
             >
               {profile?.first_name || 'Athlete'}
             </Text>
           </View>
-          <View style={styles.headerButtons}>
-            {/* Streak Counter */}
+          <View className="flex-row items-center gap-3">
             <StreakCounter />
 
             <Pressable
-              style={[
-                styles.headerButton,
-                {
-                  backgroundColor: 'transparent',
-                  borderRadius: r.pill,
-                  borderWidth: 2,
-                  borderColor: `${c.primary}40`,
-                },
-              ]}
+              className="w-11 h-11 items-center justify-center"
+              style={{
+                backgroundColor: 'transparent',
+                borderRadius: r.pill,
+                borderWidth: 2,
+                borderColor: `${c.primary}40`,
+              }}
               onPress={() => {
                 trackHomeCtaTapped({ cta_id: 'header_profile_settings' });
                 router.push('/settings');
@@ -553,20 +543,20 @@ export default function HomeScreen() {
         </MotiView>
 
         {/* Level Progress Card */}
-        <View style={[styles.section, { marginTop: s.lg, paddingHorizontal: s.lg }]}>
+        <View style={{ marginTop: s.lg, paddingHorizontal: s.lg }}>
           <LevelProgressCard delay={480} />
         </View>
 
         {/* Macro Dashboard */}
-        <View style={[styles.dashboardContainer, { marginTop: s.xl }]}>
+        <View className="items-center" style={{ marginTop: s.xl }}>
           <MacroDashboard consumed={dailyTotals} />
         </View>
 
-        <View style={[styles.section, { marginTop: s.xl, paddingHorizontal: s.lg }]}>
+        <View style={{ marginTop: s.xl, paddingHorizontal: s.lg }}>
           {renderWorkoutCard(700)}
         </View>
 
-        <View style={[styles.section, { marginTop: s.lg, paddingHorizontal: s.lg }]}>
+        <View style={{ marginTop: s.lg, paddingHorizontal: s.lg }}>
           <HomeMealPreviewCard
             meals={dashboardState.meals}
             activeIndex={safeMealIndex}
@@ -588,7 +578,7 @@ export default function HomeScreen() {
           />
         </View>
 
-        <View style={[styles.section, { marginTop: s.xl, paddingHorizontal: s.lg }]}>
+        <View style={{ marginTop: s.xl, paddingHorizontal: s.lg }}>
           <HomeHabitDock
             title={dashboardState.habitDockLabel}
             actions={habitDockActions}
@@ -600,80 +590,3 @@ export default function HomeScreen() {
   );
 
 }
-
-const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-  },
-  content: {
-    flexGrow: 1,
-  },
-  header: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-  },
-  greeting: {
-    marginBottom: 2,
-  },
-  title: {
-    letterSpacing: -0.5,
-  },
-  headerButtons: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 12,
-  },
-  headerButton: {
-    width: 44,
-    height: 44,
-    alignItems: 'center',
-    justifyContent: 'center',
-    position: 'relative',
-  },
-  notificationDot: {
-    position: 'absolute',
-    top: 10,
-    right: 10,
-    width: 8,
-    height: 8,
-    borderRadius: 4,
-    shadowOffset: { width: 0, height: 0 },
-    shadowOpacity: 0.9,
-    shadowRadius: 5,
-  },
-  dashboardContainer: {
-    alignItems: 'center',
-  },
-  section: {},
-  sectionTitle: {},
-  bannerRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 10,
-  },
-  bannerCopy: {
-    flex: 1,
-  },
-  bannerLabel: {
-    fontSize: 11,
-    letterSpacing: 1.2,
-    marginBottom: 2,
-  },
-  bannerText: {
-    fontSize: 13,
-    lineHeight: 18,
-  },
-  bannerDismiss: {
-    width: 30,
-    height: 30,
-    alignItems: 'center',
-    justifyContent: 'center',
-    borderWidth: 1,
-  },
-  ringIconsRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-around',
-    alignItems: 'flex-start',
-  },
-});

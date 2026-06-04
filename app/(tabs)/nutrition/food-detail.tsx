@@ -19,6 +19,7 @@ import { GlassCard } from '../../../components/premium/GlassCard';
 import { MacroRow } from '../../../components/nutrition/MacroRow';
 import { useProfile } from '../../../hooks/useUser';
 import { formatMacroDisplay, detectFoodCategory, getDefaultFoodMeasurement } from '../../../lib/nutrition/displayUnits';
+import { PressableScale } from '@/components/common/PressableScale';
 
 export default function FoodDetailScreen() {
   const { c, s, ty, r, shadow } = useTokens();
@@ -488,8 +489,8 @@ export default function FoodDetailScreen() {
           style={StyleSheet.absoluteFill}
           pointerEvents="none"
         />
-        <Pressable
-          style={({ pressed }) => [
+        <PressableScale
+          style={(pressed) => [
             styles.addButton,
             {
               backgroundColor: isExternalPreview
@@ -568,7 +569,7 @@ export default function FoodDetailScreen() {
               </Text>
             </>
           )}
-        </Pressable>
+        </PressableScale>
       </View>
     </View>
   );

@@ -1,6 +1,7 @@
 import React from 'react';
-import { Pressable, Text, StyleSheet, View } from 'react-native';
+import { Text, StyleSheet, View } from 'react-native';
 import { MotiView } from 'moti';
+import { PressableScale } from '@/components/common/PressableScale';
 import { metriqfitTheme } from '../../lib/theme';
 import { TabBarIcon } from '../../components/navigation/TabBarIcon';
 
@@ -29,8 +30,8 @@ export function OnboardingOption({
       animate={{ opacity: 1, translateX: 0 }}
       transition={{ type: 'timing' as const, duration: 300, delay: 100 + index * 50 } as any}
     >
-      <Pressable
-        style={({ pressed }) => [
+      <PressableScale
+        style={(pressed) => [
           styles.option,
           {
             backgroundColor: selected ? c.opacity.primaryLight : c.surface,
@@ -71,7 +72,7 @@ export function OnboardingOption({
         >
           {selected && <View style={[styles.radioInner, { backgroundColor: c.bg }]} />}
         </View>
-      </Pressable>
+      </PressableScale>
     </MotiView>
   );
 }

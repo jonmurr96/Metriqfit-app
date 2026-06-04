@@ -1,8 +1,9 @@
 import React from 'react';
-import { ActivityIndicator, Pressable, StyleSheet, Text, ViewStyle } from 'react-native';
+import { ActivityIndicator, StyleSheet, Text, ViewStyle } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 
 import { useTokens } from '../../lib/theme';
+import { PressableScale } from '@/components/common/PressableScale';
 
 interface AuthPrimaryButtonProps {
   label: string;
@@ -25,13 +26,13 @@ export function AuthPrimaryButton({
   const isDisabled = disabled || loading;
 
   return (
-    <Pressable
+    <PressableScale
       onPress={onPress}
       disabled={isDisabled}
       accessibilityRole="button"
       accessibilityLabel={label}
       accessibilityHint={accessibilityHint}
-      style={({ pressed }) => [styles.wrap, isDisabled ? { opacity: 0.6 } : null, pressed ? { transform: [{ scale: 0.99 }] } : null, style]}
+      style={(pressed) => [styles.wrap, isDisabled ? { opacity: 0.6 } : null, pressed ? { transform: [{ scale: 0.99 }] } : null, style]}
     >
       <LinearGradient
         colors={[c.primary, c.accent, c.primaryDark]}
@@ -45,7 +46,7 @@ export function AuthPrimaryButton({
           <Text style={[styles.label, { color: c.bg, fontFamily: ty.body.familySemibold }]}>{label}</Text>
         )}
       </LinearGradient>
-    </Pressable>
+    </PressableScale>
   );
 }
 

@@ -9,6 +9,7 @@ import { useTokens } from '../../../lib/theme';
 import { TabBarIcon } from '../../../components/navigation/TabBarIcon';
 import { GlassCard } from '../../../components/premium/GlassCard';
 import { useSessionDetails } from '../../../hooks/useWorkout';
+import { PressableScale } from '@/components/common/PressableScale';
 
 const { width } = Dimensions.get('window');
 
@@ -238,9 +239,9 @@ export default function WorkoutSummaryScreen() {
             paddingBottom: insets.bottom + s.md,
             backgroundColor: c.bg
         }}>
-            <Pressable
+            <PressableScale
                 onPress={() => router.replace('/(tabs)/workout/workout-history')}
-                style={({pressed}) => ({
+                style={(pressed) => ({
                     backgroundColor: c.primary,
                     padding: 16,
                     borderRadius: r.lg,
@@ -255,7 +256,7 @@ export default function WorkoutSummaryScreen() {
                 <Text style={{ color: c.bg, fontFamily: ty.heading.familySemibold, fontSize: ty.sizes.md }}>
                     Done
                 </Text>
-            </Pressable>
+            </PressableScale>
         </View>
     </View>
   );

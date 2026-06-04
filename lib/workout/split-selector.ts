@@ -943,8 +943,7 @@ export function selectSplit(input: SplitSelectorInput): SplitSelection {
     }
 
     if (
-      experienceLevel !== 'beginner'
-      && !highRecoveryBurden
+      !highRecoveryBurden
       && !shortOnTime
     ) {
       if (explicitBodybuildingIntent && preferredSplitFamily === 'arnold_split_6') {

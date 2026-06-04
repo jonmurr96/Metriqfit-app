@@ -36,7 +36,7 @@ export function SwapConfirmationSheet({
               </Text>
             </View>
             <Text style={{ color: c.textMuted, fontFamily: ty.body.family, fontSize: ty.sizes.xs, lineHeight: 18 }}>
-              "Good news! This is a perfect mechanical match. Your current weights and progression will carry over directly to {exercise.name}."
+              &quot;Good news! This is a perfect mechanical match. Your current weights and progression will carry over directly to {exercise.name}.&quot;
             </Text>
           </View>
         );
@@ -50,7 +50,7 @@ export function SwapConfirmationSheet({
               </Text>
             </View>
             <Text style={{ color: c.textMuted, fontFamily: ty.body.family, fontSize: ty.sizes.xs, lineHeight: 18 }}>
-              "This feels similar, but the equipment profile is different. I'll carry over your progress with a small safety buffer to help you adjust."
+              &quot;This feels similar, but the equipment profile is different. I&apos;ll carry over your progress with a small safety buffer to help you adjust.&quot;
             </Text>
           </View>
         );
@@ -65,7 +65,7 @@ export function SwapConfirmationSheet({
               </Text>
             </View>
             <Text style={{ color: c.textMuted, fontFamily: ty.body.family, fontSize: ty.sizes.xs, lineHeight: 18 }}>
-              "This is a meaningful change in movement. We'll start a fresh track for this exercise to find your new baseline."
+              &quot;This is a meaningful change in movement. We&apos;ll start a fresh track for this exercise to find your new baseline.&quot;
             </Text>
           </View>
         );

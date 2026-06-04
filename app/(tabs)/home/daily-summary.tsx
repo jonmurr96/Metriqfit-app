@@ -1,4 +1,4 @@
-import { StyleSheet, View, Text, Pressable, ScrollView } from "react-native";
+import { View, Text, Pressable, ScrollView } from "react-native";
 import { useRouter } from "expo-router";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useTokens } from "../../../lib/theme";
@@ -32,56 +32,55 @@ export default function DailySummaryScreen() {
       : "None";
 
   return (
-    <View style={[styles.container, { backgroundColor: c.bg, paddingTop: insets.top }]}>
-      <View style={[styles.header, { paddingHorizontal: s.lg }]}>
+    <View className="flex-1" style={{ backgroundColor: c.bg, paddingTop: insets.top }}>
+      <View className="flex-row items-center justify-between py-4" style={{ paddingHorizontal: s.lg }}>
         <Pressable
           onPress={() => router.back()}
-          style={[styles.backButton, { backgroundColor: c.surface }]}
+          className="w-10 h-10 rounded-full items-center justify-center"
+          style={{ backgroundColor: c.surface }}
           accessibilityLabel="Go back"
           accessibilityRole="button"
         >
           <TabBarIcon name="chevron-back" color={c.text} size={24} />
         </Pressable>
         <Text
-          style={[
-            styles.title,
-            {
-              color: c.text,
-              fontFamily: ty.heading.familySemibold,
-              fontSize: ty.sizes.xl,
-            },
-          ]}
+          style={{
+            letterSpacing: -0.3,
+            color: c.text,
+            fontFamily: ty.heading.familySemibold,
+            fontSize: ty.sizes.xl,
+          }}
         >
           Daily Summary
         </Text>
-        <View style={styles.placeholder} />
+        <View className="w-10" />
       </View>
 
-      <ScrollView contentContainerStyle={[styles.content, { padding: s.lg }]}>
+      <ScrollView contentContainerStyle={{ paddingBottom: 40, padding: s.lg }}>
         <GlassCard style={{ marginBottom: s.lg }}>
-          <View style={styles.cardHeader}>
+          <View className="flex-row justify-between mb-[10px] items-center">
             <Text style={{ color: c.text, fontFamily: ty.heading.familySemibold }}>Nutrition</Text>
             <Text style={{ color: c.textMuted, fontFamily: ty.body.family }}>{today}</Text>
           </View>
-          <View style={styles.metricRow}>
+          <View className="flex-row justify-between mb-1">
             <Text style={{ color: c.textMuted, fontFamily: ty.body.family }}>Calories</Text>
             <Text style={{ color: c.text, fontFamily: ty.body.familySemibold }}>
               {nutrition?.calories || 0} / {calorieTarget}
             </Text>
           </View>
-          <View style={styles.metricRow}>
+          <View className="flex-row justify-between mb-1">
             <Text style={{ color: c.textMuted, fontFamily: ty.body.family }}>Protein</Text>
             <Text style={{ color: c.text, fontFamily: ty.body.familySemibold }}>
               {Math.round(nutrition?.protein || 0)}g / {proteinTarget}g
             </Text>
           </View>
-          <View style={styles.metricRow}>
+          <View className="flex-row justify-between mb-1">
             <Text style={{ color: c.textMuted, fontFamily: ty.body.family }}>Carbs</Text>
             <Text style={{ color: c.text, fontFamily: ty.body.familySemibold }}>
               {Math.round(nutrition?.carbs || 0)}g / {carbsTarget}g
             </Text>
           </View>
-          <View style={styles.metricRow}>
+          <View className="flex-row justify-between mb-1">
             <Text style={{ color: c.textMuted, fontFamily: ty.body.family }}>Fat</Text>
             <Text style={{ color: c.text, fontFamily: ty.body.familySemibold }}>
               {Math.round(nutrition?.fat || 0)}g / {fatTarget}g
@@ -93,7 +92,7 @@ export default function DailySummaryScreen() {
         </GlassCard>
 
         <GlassCard style={{ marginBottom: s.lg }}>
-          <View style={styles.cardHeader}>
+          <View className="flex-row justify-between mb-[10px] items-center">
             <Text style={{ color: c.text, fontFamily: ty.heading.familySemibold }}>Workout</Text>
             <Text style={{ color: c.textMuted, fontFamily: ty.body.family }}>{workoutLabel}</Text>
           </View>
@@ -114,7 +113,7 @@ export default function DailySummaryScreen() {
         </GlassCard>
 
         <GlassCard>
-          <View style={styles.cardHeader}>
+          <View className="flex-row justify-between mb-[10px] items-center">
             <Text style={{ color: c.text, fontFamily: ty.heading.familySemibold }}>Coach Guidance</Text>
             <Text style={{ color: c.primary, fontFamily: ty.body.familySemibold, fontSize: ty.sizes.xs }}>Today</Text>
           </View>
@@ -143,43 +142,3 @@ export default function DailySummaryScreen() {
     </View>
   );
 }
-
-const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-  },
-  header: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-    paddingVertical: 16,
-  },
-  backButton: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  title: {
-    letterSpacing: -0.3,
-  },
-  placeholder: {
-    width: 40,
-  },
-  content: {
-    paddingBottom: 40,
-  },
-  cardHeader: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    marginBottom: 10,
-    alignItems: "center",
-  },
-  metricRow: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    marginBottom: 4,
-  },
-});
-

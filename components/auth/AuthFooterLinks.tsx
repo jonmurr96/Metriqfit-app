@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Pressable, StyleSheet, Text, View } from 'react-native';
+import { Pressable, Text, View } from 'react-native';
 import { Link } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { MotiView } from 'moti';
@@ -18,8 +18,8 @@ export function AuthFooterLinks({ prompt, actionLabel, href, disabled = false }:
   const [isPressed, setIsPressed] = useState(false);
 
   return (
-    <View style={styles.row}>
-      <Text style={{ color: c.textMuted, fontFamily: ty.body.family, fontSize: 13 }}>
+    <View className="flex-row justify-center items-center flex-wrap">
+      <Text className="text-[13px]" style={{ color: c.textMuted, fontFamily: ty.body.family }}>
         {prompt}{' '}
       </Text>
       <Link href={href as any} asChild>
@@ -29,14 +29,11 @@ export function AuthFooterLinks({ prompt, actionLabel, href, disabled = false }:
           accessibilityLabel={actionLabel}
           onPressIn={() => setIsPressed(true)}
           onPressOut={() => setIsPressed(false)}
-          style={styles.linkWrap}
+          className="flex-row items-center gap-[3px]"
         >
           <Text
-            style={{
-              color: c.primary,
-              fontFamily: ty.body.familySemibold,
-              fontSize: 13,
-            }}
+            className="text-[13px]"
+            style={{ color: c.primary, fontFamily: ty.body.familySemibold }}
           >
             {actionLabel}
           </Text>
@@ -51,17 +48,3 @@ export function AuthFooterLinks({ prompt, actionLabel, href, disabled = false }:
     </View>
   );
 }
-
-const styles = StyleSheet.create({
-  row: {
-    flexDirection: 'row',
-    justifyContent: 'center',
-    alignItems: 'center',
-    flexWrap: 'wrap',
-  },
-  linkWrap: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 3,
-  },
-});

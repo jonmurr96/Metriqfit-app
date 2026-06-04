@@ -61,7 +61,7 @@ export default function IdentityScreen() {
             <View style={styles.titleBlock}>
               <Text style={styles.titleLine1}>What should we</Text>
               <Text style={[styles.titleGradient, { color: CYAN }]}>call you?</Text>
-              <Text style={styles.subtitle}>Let's personalise your experience</Text>
+              <Text style={styles.subtitle}>Let&apos;s personalise your experience</Text>
             </View>
 
             {/* First Name */}

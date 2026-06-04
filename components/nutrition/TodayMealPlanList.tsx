@@ -9,6 +9,7 @@ import { MacroRow } from './MacroRow';
 import { useProfile } from '../../hooks/useUser';
 import { formatMacroDisplay, getDefaultFoodMeasurement } from '../../lib/nutrition/displayUnits';
 import type { PlannedFoodItem } from '../../lib/nutrition/home-meal-preview';
+import { PressableScale } from '@/components/common/PressableScale';
 
 export interface TodayMealPlanListItem {
   slot: MealSlot;
@@ -173,10 +174,10 @@ export function TodayMealPlanList({
         const hasFoods = meal.foods.length > 0;
 
         return (
-          <Pressable
+          <PressableScale
             key={meal.slot}
             onPress={() => onOpenMeal(meal)}
-            style={({ pressed }) => [
+            style={(pressed) => [
               styles.mealRow,
               {
                 backgroundColor: pressed ? c.surface2 : c.bg,
@@ -375,7 +376,7 @@ export function TodayMealPlanList({
                 {meal.loggedItemCount === 1 ? '' : 's'}
               </Text>
             )}
-          </Pressable>
+          </PressableScale>
         );
       })}
     </View>

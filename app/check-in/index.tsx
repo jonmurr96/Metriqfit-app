@@ -20,6 +20,7 @@ import { getTierLabel } from '../../lib/subscription/plans';
 import type { CheckInPreviewResult } from '../../services/checkInService';
 import type { PrepCoachAdjustmentResult } from '../../services/prepCoachService';
 import type { ProgressPhotoAngle } from '../../services/progressPhotoService';
+import { PressableScale } from '@/components/common/PressableScale';
 
 type Step = 'metrics' | 'wellness' | 'photos' | 'analysis';
 type BodyPhotoAngle = Extract<ProgressPhotoAngle, 'front' | 'side' | 'back'>;
@@ -660,8 +661,8 @@ export default function CheckInScreen() {
                         </Pressable>
                     )}
 
-                    <Pressable
-                        style={({ pressed }) => [
+                    <PressableScale
+                        style={(pressed) => [
                             styles.primaryButton,
                             {
                                 backgroundColor: c.primary,
@@ -687,7 +688,7 @@ export default function CheckInScreen() {
                                     : 'Continue'}
                         </Text>
                         {currentStep !== 'analysis' && <TabBarIcon name="arrow-forward" color={c.bg} size={18} />}
-                    </Pressable>
+                    </PressableScale>
                 </View>
             )}
 

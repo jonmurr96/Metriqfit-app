@@ -501,7 +501,7 @@ export default function PlanGenerationScreen() {
       try {
         const startTime = Date.now();
         const result = await triggerPlanGeneration(user.id, 'both', {
-          generation_version: 'v1',
+          generation_version: 'v3',
           generation_mode: 'initial',
           strict_days_match: true,
           strict_template_source: true,
@@ -590,11 +590,11 @@ export default function PlanGenerationScreen() {
   }, [goToPlanReview, handleRetry, latestRunId, retryNonce, router, user?.id]);
 
   return (
-    <View style={[styles.container, { backgroundColor: c.bg }]}>
+    <View className="flex-1" style={{ backgroundColor: c.bg }}>
       {/* Atmospheric background */}
       <GradientMeshBackground />
 
-      <View style={[styles.content, { paddingTop: insets.top + s.lg, paddingBottom: insets.bottom + s.lg }]}>
+      <View className="flex-1 items-center justify-between px-6" style={{ paddingTop: insets.top + s.lg, paddingBottom: insets.bottom + s.lg }}>
         {/* Header */}
         <MotiView
           from={{ opacity: 0, translateY: -20 }}
@@ -705,17 +705,8 @@ export default function PlanGenerationScreen() {
 }
 
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-  },
   blob: {
     position: 'absolute',
-  },
-  content: {
-    flex: 1,
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    paddingHorizontal: 24,
   },
 
   // Header

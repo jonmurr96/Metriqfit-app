@@ -1,5 +1,6 @@
 import React from 'react';
-import { Pressable, StyleSheet, Text, View } from 'react-native';
+import { StyleSheet, Text, View } from 'react-native';
+import { PressableScale } from '@/components/common/PressableScale';
 import { GlassCard } from '../premium/GlassCard';
 import { useTokens } from '../../lib/theme';
 import type { AICoachMemoryItem } from '../../services/aiCoachService';
@@ -39,11 +40,11 @@ export function CoachMemoryPreviewCard({ items, onOpen }: CoachMemoryPreviewCard
           </Text>
         </View>
 
-        <Pressable
+        <PressableScale
           accessibilityRole="button"
           accessibilityLabel="Open coach memory"
           onPress={onOpen}
-          style={({ pressed }) => [
+          style={(pressed) => [
             styles.iconButton,
             {
               borderRadius: r.md,
@@ -54,7 +55,7 @@ export function CoachMemoryPreviewCard({ items, onOpen }: CoachMemoryPreviewCard
           ]}
         >
           <TabBarIcon name="book-outline" color={c.primary} size={18} />
-        </Pressable>
+        </PressableScale>
       </View>
 
       <View style={{ marginTop: s.lg, gap: s.sm }}>

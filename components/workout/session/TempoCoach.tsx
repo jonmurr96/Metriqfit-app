@@ -172,7 +172,7 @@ export function TempoCoach({
             {'\n\n'}
             <Text style={{ fontFamily: ty.body.familySemibold }}>Format:</Text> Eccentric-Pause-Concentric-Rest (in seconds)
             {'\n'}
-            <Text style={{ fontFamily: ty.body.familySemibold }}>Example:</Text> "3-0-1-0" = 3s down, 0s pause, 1s up, 0s rest
+            <Text style={{ fontFamily: ty.body.familySemibold }}>Example:</Text> &quot;3-0-1-0&quot; = 3s down, 0s pause, 1s up, 0s rest
           </Text>
         </View>
       )}

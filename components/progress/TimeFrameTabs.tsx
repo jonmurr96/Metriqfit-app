@@ -1,7 +1,8 @@
 import React from 'react';
-import { View, Text, Pressable, StyleSheet, Platform } from 'react-native';
+import { View, Text, StyleSheet, Platform } from 'react-native';
 import { MotiView } from 'moti';
 import { useTokens } from '../../lib/theme';
+import { PressableScale } from '@/components/common/PressableScale';
 
 type TimeFrame = 'week' | 'month' | 'year';
 
@@ -39,8 +40,8 @@ export function TimeFrameTabs({ selected, onSelect }: TimeFrameTabsProps) {
             animate={{ opacity: 1, scale: 1 }}
             transition={{ type: 'spring', damping: 15, delay: 50 + index * 50 }}
           >
-            <Pressable
-              style={({ pressed }) => [
+            <PressableScale
+              style={(pressed) => [
                 styles.tab,
                 {
                   backgroundColor: isActive ? c.primary : 'transparent',
@@ -73,7 +74,7 @@ export function TimeFrameTabs({ selected, onSelect }: TimeFrameTabsProps) {
               >
                 {tab.label}
               </Text>
-            </Pressable>
+            </PressableScale>
           </MotiView>
         );
       })}

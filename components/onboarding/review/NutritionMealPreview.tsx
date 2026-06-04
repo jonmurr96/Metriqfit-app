@@ -1,5 +1,5 @@
 import React, { useMemo } from 'react';
-import { StyleSheet, Text, View } from 'react-native';
+import { Text, View } from 'react-native';
 import { useTokens } from '../../../lib/theme';
 import { MacroInlineSummary } from '../../nutrition/MacroInlineSummary';
 import type { NutritionPlanDayDetails } from '../../../services/planService';
@@ -35,15 +35,15 @@ export function NutritionMealPreview({ dayDetails }: NutritionMealPreviewProps) 
 
   if (!dayDetails || !meals.length) {
     return (
-      <View style={[styles.emptyCard, { borderColor: c.border, backgroundColor: c.bg, borderRadius: r.md }]}> 
+      <View className="border p-3" style={{ borderColor: c.border, backgroundColor: c.bg, borderRadius: r.md }}>
         <Text style={{ color: c.textMuted, fontFamily: ty.body.family }}>No meals available for today yet.</Text>
       </View>
     );
   }
 
   return (
-    <View style={styles.wrapper}>
-      <View style={[styles.summaryCard, { borderColor: c.border, backgroundColor: c.bg, borderRadius: r.md }]}> 
+    <View className="gap-2">
+      <View className="border p-[10px] gap-[2px]" style={{ borderColor: c.border, backgroundColor: c.bg, borderRadius: r.md }}>
         <Text style={{ color: c.text, fontFamily: ty.body.familySemibold, fontSize: 12 }}>
           Planned today: {Math.round(dayDetails.totals.calories)} kcal
         </Text>
@@ -67,22 +67,18 @@ export function NutritionMealPreview({ dayDetails }: NutritionMealPreviewProps) 
         const fat = Number(selected?.target_fat ?? meal.target_fat ?? 0);
 
         return (
-          <View key={meal.id} style={[styles.mealCard, { borderColor: c.border, backgroundColor: c.bg, borderRadius: r.md }]}> 
-            <View style={styles.mealHeader}>
+          <View key={meal.id} className="border p-3" style={{ borderColor: c.border, backgroundColor: c.bg, borderRadius: r.md }}>
+            <View className="flex-row items-start justify-between mb-[6px] gap-2">
               <Text
-                style={[
-                  styles.mealTitle,
-                  { color: c.text, fontFamily: ty.body.familySemibold },
-                ]}
+                className="flex-1 text-[13px] leading-[17px] pr-[6px]"
+                style={{ color: c.text, fontFamily: ty.body.familySemibold }}
                 numberOfLines={2}
               >
                 {slotLabel(meal.meal_slot)}: {selected?.name || meal.name}
               </Text>
               <Text
-                style={[
-                  styles.mealCalories,
-                  { color: c.primary, fontFamily: ty.body.familySemibold },
-                ]}
+                className="shrink-0 text-xs leading-[17px] text-right"
+                style={{ color: c.primary, fontFamily: ty.body.familySemibold }}
               >
                 {Math.round(calories)} kcal
               </Text>
@@ -120,41 +116,3 @@ export function NutritionMealPreview({ dayDetails }: NutritionMealPreviewProps) 
     </View>
   );
 }
-
-const styles = StyleSheet.create({
-  wrapper: {
-    gap: 8,
-  },
-  summaryCard: {
-    borderWidth: 1,
-    padding: 10,
-    gap: 2,
-  },
-  mealCard: {
-    borderWidth: 1,
-    padding: 12,
-  },
-  mealHeader: {
-    flexDirection: 'row',
-    alignItems: 'flex-start',
-    justifyContent: 'space-between',
-    marginBottom: 6,
-    gap: 8,
-  },
-  mealTitle: {
-    flex: 1,
-    fontSize: 13,
-    lineHeight: 17,
-    paddingRight: 6,
-  },
-  mealCalories: {
-    flexShrink: 0,
-    fontSize: 12,
-    lineHeight: 17,
-    textAlign: 'right',
-  },
-  emptyCard: {
-    borderWidth: 1,
-    padding: 12,
-  },
-});

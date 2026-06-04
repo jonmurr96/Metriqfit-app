@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState } from 'react';
 import {
   ActivityIndicator,
   Pressable,
@@ -30,18 +30,21 @@ export function ShimmerButton({
 }: ShimmerButtonProps) {
   const { c, ty, r } = useTokens();
   const isDisabled = disabled || loading;
+  const [pressed, setPressed] = useState(false);
 
   return (
     <Pressable
       onPress={onPress}
+      onPressIn={() => setPressed(true)}
+      onPressOut={() => setPressed(false)}
       disabled={isDisabled}
       accessibilityRole="button"
       accessibilityLabel={label}
       accessibilityHint={accessibilityHint}
-      style={({ pressed }) => [
+      style={[
         styles.wrap,
         isDisabled ? { opacity: 0.55 } : null,
-        pressed ? { transform: [{ scale: 0.98 }] } : null,
+        pressed && !isDisabled ? { transform: [{ scale: 0.98 }] } : null,
         style,
       ]}
     >

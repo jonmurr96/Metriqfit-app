@@ -1,9 +1,10 @@
 import React from 'react';
-import { View, Text, StyleSheet, Pressable, Platform } from 'react-native';
+import { View, Text, StyleSheet, Platform } from 'react-native';
 import { MotiView } from 'moti';
 import Svg, { Circle } from 'react-native-svg';
 import { useTokens } from '../../lib/theme';
 import { GlassCard } from '../../components/premium/GlassCard';
+import { PressableScale } from '@/components/common/PressableScale';
 
 interface MacroConsistencyCardProps {
   overallScore?: number;
@@ -53,9 +54,9 @@ export function MacroConsistencyCard({
           Macro Consistency
         </Text>
         {/* Ring-style button */}
-        <Pressable
+        <PressableScale
           onPress={onViewAnalytics}
-          style={({ pressed }) => [
+          style={(pressed) => [
             styles.viewButton,
             {
               borderWidth: 2,
@@ -74,7 +75,7 @@ export function MacroConsistencyCard({
           >
             View Analytics
           </Text>
-        </Pressable>
+        </PressableScale>
       </View>
 
       <View style={styles.content}>

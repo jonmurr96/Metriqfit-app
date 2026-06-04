@@ -1,8 +1,9 @@
 import React from 'react';
-import { View, Text, Pressable, StyleSheet, Platform } from 'react-native';
+import { View, Text, StyleSheet, Platform } from 'react-native';
 import { MotiView } from 'moti';
 import { useTokens } from '../../lib/theme';
 import { TabBarIcon } from '../../components/navigation/TabBarIcon';
+import { PressableScale } from '@/components/common/PressableScale';
 
 interface RingIconButtonProps {
     icon: string;
@@ -39,9 +40,9 @@ export function RingIconButton({
             }}
             style={styles.container}
         >
-            <Pressable
+            <PressableScale
                 onPress={onPress}
-                style={({ pressed }) => [
+                style={(pressed) => [
                     styles.pressable,
                     { minWidth: size + 12 },
                     { transform: [{ scale: pressed ? 0.92 : 1 }] },
@@ -99,7 +100,7 @@ export function RingIconButton({
                         </Text>
                     </>
                 )}
-            </Pressable>
+            </PressableScale>
         </MotiView>
     );
 }

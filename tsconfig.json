@@ -5,13 +5,25 @@
     "module": "esnext",
     "moduleResolution": "bundler",
     "allowImportingTsExtensions": true,
+    "experimentalDecorators": true,
+    "emitDecoratorMetadata": true,
     "baseUrl": ".",
     "paths": {
-      "@/*": ["./*"],
-      "@components/*": ["components/*"],
-      "@lib/*": ["lib/*"],
-      "@screens/*": ["screens/*"],
-      "@services/*": ["services/*"]
+      "@/*": [
+        "./*"
+      ],
+      "@components/*": [
+        "components/*"
+      ],
+      "@lib/*": [
+        "lib/*"
+      ],
+      "@screens/*": [
+        "screens/*"
+      ],
+      "@services/*": [
+        "services/*"
+      ]
     }
   },
   "include": [
@@ -26,13 +38,19 @@
     "utils/**/*.ts",
     "constants/**/*.ts",
     ".expo/types/**/*.ts",
-    "expo-env.d.ts"
+    "expo-env.d.ts",
+    "nativewind-env.d.ts"
   ],
   "exclude": [
     "node_modules",
     "Metriqfit 3",
     "lib/Barcode Scan/supabase_*.ts",
     "supabase/functions",
-    ".agent"
+    ".agent",
+    "lib/workout/__tests__",
+    "lib/**/*_test.ts",
+    "lib/spec/snapshot.ts",
+    "lib/science/_test.ts",
+    ".claude"
   ]
 }

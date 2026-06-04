@@ -15,6 +15,7 @@ import { selectRecipesForPlan } from './recipe-selection.ts';
 import { generatePeriodizedProgram } from './periodization-integration.ts';
 import { enhanceProgramWithRecovery, processDailyCheckIn } from './recovery-integration.ts';
 import { Analytics, calculateProgramMetrics } from './analytics-framework.ts';
+import { normalizeUserTrainingProfile, type ExperienceLevel } from './training-profile.ts';
 
 // ---------------------------------------------------------------------------
 // Unit Tests: Recovery Management
@@ -22,13 +23,13 @@ import { Analytics, calculateProgramMetrics } from './analytics-framework.ts';
 
 testRunner.describe('Recovery Score Calculation', () => {
   testRunner.it('should calculate high score for excellent metrics', () => {
-    const score = calculateRecoveryScore([TestData.metrics.excellent], [], 'intermediate');
+    const score = calculateRecoveryScore([{ ...TestData.metrics.excellent, date: '2024-01-15' }], [], 'intermediate');
     assertTrue(score.overall >= 80, 'Excellent metrics should score >= 80');
     assertEquals(score.status, 'excellent');
   });
 
   testRunner.it('should calculate low score for poor metrics', () => {
-    const score = calculateRecoveryScore([TestData.metrics.poor], [], 'intermediate');
+    const score = calculateRecoveryScore([{ ...TestData.metrics.poor, date: '2024-01-15' }], [], 'intermediate');
     assertTrue(score.overall <= 50, 'Poor metrics should score <= 50');
     assertEquals(score.status, 'poor');
   });
@@ -92,7 +93,7 @@ testRunner.describe('Progressive Overload Protocols', () => {
   testRunner.it('should recommend weight increase on successful set', () => {
     const protocol = {
       name: 'Double Progression',
-      applicableTo: ['beginner', 'intermediate'],
+      applicableTo: ['beginner', 'intermediate'] as ExperienceLevel[],
       description: '',
       primaryDriver: 'weight' as const,
       progressionRule: '',
@@ -113,7 +114,7 @@ testRunner.describe('Progressive Overload Protocols', () => {
   testRunner.it('should maintain weight when RPE too high', () => {
     const protocol = {
       name: 'RPE-Based',
-      applicableTo: ['advanced'],
+      applicableTo: ['advanced'] as ExperienceLevel[],
       description: '',
       primaryDriver: 'weight' as const,
       progressionRule: '',
@@ -145,7 +146,7 @@ testRunner.describe('Periodization Config', () => {
 
   testRunner.it('should return appropriate deload strategy for experience level', () => {
     const beginner = getPeriodizationConfig('beginner', 'build_muscle', 8);
-    const advanced = getPeriodizationConfig('advanced', 'build_strength', 16);
+    const advanced = getPeriodizationConfig('advanced', 'get_stronger', 16);
 
     assertEquals(beginner.deloadStrategy.frequency, 6);
     assertEquals(advanced.deloadStrategy.frequency, 3);
@@ -200,7 +201,7 @@ testRunner.describe('Recipe Selection', () => {
 
 testRunner.describe('Full Program Generation', () => {
   testRunner.it('should generate complete beginner program', () => {
-    const program = generatePeriodizedProgram('test_user', TestData.users.beginner, { weeks: 8 });
+    const program = generatePeriodizedProgram('test_user', normalizeUserTrainingProfile(TestData.users.beginner), { weeks: 8 });
 
     assertEquals(program.totalWeeks, 8);
     assertTrue(program.weeks.length === 8);
@@ -208,7 +209,7 @@ testRunner.describe('Full Program Generation', () => {
   });
 
   testRunner.it('should generate program with recovery tracking', () => {
-    const baseProgram = generatePeriodizedProgram('test_user', TestData.users.intermediate);
+    const baseProgram = generatePeriodizedProgram('test_user', normalizeUserTrainingProfile(TestData.users.intermediate));
     const program = enhanceProgramWithRecovery(baseProgram);
 
     assertTrue(program.recoveryTracking !== undefined);
@@ -216,7 +217,7 @@ testRunner.describe('Full Program Generation', () => {
   });
 
   testRunner.it('should adjust training based on recovery', () => {
-    const baseProgram = generatePeriodizedProgram('test_user', TestData.users.intermediate);
+    const baseProgram = generatePeriodizedProgram('test_user', normalizeUserTrainingProfile(TestData.users.intermediate));
     let program = enhanceProgramWithRecovery(baseProgram);
 
     // Simulate poor recovery check-in
@@ -241,10 +242,10 @@ testRunner.describe('Full Program Generation', () => {
     ];
 
     experiences.forEach((exp) => {
-      const program = generatePeriodizedProgram('test_user', {
+      const program = generatePeriodizedProgram('test_user', normalizeUserTrainingProfile({
         ...TestData.users[exp],
         experienceLevel: exp,
-      });
+      }));
 
       assertTrue(program.weeks.length > 0, `${exp} program should have weeks`);
       assertTrue(
@@ -306,7 +307,7 @@ testRunner.describe('Property-Based Tests', () => {
 testRunner.describe('Analytics Calculations', () => {
   testRunner.it('should calculate program metrics correctly', () => {
     const program = enhanceProgramWithRecovery(
-      generatePeriodizedProgram('test_user', TestData.users.intermediate, { weeks: 4 })
+      generatePeriodizedProgram('test_user', normalizeUserTrainingProfile(TestData.users.intermediate), { weeks: 4 })
     );
 
     const completedWorkouts = [
@@ -348,7 +349,7 @@ testRunner.describe('Program Validation', () => {
     const validator = createProgramValidator();
 
     const validProgram = enhanceProgramWithRecovery(
-      generatePeriodizedProgram('test', TestData.users.beginner)
+      generatePeriodizedProgram('test', normalizeUserTrainingProfile(TestData.users.beginner))
     );
 
     const results = validator.validate(validProgram);
@@ -384,7 +385,7 @@ testRunner.describe('Edge Cases', () => {
   });
 
   testRunner.it('should handle single metric', () => {
-    const score = calculateRecoveryScore([TestData.metrics.good], [], 'intermediate');
+    const score = calculateRecoveryScore([{ ...TestData.metrics.good, date: '2024-01-15' }], [], 'intermediate');
     assertTrue(score.overall > 0);
     assertTrue(score.status !== 'critical');
   });
@@ -411,7 +412,7 @@ testRunner.describe('Edge Cases', () => {
       sessionDurationMin: 30,
     };
 
-    const program = generatePeriodizedProgram('test', context);
+    const program = generatePeriodizedProgram('test', normalizeUserTrainingProfile(context as any));
     assertTrue(program.weeks.length > 0);
 
     // All days should fit in 30 minutes

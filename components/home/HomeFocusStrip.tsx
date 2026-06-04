@@ -1,9 +1,10 @@
 import React from 'react';
-import { Platform, Pressable, StyleSheet, Text, View } from 'react-native';
+import { Platform, StyleSheet, Text, View } from 'react-native';
 
 import { useTokens } from '../../lib/theme';
 import { TabBarIcon } from '../navigation/TabBarIcon';
 import { GlassCard } from '../premium/GlassCard';
+import { PressableScale } from '@/components/common/PressableScale';
 
 export type HomeFocusMetric = {
   label: string;
@@ -130,9 +131,9 @@ export function HomeFocusStrip({
       ) : null}
 
       <View style={[styles.actionsRow, { marginTop: s.lg, gap: s.md }]}>
-        <Pressable
+        <PressableScale
           onPress={onPress}
-          style={({ pressed }) => [
+          style={(pressed) => [
             styles.primaryAction,
             {
               backgroundColor: accentColor,
@@ -160,12 +161,12 @@ export function HomeFocusStrip({
           >
             {ctaLabel}
           </Text>
-        </Pressable>
+        </PressableScale>
 
         {secondaryLabel && onSecondaryPress ? (
-          <Pressable
+          <PressableScale
             onPress={onSecondaryPress}
-            style={({ pressed }) => [
+            style={(pressed) => [
               styles.secondaryAction,
               {
                 borderRadius: r.pill,
@@ -183,7 +184,7 @@ export function HomeFocusStrip({
             >
               {secondaryLabel}
             </Text>
-          </Pressable>
+          </PressableScale>
         ) : null}
       </View>
     </GlassCard>

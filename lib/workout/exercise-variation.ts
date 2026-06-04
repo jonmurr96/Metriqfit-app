@@ -110,7 +110,7 @@ const ROTATABLE_PATTERNS: PatternSlot[] = [
 // Variation Strategies by Pattern
 // ---------------------------------------------------------------------------
 
-const VARIATION_STRATEGIES: Record<PatternSlot, { rotationWeeks: number; strategies: string[] }> = {
+const VARIATION_STRATEGIES: Record<string, { rotationWeeks: number; strategies: string[] }> = {
   compound_squat: { rotationWeeks: 8, strategies: ['stable', 'equipment'] },
   compound_hinge: { rotationWeeks: 8, strategies: ['stable', 'equipment'] },
   horizontal_push: { rotationWeeks: 6, strategies: ['stable', 'angle', 'grip'] },
@@ -300,7 +300,7 @@ export function getVariationCandidates(
       const gripAlts = GRIP_VARIATIONS[nameKey] || [];
       candidates = pool.filter((ex) => 
         gripAlts.some((alt) => 
-          normalizeName(ex.name).includes(normalizeName(alt))
+          normalizeName(ex.name || '').includes(normalizeName(alt))
         )
       );
       break;
@@ -311,7 +311,7 @@ export function getVariationCandidates(
       const angleAlts = ANGLE_VARIATIONS[nameKey] || [];
       candidates = pool.filter((ex) => 
         angleAlts.some((alt) => 
-          normalizeName(ex.name).includes(normalizeName(alt))
+          normalizeName(ex.name || '').includes(normalizeName(alt))
         )
       );
       break;

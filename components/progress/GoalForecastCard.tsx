@@ -1,9 +1,10 @@
 import React from 'react';
-import { View, Text, StyleSheet, Pressable, Platform } from 'react-native';
+import { View, Text, StyleSheet, Platform } from 'react-native';
 import { MotiView } from 'moti';
 import { useTokens } from '../../lib/theme';
 import { TabBarIcon } from '../../components/navigation/TabBarIcon';
 import { GlassCard } from '../../components/premium/GlassCard';
+import { PressableScale } from '@/components/common/PressableScale';
 
 interface GoalForecastCardProps {
   startWeight?: number;
@@ -123,8 +124,8 @@ export function GoalForecastCard({
       </View>
 
       {/* Glow CTA button */}
-      <Pressable
-        style={({ pressed }) => [
+      <PressableScale
+        style={(pressed) => [
           styles.ctaButton,
           {
             backgroundColor: c.primary,
@@ -153,7 +154,7 @@ export function GoalForecastCard({
         >
           View Full Projection
         </Text>
-      </Pressable>
+      </PressableScale>
     </GlassCard>
   );
 }

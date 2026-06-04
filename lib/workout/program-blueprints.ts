@@ -69,7 +69,7 @@ const EX = {
   goblet_squat: 'goblet_squat',
   leg_press: 'leg_press',
   hack_squat: 'hack_squat',
-  
+
   // Hinge
   deadlift: 'deadlift',
   romanian_deadlift: 'romanian_deadlift',
@@ -127,6 +127,12 @@ const EX = {
   pallof_press: 'pallof_press',
   ab_wheel: 'ab_wheel',
   hanging_leg_raise: 'hanging_leg_raise',
+
+  // Mappings to fundamental-exercises
+  weighted_pull_up: 'pull_up',
+  weighted_dip: 'push_up',
+  rack_pull: 'deadlift',
+  cable_curl: 'dumbbell_curl',
 } as const;
 
 // ---------------------------------------------------------------------------

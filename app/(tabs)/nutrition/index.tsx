@@ -22,6 +22,7 @@ import { getDefaultFoodMeasurement } from '../../../lib/nutrition/displayUnits';
 import { getMealSlotLabel, MEAL_SLOT_ORDER } from '../../../lib/nutrition/meal-slots';
 import type { MealSlot } from '../../../services/nutritionService';
 import { toLocalDateKey } from '../../../lib/home/dashboard-state';
+import { PressableScale } from '@/components/common/PressableScale';
 
 
 
@@ -264,8 +265,8 @@ export default function NutritionHomeScreen() {
 
         <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12 }}>
           {/* Ring-style Search button */}
-          <Pressable
-            style={({ pressed }) => [
+          <PressableScale
+            style={(pressed) => [
               styles.logButton,
               {
                 backgroundColor: pressed ? `${c.primary}20` : 'transparent',
@@ -296,7 +297,7 @@ export default function NutritionHomeScreen() {
             >
               Search
             </Text>
-          </Pressable>
+          </PressableScale>
         </View>
       </MotiView>
 

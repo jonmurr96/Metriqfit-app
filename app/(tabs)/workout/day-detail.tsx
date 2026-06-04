@@ -43,19 +43,13 @@ export default function DayDetailScreen() {
     return getProgramById(programId);
   }, [programId]);
 
-  if (!day || !program) {
-    return (
-      <View style={[styles.container, { backgroundColor: c.bg, paddingTop: insets.top }]}>
-        <Text style={{ color: c.text }}>Day not found</Text>
-      </View>
-    );
-  }
-
   // Calculate push/pull ratio for this day
   const pushPullStats = useMemo(() => {
     let pushSets = 0;
     let pullSets = 0;
     let legSets = 0;
+
+    if (!day) return { pushSets, pullSets, legSets, ratio: 0 };
 
     for (const exercise of day.exercises) {
       const exerciseData = FUNDAMENTAL_EXERCISES.find(e => e.id === exercise.exerciseId);
@@ -73,6 +67,14 @@ export default function DayDetailScreen() {
 
     return { pushSets, pullSets, legSets, ratio: pullSets > 0 ? pushSets / pullSets : 0 };
   }, [day]);
+
+  if (!day || !program) {
+    return (
+      <View style={[styles.container, { backgroundColor: c.bg, paddingTop: insets.top }]}>
+        <Text style={{ color: c.text }}>Day not found</Text>
+      </View>
+    );
+  }
 
   return (
     <View style={[styles.container, { backgroundColor: c.bg, paddingTop: insets.top }]}>

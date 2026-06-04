@@ -1,9 +1,10 @@
 import React from 'react';
-import { Pressable, Text, View } from 'react-native';
+import { Text, View } from 'react-native';
 
 import { GlassCard } from '../../premium/GlassCard';
 import { TabBarIcon } from '../../navigation/TabBarIcon';
 import { useTokens } from '../../../lib/theme';
+import { PressableScale } from '@/components/common/PressableScale';
 import type { WorkoutDashboardPrimaryHeroState } from '../../../lib/workout/dashboard-state';
 
 type Props = {
@@ -226,10 +227,10 @@ export function WorkoutPrimaryHeroCard({ state, contextLabel, onPrimaryPress, on
         )}
 
         <View style={{ flexDirection: 'row', gap: s.sm }}>
-          <Pressable
+          <PressableScale
             disabled={disabled}
             onPress={onPrimaryPress}
-            style={({ pressed }) => ({
+            style={(pressed) => ({
               flex: 1,
               minHeight: 48,
               borderRadius: r.pill,
@@ -248,13 +249,13 @@ export function WorkoutPrimaryHeroCard({ state, contextLabel, onPrimaryPress, on
             >
               {state.primaryLabel}
             </Text>
-          </Pressable>
+          </PressableScale>
 
           {state.secondaryLabel && onSecondaryPress ? (
-            <Pressable
+            <PressableScale
               disabled={disabled}
               onPress={onSecondaryPress}
-              style={({ pressed }) => ({
+              style={(pressed) => ({
                 paddingHorizontal: s.lg,
                 minHeight: 48,
                 borderRadius: r.pill,
@@ -275,7 +276,7 @@ export function WorkoutPrimaryHeroCard({ state, contextLabel, onPrimaryPress, on
               >
                 {state.secondaryLabel}
               </Text>
-            </Pressable>
+            </PressableScale>
           ) : null}
         </View>
       </View>

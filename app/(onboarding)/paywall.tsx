@@ -340,14 +340,14 @@ export default function PaywallScreen() {
 
   if (isLoading) {
     return (
-      <View style={[styles.loading, { backgroundColor: c.bg }]}> 
+      <View className="flex-1 items-center justify-center" style={{ backgroundColor: c.bg }}>
         <ActivityIndicator size="large" color={c.primary} />
       </View>
     );
   }
 
   return (
-    <View style={[styles.container, { backgroundColor: c.bg }]}> 
+    <View className="flex-1" style={{ backgroundColor: c.bg }}>
       <LinearGradient colors={[c.bg, c.surface]} style={StyleSheet.absoluteFill} />
 
       <ScrollView
@@ -358,27 +358,40 @@ export default function PaywallScreen() {
         }}
         showsVerticalScrollIndicator={false}
       >
-        <View style={styles.headerRow}>
+        <View className="flex-row justify-between gap-4">
           <View>
-            <Text style={[styles.sectionLabel, { color: c.primary, fontFamily: ty.body.familySemibold }]}>Plan Comparison</Text>
-            <Text style={[styles.headline, { color: c.text, fontFamily: ty.heading.familySemibold }]}>Choose your</Text>
-            <Text style={[styles.headlineAccent, { color: c.primary, fontFamily: ty.heading.familySemibold }]}>training path</Text>
+            <Text
+              className="mt-2 mb-2 text-xs uppercase"
+              style={{ color: c.primary, fontFamily: ty.body.familySemibold, letterSpacing: 2 }}
+            >
+              Plan Comparison
+            </Text>
+            <Text style={{ fontSize: 42, lineHeight: 44, color: c.text, fontFamily: ty.heading.familySemibold }}>Choose your</Text>
+            <Text style={{ fontSize: 42, lineHeight: 44, marginBottom: 16, color: c.primary, fontFamily: ty.heading.familySemibold }}>training path</Text>
             <Text style={{ color: c.textMuted, fontFamily: ty.body.family, marginTop: 10 }}>
               {displayName}, Free builds the habit, Premium expands the system, and Elite removes the limits.
             </Text>
           </View>
-          <Pressable onPress={completeWithFreeTier} style={[styles.closeButton, { backgroundColor: c.surface2 }]}>
+          <Pressable
+            className="self-start px-[14px] py-[10px] rounded-full"
+            style={{ backgroundColor: c.surface2 }}
+            onPress={completeWithFreeTier}
+          >
             <Text style={{ color: c.textMuted, fontFamily: ty.body.familySemibold }}>Skip</Text>
           </Pressable>
         </View>
 
-        <View style={[styles.billingToggle, { backgroundColor: c.surface2 }]}>
+        <View
+          className="flex-row gap-1 p-1 rounded-[14px]"
+          style={{ backgroundColor: c.surface2 }}
+        >
           {(['annual', 'monthly'] as const).map((value) => {
             const active = billingPeriod === value;
             return (
               <Pressable
                 key={value}
-                style={[styles.billingToggleOption, { backgroundColor: active ? c.surface : 'transparent' }]}
+                className="flex-1 h-[42px] rounded-[10px] items-center justify-center"
+                style={{ backgroundColor: active ? c.surface : 'transparent' }}
                 onPress={() => setBillingPeriod(value)}
               >
                 <Text style={{ color: active ? c.text : c.textMuted, fontFamily: ty.body.familySemibold }}>
@@ -396,13 +409,11 @@ export default function PaywallScreen() {
             return (
               <Pressable
                 key={card.tier}
-                style={[
-                  styles.planCard,
-                  {
-                    borderColor: selected ? c.primary : highlighted ? `${c.primary}88` : c.border,
-                    backgroundColor: c.surface,
-                  },
-                ]}
+                className="border rounded-[20px] p-[18px]"
+                style={{
+                  borderColor: selected ? c.primary : highlighted ? `${c.primary}88` : c.border,
+                  backgroundColor: c.surface,
+                }}
                 onPress={() => {
                   if (card.tier === 'free') return;
                   setSelectedTier(card.tier);
@@ -415,8 +426,11 @@ export default function PaywallScreen() {
                   });
                 }}
               >
-                <View style={styles.cardTopRow}>
-                  <View style={[styles.cardBadge, { backgroundColor: highlighted ? c.primary : c.surface2 }]}>
+                <View className="flex-row justify-between items-center gap-3">
+                  <View
+                    className="rounded-full px-[10px] py-[6px]"
+                    style={{ backgroundColor: highlighted ? c.primary : c.surface2 }}
+                  >
                     <Text style={{ color: highlighted ? c.bg : c.textMuted, fontFamily: ty.body.familySemibold, fontSize: 11 }}>
                       {card.badge}
                     </Text>
@@ -441,9 +455,9 @@ export default function PaywallScreen() {
                 </Text>
                 <View style={{ marginTop: 18, gap: 10 }}>
                   {card.features.map((feature) => (
-                    <View key={feature} style={{ flexDirection: 'row', gap: 10 }}>
+                    <View key={feature} className="flex-row gap-[10px]">
                       <Text style={{ color: card.tier === 'free' ? c.textMuted : c.primary }}>•</Text>
-                      <Text style={{ color: c.text, fontFamily: ty.body.family, flex: 1 }}>{feature}</Text>
+                      <Text className="flex-1" style={{ color: c.text, fontFamily: ty.body.family }}>{feature}</Text>
                     </View>
                   ))}
                 </View>
@@ -452,34 +466,38 @@ export default function PaywallScreen() {
           })}
         </View>
 
-        <View style={[styles.tableWrap, { borderColor: c.border, backgroundColor: c.surface, marginTop: s.xl }]}>
-          <View style={[styles.tableHeader, { borderBottomColor: c.border }]}>
-            <Text style={[styles.tableLabel, { color: c.text, fontFamily: ty.body.familySemibold }]}>Feature</Text>
-            <Text style={[styles.tableCellHeader, { color: c.text, fontFamily: ty.body.familySemibold }]}>Free</Text>
-            <Text style={[styles.tableCellHeader, { color: c.text, fontFamily: ty.body.familySemibold }]}>Premium</Text>
-            <Text style={[styles.tableCellHeader, { color: c.primary, fontFamily: ty.body.familySemibold }]}>Elite</Text>
+        <View
+          className="border rounded-[18px] overflow-hidden"
+          style={{ borderColor: c.border, backgroundColor: c.surface, marginTop: s.xl }}
+        >
+          <View
+            className="flex-row items-center border-b px-[14px] py-3"
+            style={{ borderBottomColor: c.border }}
+          >
+            <Text style={{ flex: 2, fontSize: 13, color: c.text, fontFamily: ty.body.familySemibold }}>Feature</Text>
+            <Text className="flex-1 text-center text-[13px]" style={{ color: c.text, fontFamily: ty.body.familySemibold }}>Free</Text>
+            <Text className="flex-1 text-center text-[13px]" style={{ color: c.text, fontFamily: ty.body.familySemibold }}>Premium</Text>
+            <Text className="flex-1 text-center text-[13px]" style={{ color: c.primary, fontFamily: ty.body.familySemibold }}>Elite</Text>
           </View>
           {comparisonRows.map((row, index) => (
             <View
               key={row[0]}
-              style={[
-                styles.tableRow,
-                {
-                  borderBottomWidth: index === comparisonRows.length - 1 ? 0 : StyleSheet.hairlineWidth,
-                  borderBottomColor: c.border,
-                },
-              ]}
+              className="flex-row items-center px-[14px] py-3"
+              style={{
+                borderBottomWidth: index === comparisonRows.length - 1 ? 0 : StyleSheet.hairlineWidth,
+                borderBottomColor: c.border,
+              }}
             >
-              <Text style={[styles.tableLabel, { color: c.textMuted, fontFamily: ty.body.family }]}>{row[0]}</Text>
-              <Text style={[styles.tableCell, { color: c.text }]}>{row[1]}</Text>
-              <Text style={[styles.tableCell, { color: c.text }]}>{row[2]}</Text>
-              <Text style={[styles.tableCell, { color: c.primary, fontFamily: ty.body.familySemibold }]}>{row[3]}</Text>
+              <Text style={{ flex: 2, fontSize: 13, color: c.textMuted, fontFamily: ty.body.family }}>{row[0]}</Text>
+              <Text className="flex-1 text-center text-[13px]" style={{ color: c.text }}>{row[1]}</Text>
+              <Text className="flex-1 text-center text-[13px]" style={{ color: c.text }}>{row[2]}</Text>
+              <Text className="flex-1 text-center text-[13px]" style={{ color: c.primary, fontFamily: ty.body.familySemibold }}>{row[3]}</Text>
             </View>
           ))}
         </View>
 
         {billingStatus ? (
-          <View style={[styles.integrationStatusBox, { borderColor: c.border, backgroundColor: c.surface2 }]}> 
+          <View className="border p-[10px] mt-3" style={{ borderColor: c.border, backgroundColor: c.surface2 }}>
             <Text style={{ color: c.textMuted, fontFamily: ty.body.family, fontSize: 12 }}>
               {billingStatus.reason}
             </Text>
@@ -487,25 +505,23 @@ export default function PaywallScreen() {
         ) : null}
 
         {inlineError ? (
-          <View style={[styles.errorBox, { borderColor: c.danger, backgroundColor: c.surface }]}> 
+          <View className="border p-[10px] mt-3" style={{ borderColor: c.danger, backgroundColor: c.surface }}>
             <Text style={{ color: c.danger, fontFamily: ty.body.family }}>{inlineError}</Text>
           </View>
         ) : null}
 
         <Pressable
-          style={[
-            styles.primaryButton,
-            {
-              backgroundColor: c.primary,
-              opacity:
-                purchasePackage.isPending
-                || hostedPaywall.isPending
-                || restorePurchases.isPending
-                || setPricingDecision.isPending
-                  ? 0.7
-                  : 1,
-            },
-          ]}
+          className="mt-[18px] h-[54px] rounded-[16px] items-center justify-center"
+          style={{
+            backgroundColor: c.primary,
+            opacity:
+              purchasePackage.isPending
+              || hostedPaywall.isPending
+              || restorePurchases.isPending
+              || setPricingDecision.isPending
+                ? 0.7
+                : 1,
+          }}
           onPress={handlePurchase}
           disabled={
             purchasePackage.isPending
@@ -526,7 +542,8 @@ export default function PaywallScreen() {
         </Pressable>
 
         <Pressable
-          style={[styles.secondaryButton, { borderColor: c.border }]}
+          className="mt-3 h-[50px] rounded-[16px] border items-center justify-center"
+          style={{ borderColor: c.border }}
           onPress={handleRestorePurchases}
           disabled={
             purchasePackage.isPending
@@ -541,7 +558,8 @@ export default function PaywallScreen() {
         </Pressable>
 
         <Pressable
-          style={[styles.secondaryButton, { borderColor: c.border }]}
+          className="mt-3 h-[50px] rounded-[16px] border items-center justify-center"
+          style={{ borderColor: c.border }}
           onPress={completeWithFreeTier}
           disabled={
             purchasePackage.isPending
@@ -560,127 +578,3 @@ export default function PaywallScreen() {
     </View>
   );
 }
-
-const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-  },
-  loading: {
-    flex: 1,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  headline: {
-    fontSize: 42,
-    lineHeight: 44,
-  },
-  headlineAccent: {
-    fontSize: 42,
-    lineHeight: 44,
-    marginBottom: 16,
-  },
-  sectionLabel: {
-    marginTop: 8,
-    marginBottom: 8,
-    fontSize: 12,
-    letterSpacing: 2,
-    textTransform: 'uppercase',
-  },
-  errorBox: {
-    borderWidth: 1,
-    padding: 10,
-    marginTop: 12,
-  },
-  integrationStatusBox: {
-    borderWidth: 1,
-    padding: 10,
-    marginTop: 12,
-  },
-  headerRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    gap: 16,
-  },
-  closeButton: {
-    alignSelf: 'flex-start',
-    paddingHorizontal: 14,
-    paddingVertical: 10,
-    borderRadius: 999,
-  },
-  billingToggle: {
-    flexDirection: 'row',
-    gap: 4,
-    padding: 4,
-    borderRadius: 14,
-  },
-  billingToggleOption: {
-    flex: 1,
-    height: 42,
-    borderRadius: 10,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  planCard: {
-    borderWidth: 1,
-    borderRadius: 20,
-    padding: 18,
-  },
-  cardTopRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    gap: 12,
-  },
-  cardBadge: {
-    borderRadius: 999,
-    paddingHorizontal: 10,
-    paddingVertical: 6,
-  },
-  tableWrap: {
-    borderWidth: 1,
-    borderRadius: 18,
-    overflow: 'hidden',
-  },
-  tableHeader: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    borderBottomWidth: 1,
-    paddingHorizontal: 14,
-    paddingVertical: 12,
-  },
-  tableRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingHorizontal: 14,
-    paddingVertical: 12,
-  },
-  tableLabel: {
-    flex: 2,
-    fontSize: 13,
-  },
-  tableCellHeader: {
-    flex: 1,
-    textAlign: 'center',
-    fontSize: 13,
-  },
-  tableCell: {
-    flex: 1,
-    textAlign: 'center',
-    fontSize: 13,
-  },
-  primaryButton: {
-    marginTop: 18,
-    height: 54,
-    borderRadius: 16,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  secondaryButton: {
-    marginTop: 12,
-    height: 50,
-    borderRadius: 16,
-    borderWidth: 1,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-});

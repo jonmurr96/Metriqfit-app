@@ -1,5 +1,6 @@
 import React from 'react';
-import { Pressable, StyleSheet, Text, View } from 'react-native';
+import { StyleSheet, Text, View } from 'react-native';
+import { PressableScale } from '@/components/common/PressableScale';
 import { useTokens } from '../../lib/theme';
 import type { AICoachAction, AICoachStatusStripState } from '../../services/aiCoachService';
 import { TabBarIcon } from '../navigation/TabBarIcon';
@@ -64,11 +65,11 @@ export function CoachStatusStrip({ state, onAction, onOpenContext, onDismiss }: 
 
           <View style={styles.headerActions}>
             {onOpenContext ? (
-              <Pressable
+              <PressableScale
                 accessibilityRole="button"
                 accessibilityLabel="Open coach context"
                 onPress={onOpenContext}
-                style={({ pressed }) => [
+                style={(pressed) => [
                   styles.contextButton,
                   {
                     borderRadius: r.md,
@@ -79,15 +80,15 @@ export function CoachStatusStrip({ state, onAction, onOpenContext, onDismiss }: 
                 ]}
               >
                 <TabBarIcon name="layers-outline" color={c.textMuted} size={16} />
-              </Pressable>
+              </PressableScale>
             ) : null}
 
             {onDismiss ? (
-              <Pressable
+              <PressableScale
                 accessibilityRole="button"
                 accessibilityLabel="Dismiss coach status"
                 onPress={onDismiss}
-                style={({ pressed }) => [
+                style={(pressed) => [
                   styles.contextButton,
                   {
                     borderRadius: r.md,
@@ -98,7 +99,7 @@ export function CoachStatusStrip({ state, onAction, onOpenContext, onDismiss }: 
                 ]}
               >
                 <TabBarIcon name="close" color={c.textMuted} size={16} />
-              </Pressable>
+              </PressableScale>
             ) : null}
           </View>
         </View>
@@ -128,11 +129,11 @@ export function CoachStatusStrip({ state, onAction, onOpenContext, onDismiss }: 
       </View>
 
       {state.cta && onAction ? (
-        <Pressable
+        <PressableScale
           accessibilityRole="button"
           accessibilityLabel={state.cta.label}
           onPress={() => onAction(state.cta!)}
-          style={({ pressed }) => [
+          style={(pressed) => [
             styles.cta,
             {
               minHeight: 44,
@@ -150,7 +151,7 @@ export function CoachStatusStrip({ state, onAction, onOpenContext, onDismiss }: 
           >
             {state.cta.label}
           </Text>
-        </Pressable>
+        </PressableScale>
       ) : null}
     </View>
   );

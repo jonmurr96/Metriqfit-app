@@ -1,13 +1,5 @@
 import { createClient } from '@supabase/supabase-js';
 import Constants from 'expo-constants';
-import { Platform } from 'react-native';
-import * as SecureStore from 'expo-secure-store';
-
-const nativeSecureStorage = {
-  getItem: (key: string) => SecureStore.getItemAsync(key),
-  setItem: (key: string, value: string) => SecureStore.setItemAsync(key, value),
-  removeItem: (key: string) => SecureStore.deleteItemAsync(key),
-};
 
 // Get Supabase URL and anon key from environment variables
 const supabaseUrl = Constants.expoConfig?.extra?.supabaseUrl || process.env.EXPO_PUBLIC_SUPABASE_URL || '';
@@ -30,16 +22,29 @@ if (!hasValidConfig) {
   console.log('✅ SUPABASE CONFIGURED WITH URL:', supabaseUrl);
 }
 
+// Clerk token getter — set by AuthProvider once Clerk is initialized
+let _clerkTokenGetter: (() => Promise<string | null>) | null = null;
+
+export function setClerkTokenGetter(getter: () => Promise<string | null>) {
+  _clerkTokenGetter = getter;
+}
+
 // Create Supabase client (use placeholders if not configured)
 export const supabase = createClient(
   hasValidConfig ? supabaseUrl : PLACEHOLDER_URL,
   hasValidConfig ? supabaseAnonKey : PLACEHOLDER_KEY,
   {
     auth: {
-      autoRefreshToken: true,
-      persistSession: true,
-      detectSessionInUrl: Platform.OS === 'web',
-      storage: Platform.OS === 'web' ? undefined : nativeSecureStorage,
+      autoRefreshToken: false,
+      persistSession: false,
+      detectSessionInUrl: false,
+    },
+    global: {
+      headers: {},
+    },
+    accessToken: async () => {
+      if (!_clerkTokenGetter) return null;
+      return _clerkTokenGetter();
     },
   }
 );

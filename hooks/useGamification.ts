@@ -230,12 +230,10 @@ export function useUpdateStreak() {
     mutationFn: ({
       streakType,
       activityDate,
-      useFreezeToken,
     }: {
       streakType: StreakType;
       activityDate?: string;
-      useFreezeToken?: boolean;
-    }) => updateStreak(user!.id, streakType, activityDate, useFreezeToken),
+    }) => updateStreak(user!.id, streakType, activityDate || new Date().toISOString().split('T')[0]),
     onSuccess: (data, variables) => {
       // Invalidate streak queries
       queryClient.invalidateQueries({
@@ -249,7 +247,7 @@ export function useUpdateStreak() {
       });
 
       // Check for streak milestone achievements
-      if (data.current_streak && data.current_streak % 7 === 0) {
+      if (data && data.current_streak && data.current_streak % 7 === 0) {
         queryClient.invalidateQueries({
           queryKey: gamificationKeys.achievements(user!.id),
         });
@@ -305,9 +303,9 @@ export function useCheckAchievements() {
     }: {
       eventType?: string;
       metadata?: Record<string, any>;
-    }) => checkAchievements(user!.id, eventType, metadata),
+    }) => checkAchievements(user!.id, eventType || 'general', metadata),
     onSuccess: (data) => {
-      if (data.achievements_unlocked > 0) {
+      if (data.length > 0) {
         // Invalidate achievements queries
         queryClient.invalidateQueries({
           queryKey: gamificationKeys.achievements(user!.id),

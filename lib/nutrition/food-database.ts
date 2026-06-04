@@ -517,7 +517,7 @@ export const carbFoods: FoodItem[] = [
     defaultFormForGoal: { bulk: 'whole', cut: 'whole' },
     digestionSpeed: 'medium',
     goalPreference: 'cut',
-    timingAppropriate: ['evening', 'snack', 'anytime'],
+    timingAppropriate: ['evening', 'anytime'],
     tags: ['fruit', 'low-calorie', 'fiber', 'convenient'],
   },
 ];

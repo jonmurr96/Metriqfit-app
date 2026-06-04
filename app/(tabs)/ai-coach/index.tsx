@@ -3,7 +3,6 @@ import {
   Alert,
   KeyboardAvoidingView,
   Platform,
-  Pressable,
   ScrollView,
   StyleSheet,
   Text,
@@ -14,6 +13,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import { useQueryClient } from '@tanstack/react-query';
 import { MotiView } from 'moti';
+import { PressableScale } from '@/components/common/PressableScale';
 import { PremiumBackground } from '../../../components/premium/PremiumBackground';
 import { TabBarIcon } from '../../../components/navigation/TabBarIcon';
 import {
@@ -258,12 +258,12 @@ function CoachEmptyState({
       {prompts.length ? (
         <View style={[styles.emptyPromptGrid, { gap: s.sm, marginTop: s.xl }]}>
           {prompts.slice(0, 4).map((prompt) => (
-            <Pressable
+            <PressableScale
               key={prompt.id}
               accessibilityRole="button"
               accessibilityLabel={prompt.label}
               onPress={() => onSelectPrompt(prompt)}
-              style={({ pressed }) => [
+              style={(pressed) => [
                 styles.emptyPromptCard,
                 {
                   borderRadius: r.lg,
@@ -289,7 +289,7 @@ function CoachEmptyState({
               >
                 {prompt.label}
               </Text>
-            </Pressable>
+            </PressableScale>
           ))}
         </View>
       ) : null}
@@ -752,11 +752,11 @@ export default function AICoachScreen() {
 
           <View style={styles.headerRight}>
             <View style={styles.headerActions}>
-              <Pressable
+              <PressableScale
                 accessibilityRole="button"
                 accessibilityLabel="Open coach actions"
                 onPress={() => setIsActionsOpen(true)}
-                style={({ pressed }) => [
+                style={(pressed) => [
                   styles.iconButton,
                   {
                     borderRadius: r.pill,
@@ -767,8 +767,8 @@ export default function AICoachScreen() {
                 ]}
               >
                 <TabBarIcon name="sparkles-outline" color={c.textMuted} size={18} />
-              </Pressable>
-              <Pressable
+              </PressableScale>
+              <PressableScale
                 accessibilityRole="button"
                 accessibilityLabel="Open conversation history"
                 onPress={() => {
@@ -780,7 +780,7 @@ export default function AICoachScreen() {
                   }
                   setIsHistoryOpen(true);
                 }}
-                style={({ pressed }) => [
+                style={(pressed) => [
                   styles.iconButton,
                   {
                     borderRadius: r.pill,
@@ -791,12 +791,12 @@ export default function AICoachScreen() {
                 ]}
               >
                 <TabBarIcon name="time-outline" color={c.textMuted} size={18} />
-              </Pressable>
-              <Pressable
+              </PressableScale>
+              <PressableScale
                 accessibilityRole="button"
                 accessibilityLabel="Open coach memory"
                 onPress={() => setIsMemoryOpen(true)}
-                style={({ pressed }) => [
+                style={(pressed) => [
                   styles.iconButton,
                   {
                     borderRadius: r.pill,
@@ -807,7 +807,7 @@ export default function AICoachScreen() {
                 ]}
               >
                 <TabBarIcon name="book-outline" color={c.textMuted} size={18} />
-              </Pressable>
+              </PressableScale>
             </View>
           </View>
         </MotiView>
@@ -851,12 +851,12 @@ export default function AICoachScreen() {
                 >
                   Viewing {activeConversationSummary?.title || historyLabel(activeConversationSummary?.updatedAt || new Date().toISOString())} history
                 </Text>
-                <Pressable
+                <PressableScale
                   accessibilityRole="button"
                   accessibilityLabel="Close history banner and return to live chat"
                   hitSlop={10}
                   onPress={handleReturnToLiveChat}
-                  style={({ pressed }) => [
+                  style={(pressed) => [
                     styles.dismissButton,
                     {
                       borderRadius: r.pill,
@@ -867,7 +867,7 @@ export default function AICoachScreen() {
                   ]}
                 >
                   <TabBarIcon name="close" color={c.textMuted} size={14} />
-                </Pressable>
+                </PressableScale>
               </View>
               <Text
                 style={{
@@ -882,11 +882,11 @@ export default function AICoachScreen() {
               </Text>
             </View>
 
-            <Pressable
+            <PressableScale
               accessibilityRole="button"
               accessibilityLabel="Return to live chat"
               onPress={handleReturnToLiveChat}
-              style={({ pressed }) => [
+              style={(pressed) => [
                 styles.historyBannerAction,
                 {
                   minHeight: 44,
@@ -904,7 +904,7 @@ export default function AICoachScreen() {
               >
                 Live chat
               </Text>
-            </Pressable>
+            </PressableScale>
           </View>
         ) : null}
 
@@ -949,11 +949,11 @@ export default function AICoachScreen() {
                     {item.actions.length ? (
                       <View style={{ paddingHorizontal: s.lg, gap: s.sm, marginTop: s.sm }}>
                         {item.actions.map((attachment, attachmentIndex) => (
-                          <Pressable
+                          <PressableScale
                             key={`${item.id}-${attachmentIndex}`}
                             accessibilityRole="button"
                             onPress={() => handleThreadAction(attachment, item.message, attachmentIndex)}
-                            style={({ pressed }) => [
+                            style={(pressed) => [
                               styles.inlineChip,
                               {
                                 minHeight: 44,
@@ -979,7 +979,7 @@ export default function AICoachScreen() {
                             >
                               {attachment.label}
                             </Text>
-                          </Pressable>
+                          </PressableScale>
                         ))}
                       </View>
                     ) : null}
@@ -995,12 +995,12 @@ export default function AICoachScreen() {
                       compact
                       onPress={() => setSelectedInterventionId(item.intervention.id)}
                     />
-                    <Pressable
+                    <PressableScale
                       accessibilityRole="button"
                       accessibilityLabel="Dismiss coach card"
                       hitSlop={10}
                       onPress={() => handleDismissThreadItem(item.id)}
-                      style={({ pressed }) => [
+                      style={(pressed) => [
                         styles.overlayDismissButton,
                         {
                           top: s.sm,
@@ -1013,7 +1013,7 @@ export default function AICoachScreen() {
                       ]}
                     >
                       <TabBarIcon name="close" color={c.textMuted} size={14} />
-                    </Pressable>
+                    </PressableScale>
                   </View>
                 );
               }
@@ -1061,12 +1061,12 @@ export default function AICoachScreen() {
                         </Text>
                       </View>
                       <View style={{ alignItems: 'flex-end', gap: s.sm }}>
-                        <Pressable
+                        <PressableScale
                           accessibilityRole="button"
                           accessibilityLabel="Dismiss proposal card"
                           hitSlop={10}
                           onPress={() => handleDismissThreadItem(item.id)}
-                          style={({ pressed }) => [
+                          style={(pressed) => [
                             styles.dismissButton,
                             {
                               borderRadius: r.pill,
@@ -1077,7 +1077,7 @@ export default function AICoachScreen() {
                           ]}
                         >
                           <TabBarIcon name="close" color={c.textMuted} size={14} />
-                        </Pressable>
+                        </PressableScale>
                         <View
                           style={{
                             minWidth: 72,
@@ -1132,11 +1132,11 @@ export default function AICoachScreen() {
 
                     {item.proposal.status === 'pending' ? (
                       <View style={[styles.errorActions, { gap: s.sm, marginTop: s.lg }]}>
-                        <Pressable
+                        <PressableScale
                           accessibilityRole="button"
                           accessibilityLabel={item.proposal.rejectLabel}
                           onPress={() => handleRejectProposal(item.proposal)}
-                          style={({ pressed }) => [
+                          style={(pressed) => [
                             styles.errorAction,
                             {
                               minHeight: 44,
@@ -1157,13 +1157,13 @@ export default function AICoachScreen() {
                           >
                             {activeMutationId === item.proposal.id ? 'Working...' : item.proposal.rejectLabel}
                           </Text>
-                        </Pressable>
+                        </PressableScale>
 
-                        <Pressable
+                        <PressableScale
                           accessibilityRole="button"
                           accessibilityLabel={item.proposal.approveLabel}
                           onPress={() => handleApproveProposal(item.proposal)}
-                          style={({ pressed }) => [
+                          style={(pressed) => [
                             styles.errorAction,
                             {
                               minHeight: 44,
@@ -1182,7 +1182,7 @@ export default function AICoachScreen() {
                           >
                             {activeMutationId === item.proposal.id ? 'Applying...' : item.proposal.approveLabel}
                           </Text>
-                        </Pressable>
+                        </PressableScale>
                       </View>
                     ) : null}
                   </View>
@@ -1213,12 +1213,12 @@ export default function AICoachScreen() {
                       >
                         MEMORY
                       </Text>
-                      <Pressable
+                      <PressableScale
                         accessibilityRole="button"
                         accessibilityLabel="Dismiss memory card"
                         hitSlop={10}
                         onPress={() => handleDismissThreadItem(item.id)}
-                        style={({ pressed }) => [
+                        style={(pressed) => [
                           styles.dismissButton,
                           {
                             borderRadius: r.pill,
@@ -1229,7 +1229,7 @@ export default function AICoachScreen() {
                         ]}
                       >
                         <TabBarIcon name="close" color={c.textMuted} size={14} />
-                      </Pressable>
+                      </PressableScale>
                     </View>
                     <Text
                       style={{
@@ -1280,12 +1280,12 @@ export default function AICoachScreen() {
                       >
                         {item.receipt.mutationLevel === 'none' ? 'NOT APPLIED' : 'ACTION RECEIPT'}
                       </Text>
-                      <Pressable
+                      <PressableScale
                         accessibilityRole="button"
                         accessibilityLabel="Dismiss receipt card"
                         hitSlop={10}
                         onPress={() => handleDismissThreadItem(item.id)}
-                        style={({ pressed }) => [
+                        style={(pressed) => [
                           styles.dismissButton,
                           {
                             borderRadius: r.pill,
@@ -1296,7 +1296,7 @@ export default function AICoachScreen() {
                         ]}
                       >
                         <TabBarIcon name="close" color={c.textMuted} size={14} />
-                      </Pressable>
+                      </PressableScale>
                     </View>
                     <Text
                       style={{
@@ -1347,12 +1347,12 @@ export default function AICoachScreen() {
                       >
                         APPLIED
                       </Text>
-                      <Pressable
+                      <PressableScale
                         accessibilityRole="button"
                         accessibilityLabel="Dismiss status card"
                         hitSlop={10}
                         onPress={() => handleDismissThreadItem(item.id)}
-                        style={({ pressed }) => [
+                        style={(pressed) => [
                           styles.dismissButton,
                           {
                             borderRadius: r.pill,
@@ -1363,7 +1363,7 @@ export default function AICoachScreen() {
                         ]}
                       >
                         <TabBarIcon name="close" color={c.textMuted} size={14} />
-                      </Pressable>
+                      </PressableScale>
                     </View>
                     <Text
                       style={{
@@ -1414,12 +1414,12 @@ export default function AICoachScreen() {
                       >
                         {item.attachment.label.toUpperCase()}
                       </Text>
-                      <Pressable
+                      <PressableScale
                         accessibilityRole="button"
                         accessibilityLabel="Dismiss context card"
                         hitSlop={10}
                         onPress={() => handleDismissThreadItem(item.id)}
-                        style={({ pressed }) => [
+                        style={(pressed) => [
                           styles.dismissButton,
                           {
                             borderRadius: r.pill,
@@ -1430,7 +1430,7 @@ export default function AICoachScreen() {
                         ]}
                       >
                         <TabBarIcon name="close" color={c.textMuted} size={14} />
-                      </Pressable>
+                      </PressableScale>
                     </View>
                     <Text
                       style={{
@@ -1492,12 +1492,12 @@ export default function AICoachScreen() {
                       >
                         NEEDS CLARITY
                       </Text>
-                      <Pressable
+                      <PressableScale
                         accessibilityRole="button"
                         accessibilityLabel="Dismiss clarification card"
                         hitSlop={10}
                         onPress={() => handleDismissThreadItem(item.id)}
-                        style={({ pressed }) => [
+                        style={(pressed) => [
                           styles.dismissButton,
                           {
                             borderRadius: r.pill,
@@ -1508,7 +1508,7 @@ export default function AICoachScreen() {
                         ]}
                       >
                         <TabBarIcon name="close" color={c.textMuted} size={14} />
-                      </Pressable>
+                      </PressableScale>
                     </View>
                     <Text
                       style={{
@@ -1534,12 +1534,12 @@ export default function AICoachScreen() {
                     {item.attachment.options?.length ? (
                       <View style={{ gap: s.sm, marginTop: s.md }}>
                         {item.attachment.options.map((option, optionIndex) => (
-                          <Pressable
+                          <PressableScale
                             key={`${item.id}-clarify-${optionIndex}`}
                             accessibilityRole="button"
                             accessibilityLabel={option.label}
                             onPress={() => handleSend(option.prompt)}
-                            style={({ pressed }) => [
+                            style={(pressed) => [
                               styles.inlineChip,
                               {
                                 minHeight: 44,
@@ -1559,7 +1559,7 @@ export default function AICoachScreen() {
                             >
                               {option.label}
                             </Text>
-                          </Pressable>
+                          </PressableScale>
                         ))}
                       </View>
                     ) : null}
@@ -1591,12 +1591,12 @@ export default function AICoachScreen() {
                       >
                         LIVE WEB
                       </Text>
-                      <Pressable
+                      <PressableScale
                         accessibilityRole="button"
                         accessibilityLabel="Dismiss web result card"
                         hitSlop={10}
                         onPress={() => handleDismissThreadItem(item.id)}
-                        style={({ pressed }) => [
+                        style={(pressed) => [
                           styles.dismissButton,
                           {
                             borderRadius: r.pill,
@@ -1607,7 +1607,7 @@ export default function AICoachScreen() {
                         ]}
                       >
                         <TabBarIcon name="close" color={c.textMuted} size={14} />
-                      </Pressable>
+                      </PressableScale>
                     </View>
                     <Text
                       style={{
@@ -1674,12 +1674,12 @@ export default function AICoachScreen() {
                       >
                         COACH ERROR
                       </Text>
-                      <Pressable
+                      <PressableScale
                         accessibilityRole="button"
                         accessibilityLabel="Dismiss error card"
                         hitSlop={10}
                         onPress={() => handleDismissThreadItem(item.id)}
-                        style={({ pressed }) => [
+                        style={(pressed) => [
                           styles.dismissButton,
                           {
                             borderRadius: r.pill,
@@ -1690,7 +1690,7 @@ export default function AICoachScreen() {
                         ]}
                       >
                         <TabBarIcon name="close" color={c.textMuted} size={14} />
-                      </Pressable>
+                      </PressableScale>
                     </View>
                     <Text
                       style={{
@@ -1714,11 +1714,11 @@ export default function AICoachScreen() {
                       {item.message}
                     </Text>
                     <View style={[styles.errorActions, { gap: s.sm, marginTop: s.md }]}>
-                      <Pressable
+                      <PressableScale
                         accessibilityRole="button"
                         accessibilityLabel={item.retryLabel || 'Retry'}
                         onPress={chat.retryLastMessage}
-                        style={({ pressed }) => [
+                        style={(pressed) => [
                           styles.errorAction,
                           {
                             minHeight: 44,
@@ -1736,12 +1736,12 @@ export default function AICoachScreen() {
                         >
                           {item.retryLabel || 'Retry'}
                         </Text>
-                      </Pressable>
-                      <Pressable
+                      </PressableScale>
+                      <PressableScale
                         accessibilityRole="button"
                         accessibilityLabel="Open coach context"
                         onPress={() => setIsContextOpen(true)}
-                        style={({ pressed }) => [
+                        style={(pressed) => [
                           styles.errorAction,
                           {
                             minHeight: 44,
@@ -1761,7 +1761,7 @@ export default function AICoachScreen() {
                         >
                           Open context
                         </Text>
-                      </Pressable>
+                      </PressableScale>
                     </View>
                   </View>
                 );

@@ -1,7 +1,8 @@
-import { ActivityIndicator, Keyboard, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
+import { ActivityIndicator, Keyboard, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
 import { useMemo, useState } from 'react';
 import { useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { PressableScale } from '@/components/common/PressableScale';
 import { useTokens } from '../lib/theme';
 import { TabBarIcon } from '../components/navigation/TabBarIcon';
 import { useDailyWaterSummary, useLogWater } from '../hooks/useWater';
@@ -154,11 +155,11 @@ export default function LogWaterSheet() {
         </View>
 
         <View style={styles.headerRow}>
-          <Pressable
+          <PressableScale
             accessibilityRole="button"
             accessibilityLabel="Close log water"
             onPress={() => router.back()}
-            style={({ pressed }) => [
+            style={(pressed) => [
               styles.closeButton,
               {
                 borderRadius: r.pill,
@@ -169,7 +170,7 @@ export default function LogWaterSheet() {
             ]}
           >
             <TabBarIcon name="close" color={c.text} size={18} />
-          </Pressable>
+          </PressableScale>
 
           <View style={styles.headerCopy}>
             <Text
@@ -270,7 +271,7 @@ export default function LogWaterSheet() {
               {(['ml', 'oz'] as WaterUnit[]).map((value) => {
                 const active = unit === value;
                 return (
-                  <Pressable
+                  <PressableScale
                     key={value}
                     accessibilityRole="button"
                     accessibilityLabel={`Use ${value} for water amounts`}
@@ -279,7 +280,7 @@ export default function LogWaterSheet() {
                       resetError();
                       setUnit(value);
                     }}
-                    style={({ pressed }) => [
+                    style={(pressed) => [
                       styles.unitToggleButton,
                       {
                         borderRadius: r.pill,
@@ -296,7 +297,7 @@ export default function LogWaterSheet() {
                     >
                       {value.toUpperCase()}
                     </Text>
-                  </Pressable>
+                  </PressableScale>
                 );
               })}
             </View>
@@ -346,13 +347,13 @@ export default function LogWaterSheet() {
 
             <View style={styles.stepperCluster}>
               {adjustmentButtons.map((button) => (
-                <Pressable
+                <PressableScale
                   key={button.label}
                   accessibilityRole="button"
                   accessibilityLabel={`Adjust water amount ${button.label} ${unit}`}
                   onPress={() => changeAmount(button.delta)}
                   disabled={logWaterMutation.isPending}
-                  style={({ pressed }) => [
+                  style={(pressed) => [
                     styles.stepperChip,
                     {
                       borderRadius: r.md,
@@ -372,7 +373,7 @@ export default function LogWaterSheet() {
                   >
                     {button.label}
                   </Text>
-                </Pressable>
+                </PressableScale>
               ))}
             </View>
           </View>
@@ -381,13 +382,13 @@ export default function LogWaterSheet() {
             {QUICK_LOG_PRESETS_ML.map((presetAmountMl) => {
               const isActiveQuickLog = activeQuickLogAmountMl === presetAmountMl;
               return (
-                <Pressable
+                <PressableScale
                   key={presetAmountMl}
                   accessibilityRole="button"
                   accessibilityLabel={`Log ${Math.round(presetAmountMl)} milliliters of water`}
                   onPress={() => handleQuickLog(presetAmountMl)}
                   disabled={logWaterMutation.isPending}
-                  style={({ pressed }) => [
+                  style={(pressed) => [
                     styles.quickChip,
                     {
                       borderRadius: r.pill,
@@ -411,7 +412,7 @@ export default function LogWaterSheet() {
                       {formatUnitAmount(presetAmountMl, unit)}
                     </Text>
                   )}
-                </Pressable>
+                </PressableScale>
               );
             })}
           </View>
@@ -476,12 +477,12 @@ export default function LogWaterSheet() {
               ]}
             />
 
-            <Pressable
+            <PressableScale
               accessibilityRole="button"
               accessibilityLabel="Apply custom water amount"
               onPress={handleApplyManualAmount}
               disabled={!isManualValid || logWaterMutation.isPending}
-              style={({ pressed }) => [
+              style={(pressed) => [
                 styles.applyButton,
                 {
                   borderRadius: r.md,
@@ -498,18 +499,18 @@ export default function LogWaterSheet() {
               >
                 Apply
               </Text>
-            </Pressable>
+            </PressableScale>
           </View>
 
           {recentLogs.length ? (
             <>
               <View style={[styles.divider, { backgroundColor: c.border }]} />
-              <Pressable
+              <PressableScale
                 accessibilityRole="button"
                 accessibilityLabel={isRecentLogsExpanded ? 'Collapse recent logs' : 'Expand recent logs'}
                 accessibilityState={{ expanded: isRecentLogsExpanded }}
                 onPress={() => setIsRecentLogsExpanded((current) => !current)}
-                style={({ pressed }) => [
+                style={(pressed) => [
                   styles.recentHeader,
                   {
                     paddingHorizontal: s.md,
@@ -555,7 +556,7 @@ export default function LogWaterSheet() {
                     size={18}
                   />
                 </View>
-              </Pressable>
+              </PressableScale>
 
               {isRecentLogsExpanded ? (
                 <View style={{ paddingHorizontal: s.md, paddingBottom: s.md, gap: s.xs }}>
@@ -630,12 +631,12 @@ export default function LogWaterSheet() {
           },
         ]}
       >
-        <Pressable
+        <PressableScale
           accessibilityRole="button"
           accessibilityLabel={`Log ${formatUnitAmount(amountMl, unit)} of water`}
           onPress={handleSave}
           disabled={logWaterMutation.isPending}
-          style={({ pressed }) => [
+          style={(pressed) => [
             styles.footerButton,
             {
               borderRadius: r.md,
@@ -669,7 +670,7 @@ export default function LogWaterSheet() {
               Log {formatUnitAmount(amountMl, unit)}
             </Text>
           )}
-        </Pressable>
+        </PressableScale>
       </View>
     </View>
   );

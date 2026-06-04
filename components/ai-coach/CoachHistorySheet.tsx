@@ -1,5 +1,6 @@
 import React from 'react';
-import { Pressable, StyleSheet, Text, View } from 'react-native';
+import { StyleSheet, Text, View } from 'react-native';
+import { PressableScale } from '@/components/common/PressableScale';
 import type { AICoachConversationSummary } from '../../services/aiCoachService';
 import { useTokens } from '../../lib/theme';
 import { SubscriptionFeatureGate } from '../premium/SubscriptionFeatureGate';
@@ -42,11 +43,11 @@ export function CoachHistorySheet({
       title="Conversation History"
       subtitle="Reopen prior coach chats and review what the coach already knows about your recent days."
       footer={onClearHistory ? (
-        <Pressable
+        <PressableScale
           accessibilityRole="button"
           accessibilityLabel="Clear conversation history"
           onPress={onClearHistory}
-          style={({ pressed }) => [
+          style={(pressed) => [
             styles.clearButton,
             {
               minHeight: 44,
@@ -66,7 +67,7 @@ export function CoachHistorySheet({
           >
             Clear all history
           </Text>
-        </Pressable>
+        </PressableScale>
       ) : null}
     >
       {locked ? (
@@ -81,12 +82,12 @@ export function CoachHistorySheet({
           {items.length ? items.map((item) => {
             const isActive = item.id === activeConversationId;
             return (
-              <Pressable
+              <PressableScale
                 key={item.id}
                 accessibilityRole="button"
                 accessibilityLabel={item.title}
                 onPress={() => onSelect(item)}
-                style={({ pressed }) => [
+                style={(pressed) => [
                   styles.card,
                   {
                     borderRadius: r.lg,
@@ -142,7 +143,7 @@ export function CoachHistorySheet({
                 >
                   {item.messageCount} messages
                 </Text>
-              </Pressable>
+              </PressableScale>
             );
           }) : (
             <Text

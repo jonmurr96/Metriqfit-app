@@ -148,7 +148,7 @@ function generateFeedbackId(): string {
 // Feedback Analysis
 // ---------------------------------------------------------------------------
 
-function analyzeFeedback(submission: FeedbackSubmission): FeedbackAnalysis {
+export function analyzeFeedback(submission: FeedbackSubmission): FeedbackAnalysis {
   const feedback = submission.feedback;
 
   // Determine sentiment based on feedback type
@@ -175,7 +175,7 @@ function analyzeFeedback(submission: FeedbackSubmission): FeedbackAnalysis {
     case 'program_satisfaction':
       sentimentScore = (feedback.overallRating - 3) / 2;
       sentiment = feedback.overallRating >= 4 ? 'positive' : feedback.overallRating <= 2 ? 'negative' : 'neutral';
-      actionable = feedback.improvements && feedback.improvements.length > 0;
+      actionable = !!(feedback.improvements && feedback.improvements.length > 0);
       priority = feedback.overallRating <= 2 ? 'high' : 'medium';
       break;
 
@@ -285,8 +285,8 @@ function suggestAction(feedback: UserFeedback, sentiment: string): string | unde
     }
   }
 
-  if (feedback.type === 'exercise_feedback' && 'painOrDiscomfort' in feedback) {
-    if (feedback.painOrDiscomfort) {
+  if (feedback.type === 'exercise_difficulty' && 'painOrDiscomfort' in feedback) {
+    if ((feedback as ExerciseFeedback).painOrDiscomfort) {
       return 'Immediate review: User reported pain. Suggest form check or exercise substitution.';
     }
   }
@@ -478,8 +478,8 @@ export function aggregateFeedback(
       .map(([suggestion]) => suggestion),
     actionableItems: Object.entries(actionableItems)
       .sort((a, b) => {
-        const priorityOrder = { critical: 0, high: 1, medium: 2, low: 3 };
-        return priorityOrder[a[1].priority] - priorityOrder[b[1].priority];
+        const priorityOrder: Record<string, number> = { critical: 0, high: 1, medium: 2, low: 3 };
+        return (priorityOrder[a[1].priority] ?? 4) - (priorityOrder[b[1].priority] ?? 4);
       })
       .map(([description, data]) => ({
         priority: data.priority,

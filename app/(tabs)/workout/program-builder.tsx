@@ -11,6 +11,7 @@ import {
   useWorkoutProgramsByFamily,
 } from '../../../hooks/useWorkoutBuilder';
 import { useActiveWorkoutPlan } from '../../../hooks/usePlan';
+import { PressableScale } from '@/components/common/PressableScale';
 import {
   trackWorkoutPlanBuilderOpenedFromMyPlan,
   trackWorkoutProgramFamilySelected,
@@ -20,12 +21,13 @@ import {
 export default function ProgramBuilderScreen() {
   const { c, s, ty, r } = useTokens();
   const router = useRouter();
-  const params = useLocalSearchParams<{ entry?: string }>();
+  const params = useLocalSearchParams<{ entry?: string; templateId?: string; templateName?: string }>();
   const insets = useSafeAreaInsets();
   const [family, setFamily] = useState<string | undefined>(undefined);
   const [name, setName] = useState('');
   const [daysPerWeek, setDaysPerWeek] = useState('4');
   const [description, setDescription] = useState('');
+  const [hasAutoCloned, setHasAutoCloned] = useState(false);
 
   const { data: activePlan } = useActiveWorkoutPlan();
   const { data: families = [], isLoading: familyLoading } = useWorkoutProgramFamilies();
@@ -87,6 +89,16 @@ export default function ProgramBuilderScreen() {
     }
   };
 
+  useEffect(() => {
+    const templateId = Array.isArray(params.templateId) ? params.templateId[0] : params.templateId;
+    const templateName = Array.isArray(params.templateName) ? params.templateName[0] : params.templateName;
+
+    if (templateId && !hasAutoCloned && !createFromTemplate.isPending) {
+      setHasAutoCloned(true);
+      void handleCloneTemplate(templateId, templateName || 'Program');
+    }
+  }, [params.templateId, params.templateName, hasAutoCloned, createFromTemplate.isPending]);
+
   const selectFamily = (nextFamily?: string) => {
     setFamily(nextFamily);
     trackWorkoutProgramFamilySelected({
@@ -138,10 +150,10 @@ export default function ProgramBuilderScreen() {
             style={[styles.input, { borderColor: c.border, color: c.text, fontFamily: ty.body.family, marginTop: s.sm, borderRadius: r.md }]}
           />
 
-          <Pressable
+          <PressableScale
             onPress={handleCreateCustom}
             disabled={createCustom.isPending}
-            style={({ pressed }) => [
+            style={(pressed) => [
               {
                 marginTop: s.md,
                 backgroundColor: c.primary,
@@ -157,7 +169,7 @@ export default function ProgramBuilderScreen() {
             ) : (
               <Text style={{ color: c.bg, fontFamily: ty.body.familySemibold, fontSize: ty.sizes.md }}>Create & Edit</Text>
             )}
-          </Pressable>
+          </PressableScale>
         </View>
 
         <View style={{ marginTop: s.xl }}>
@@ -240,10 +252,10 @@ export default function ProgramBuilderScreen() {
                     </View>
                   ))}
                 </View>
-                <Pressable
+                <PressableScale
                   onPress={() => handleCloneTemplate(template.id, template.name)}
                   disabled={createFromTemplate.isPending}
-                  style={({ pressed }) => [
+                  style={(pressed) => [
                     {
                       marginTop: s.md,
                       borderRadius: r.md,
@@ -256,16 +268,16 @@ export default function ProgramBuilderScreen() {
                   ]}
                 >
                   <Text style={{ color: c.primary, fontFamily: ty.body.familySemibold, fontSize: ty.sizes.sm }}>Clone & Customize</Text>
-                </Pressable>
+                </PressableScale>
               </View>
             ))}
           </View>
         )}
 
         {activePlan && (
-          <Pressable
+          <PressableScale
             onPress={() => router.push({ pathname: '/(tabs)/workout/program-builder-day', params: { planId: activePlan.id } })}
-            style={({ pressed }) => [
+            style={(pressed) => [
               {
                 marginTop: s.xl,
                 backgroundColor: c.surface2,
@@ -279,7 +291,7 @@ export default function ProgramBuilderScreen() {
             <Text style={{ color: c.text, fontFamily: ty.body.familySemibold, fontSize: ty.sizes.sm }}>
               Edit Active Plan: {activePlan.name}
             </Text>
-          </Pressable>
+          </PressableScale>
         )}
       </ScrollView>
     </View>

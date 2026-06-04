@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { Alert, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
+import { Alert, Pressable, ScrollView, Text, TextInput, View } from 'react-native';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useTokens } from '../../lib/theme';
@@ -94,17 +94,21 @@ export default function EditMacrosScreen() {
   };
 
   return (
-    <View style={[styles.container, { backgroundColor: c.bg, paddingTop: insets.top + s.md }]}> 
-      <View style={[styles.header, { paddingHorizontal: s.lg }]}> 
-        <Pressable style={[styles.iconButton, { backgroundColor: c.surface, borderColor: c.border, borderRadius: r.md }]} onPress={() => router.back()}>
+    <View className="flex-1" style={{ backgroundColor: c.bg, paddingTop: insets.top + s.md }}>
+      <View className="flex-row items-center justify-between mb-4" style={{ paddingHorizontal: s.lg }}>
+        <Pressable
+          className="w-[42px] h-[42px] border items-center justify-center"
+          style={{ backgroundColor: c.surface, borderColor: c.border, borderRadius: r.md }}
+          onPress={() => router.back()}
+        >
           <TabBarIcon name="chevron-back" color={c.text} size={22} />
         </Pressable>
         <Text style={{ color: c.text, fontFamily: ty.heading.familySemibold, fontSize: ty.sizes.lg }}>Edit Macros</Text>
-        <View style={{ width: 42 }} />
+        <View className="w-[42px]" />
       </View>
 
       <ScrollView contentContainerStyle={{ paddingHorizontal: s.lg, paddingBottom: insets.bottom + s.xl }}>
-        <Text style={[styles.subtitle, { color: c.textMuted, fontFamily: ty.body.family }]}>Adjust your daily macro targets.</Text>
+        <Text className="text-sm mb-[14px]" style={{ color: c.textMuted, fontFamily: ty.body.family }}>Adjust your daily macro targets.</Text>
 
         {[
           { label: 'Calories (kcal)', value: calories, setter: setCalories },
@@ -112,71 +116,32 @@ export default function EditMacrosScreen() {
           { label: 'Carbs (g)', value: carbs, setter: setCarbs },
           { label: 'Fats (g)', value: fat, setter: setFat },
         ].map((field) => (
-          <View key={field.label} style={styles.fieldWrap}>
-            <Text style={[styles.label, { color: c.text, fontFamily: ty.body.familySemibold }]}>{field.label}</Text>
+          <View key={field.label} className="mb-3">
+            <Text className="text-[13px] mb-[6px]" style={{ color: c.text, fontFamily: ty.body.familySemibold }}>{field.label}</Text>
             <TextInput
               keyboardType="numeric"
               value={field.value}
               onChangeText={field.setter}
-              style={[styles.input, { color: c.text, borderColor: c.border, backgroundColor: c.surface, borderRadius: r.md, fontFamily: ty.body.family }]}
+              className="border h-12 px-3 text-base"
+              style={{ color: c.text, borderColor: c.border, backgroundColor: c.surface, borderRadius: r.md, fontFamily: ty.body.family }}
               placeholderTextColor={c.textSubtle}
             />
           </View>
         ))}
 
-        <View style={[styles.calorieHint, { borderColor: c.border, backgroundColor: c.surface2, borderRadius: r.md }]}> 
+        <View className="border p-3 mt-1" style={{ borderColor: c.border, backgroundColor: c.surface2, borderRadius: r.md }}>
           <Text style={{ color: c.textMuted, fontFamily: ty.body.family }}>Calories from macros: {estimatedCalories} kcal</Text>
         </View>
 
-        <Pressable style={[styles.saveButton, { backgroundColor: c.primary, borderRadius: r.md }]} onPress={save} disabled={updateMacros.isPending}>
+        <Pressable
+          className="h-[52px] items-center justify-center mt-[18px]"
+          style={{ backgroundColor: c.primary, borderRadius: r.md }}
+          onPress={save}
+          disabled={updateMacros.isPending}
+        >
           <Text style={{ color: c.bg, fontFamily: ty.heading.familySemibold }}>Save Changes</Text>
         </Pressable>
       </ScrollView>
     </View>
   );
 }
-
-const styles = StyleSheet.create({
-  container: { flex: 1 },
-  header: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    marginBottom: 16,
-  },
-  iconButton: {
-    width: 42,
-    height: 42,
-    borderWidth: 1,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  subtitle: {
-    fontSize: 14,
-    marginBottom: 14,
-  },
-  fieldWrap: {
-    marginBottom: 12,
-  },
-  label: {
-    fontSize: 13,
-    marginBottom: 6,
-  },
-  input: {
-    borderWidth: 1,
-    height: 48,
-    paddingHorizontal: 12,
-    fontSize: 16,
-  },
-  calorieHint: {
-    borderWidth: 1,
-    padding: 12,
-    marginTop: 4,
-  },
-  saveButton: {
-    height: 52,
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginTop: 18,
-  },
-});

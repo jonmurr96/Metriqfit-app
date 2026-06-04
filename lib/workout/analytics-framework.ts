@@ -9,7 +9,8 @@
  */
 
 import type { ExperienceLevel, PrimaryGoal } from './training-profile.ts';
-import type { PeriodizedProgram, WeekPlan } from './periodization-integration.ts';
+import type { PeriodizedProgram } from './periodization-integration.ts';
+import type { WeekPlan } from './week-progression.ts';
 import type { ProgramWithRecovery, RecoveryMetric } from './recovery-system.ts';
 
 // ---------------------------------------------------------------------------
@@ -22,6 +23,7 @@ export type ProgramMetrics = {
   createdAt: string;
   completedAt?: string;
   status: 'active' | 'completed' | 'abandoned';
+  totalWeeks: number;
 
   // Engagement
   totalWorkoutsPlanned: number;
@@ -138,6 +140,7 @@ export function calculateProgramMetrics(
     userId: program.userId,
     createdAt: new Date().toISOString(),
     status: weeksCompleted >= program.totalWeeks ? 'completed' : 'active',
+    totalWeeks: program.totalWeeks,
 
     totalWorkoutsPlanned: totalPlanned,
     totalWorkoutsCompleted: totalCompleted,

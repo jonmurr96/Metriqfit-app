@@ -1,9 +1,10 @@
 import React from 'react';
-import { Platform, Pressable, StyleSheet, Text, View } from 'react-native';
+import { Platform, StyleSheet, Text, View } from 'react-native';
 
 import { useTokens } from '../../lib/theme';
 import { TabBarIcon } from '../navigation/TabBarIcon';
 import { GlassCard } from '../premium/GlassCard';
+import { PressableScale } from '@/components/common/PressableScale';
 
 type HomeCoachPulseCardProps = {
   title: string;
@@ -73,9 +74,9 @@ export function HomeCoachPulseCard({
         {message}
       </Text>
 
-      <Pressable
+      <PressableScale
         onPress={onPress}
-        style={({ pressed }) => [
+        style={(pressed) => [
           styles.cta,
           {
             marginTop: s.lg,
@@ -98,7 +99,7 @@ export function HomeCoachPulseCard({
           {ctaLabel}
         </Text>
         <TabBarIcon name="arrow-forward" color={c.accent} size={15} />
-      </Pressable>
+      </PressableScale>
     </GlassCard>
   );
 }

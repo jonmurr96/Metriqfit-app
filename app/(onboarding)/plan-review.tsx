@@ -316,7 +316,7 @@ export default function PlanReviewScreen() {
 
   if (isLoading) {
     return (
-      <View style={[styles.loadingScreen, { backgroundColor: c.bg }]}>
+      <View className="flex-1 justify-center items-center" style={{ backgroundColor: c.bg }}>
         <ActivityIndicator size="large" color={c.primary} />
       </View>
     );
@@ -324,12 +324,13 @@ export default function PlanReviewScreen() {
 
   if (!resolvedRunId) {
     return (
-      <View style={[styles.loadingScreen, { backgroundColor: c.bg, padding: s.lg }]}>
+      <View className="flex-1 justify-center items-center" style={{ backgroundColor: c.bg, padding: s.lg }}>
         <Text style={{ color: c.text, fontFamily: ty.heading.familySemibold, fontSize: ty.sizes.lg, textAlign: 'center' }}>
           We could not find your generated plan.
         </Text>
         <Pressable
-          style={[styles.primaryButton, { backgroundColor: c.primary, borderRadius: r.md, marginTop: s.lg }]}
+          className="h-[52px] items-center justify-center"
+          style={{ backgroundColor: c.primary, borderRadius: r.md, marginTop: s.lg }}
           onPress={() => router.replace('/(onboarding)/plan-generation')}
         >
           <Text style={{ color: c.bg, fontFamily: ty.heading.familySemibold }}>Generate again</Text>
@@ -346,7 +347,7 @@ export default function PlanReviewScreen() {
   const tdeeValue = typeof answerPayload.maintenance_tdee === 'number' ? answerPayload.maintenance_tdee.toLocaleString() : null;
 
   return (
-    <View style={[styles.container, { backgroundColor: c.bg }]}>
+    <View className="flex-1" style={{ backgroundColor: c.bg }}>
       <LinearGradient colors={[c.bg, c.surface]} style={StyleSheet.absoluteFill} />
 
       <ScrollView
@@ -358,7 +359,7 @@ export default function PlanReviewScreen() {
         showsVerticalScrollIndicator={false}
       >
         {/* Header */}
-        <View style={styles.headerRow}>
+        <View className="flex-row items-center justify-between mb-[14px]">
           <View>
             <Text style={{ color: c.text, fontFamily: ty.heading.familySemibold, fontSize: ty.sizes.xl }}>
               {displayName}
@@ -375,7 +376,8 @@ export default function PlanReviewScreen() {
             </Text>
           </View>
           <Pressable
-            style={[styles.closeButton, { backgroundColor: c.surface2, borderColor: c.border, borderRadius: r.md }]}
+            className="w-[42px] h-[42px] border items-center justify-center"
+            style={{ backgroundColor: c.surface2, borderColor: c.border, borderRadius: r.md }}
             onPress={handleClose}
           >
             <TabBarIcon name="close" color={c.text} size={20} />
@@ -392,7 +394,6 @@ export default function PlanReviewScreen() {
           steps={stepsValue}
           accepted={Boolean(reviewState?.macros_accepted && reviewState?.daily_targets_accepted)}
           onAccept={() => {
-            // Accept both macros and daily_targets together
             handleAcceptToggle('macros', !reviewState?.macros_accepted);
             handleAcceptToggle('daily_targets', !reviewState?.daily_targets_accepted);
           }}
@@ -403,20 +404,17 @@ export default function PlanReviewScreen() {
               { text: 'Cancel', style: 'cancel' },
             ]);
           }}
-
         />
 
         {/* Plans Section */}
         <Text
-          style={[
-            styles.sectionLabel,
-            { color: c.textMuted, fontFamily: ty.body.familySemibold },
-          ]}
+          className="text-xs uppercase mt-5 mb-[10px]"
+          style={{ color: c.textMuted, fontFamily: ty.body.familySemibold, letterSpacing: 1 }}
         >
           YOUR PLANS
         </Text>
 
-        <View style={styles.plansGap}>
+        <View className="gap-[10px]">
           {/* Workout Plan Row */}
           <PlanRow
             icon="barbell-outline"
@@ -458,7 +456,7 @@ export default function PlanReviewScreen() {
         </View>
 
         {/* Redo onboarding — subtle text link */}
-        <Pressable style={styles.redoLink} onPress={handleRedoOnboarding}>
+        <Pressable className="items-center mt-5 mb-2" onPress={handleRedoOnboarding}>
           <Text style={{ color: c.textSubtle, fontFamily: ty.body.family, fontSize: 12 }}>
             Want to start over? Redo onboarding
           </Text>
@@ -475,23 +473,23 @@ export default function PlanReviewScreen() {
 
       {/* Info Sheet Overlay */}
       {infoSheet ? (
-        <View style={styles.infoOverlay}>
+        <View
+          className="absolute inset-0 justify-end p-4"
+          style={{ backgroundColor: 'rgba(0,0,0,0.4)' }}
+        >
           <Pressable style={StyleSheet.absoluteFill} onPress={() => setInfoSheet(null)} />
           <View
-            style={[
-              styles.infoCard,
-              { backgroundColor: c.surface, borderColor: c.border, borderRadius: r.lg },
-            ]}
+            className="border p-[14px] gap-2"
+            style={{ backgroundColor: c.surface, borderColor: c.border, borderRadius: r.lg }}
           >
-            <View style={styles.infoHeader}>
-              <Text
-                style={{ color: c.text, fontFamily: ty.heading.familySemibold, fontSize: ty.sizes.md }}
-              >
+            <View className="flex-row items-center justify-between gap-[10px]">
+              <Text style={{ color: c.text, fontFamily: ty.heading.familySemibold, fontSize: ty.sizes.md }}>
                 {infoSheet.title}
               </Text>
               <Pressable
+                className="border w-7 h-7 items-center justify-center"
+                style={{ borderColor: c.border, borderRadius: r.md }}
                 onPress={() => setInfoSheet(null)}
-                style={[styles.infoClose, { borderColor: c.border, borderRadius: r.md }]}
               >
                 <TabBarIcon name="close" color={c.textMuted} size={16} />
               </Pressable>
@@ -505,71 +503,3 @@ export default function PlanReviewScreen() {
     </View>
   );
 }
-
-const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-  },
-  loadingScreen: {
-    flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  headerRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    marginBottom: 14,
-  },
-  closeButton: {
-    width: 42,
-    height: 42,
-    borderWidth: 1,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  sectionLabel: {
-    fontSize: 12,
-    letterSpacing: 1,
-    textTransform: 'uppercase',
-    marginTop: 20,
-    marginBottom: 10,
-  },
-  plansGap: {
-    gap: 10,
-  },
-  redoLink: {
-    alignItems: 'center',
-    marginTop: 20,
-    marginBottom: 8,
-  },
-  primaryButton: {
-    height: 52,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  infoOverlay: {
-    ...StyleSheet.absoluteFillObject,
-    justifyContent: 'flex-end',
-    padding: 16,
-    backgroundColor: 'rgba(0,0,0,0.4)',
-  },
-  infoCard: {
-    borderWidth: 1,
-    padding: 14,
-    gap: 8,
-  },
-  infoHeader: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    gap: 10,
-  },
-  infoClose: {
-    borderWidth: 1,
-    width: 28,
-    height: 28,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-});

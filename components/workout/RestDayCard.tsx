@@ -1,10 +1,11 @@
 import React from 'react';
-import { Platform, Pressable, StyleSheet, Text, View } from 'react-native';
+import { Platform, StyleSheet, Text, View } from 'react-native';
 import { MotiView } from 'moti';
 import { useRouter } from 'expo-router';
 
 import { useTokens } from '../../lib/theme';
 import { TabBarIcon } from '../navigation/TabBarIcon';
+import { PressableScale } from '@/components/common/PressableScale';
 
 interface RestDayCardProps {
   title?: string;
@@ -30,9 +31,9 @@ export function RestDayCard({
       animate={{ opacity: 1, translateY: 0 }}
       transition={{ type: 'timing', duration: 450, delay }}
     >
-      <Pressable
+      <PressableScale
         onPress={handlePress}
-        style={({ pressed }) => [
+        style={(pressed) => [
           styles.container,
           {
             backgroundColor: glass.background,
@@ -116,7 +117,7 @@ export function RestDayCard({
             Open Week
           </Text>
         </View>
-      </Pressable>
+      </PressableScale>
     </MotiView>
   );
 }

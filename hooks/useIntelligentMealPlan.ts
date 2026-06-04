@@ -46,7 +46,7 @@ export function useIntelligentMealPlan(
   options: UseIntelligentMealPlanOptions = {}
 ): UseIntelligentMealPlanReturn {
   const { trainingDays = ['monday', 'wednesday', 'friday'], autoGenerate = true } = options;
-  const { onboardingData } = useOnboarding();
+  const { data: onboardingData } = useOnboarding();
   
   const [weekPlan, setWeekPlan] = useState<GeneratedMealPlan | null>(null);
   const [currentDayPlan, setCurrentDayPlan] = useState<GeneratedDayPlan | null>(null);

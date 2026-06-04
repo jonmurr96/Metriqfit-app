@@ -69,31 +69,12 @@ function getAuthRedirectUrl(path: string): string | undefined {
   return ExpoLinking.createURL(path);
 }
 
-export async function requestEmailChange(newEmail: string) {
-  const email = newEmail.trim().toLowerCase();
-  if (!email) {
-    throw new Error('Enter a valid email address.');
-  }
-
-  const { data, error } = await supabase.auth.updateUser({ email });
-  if (error) throw error;
-  return data;
+export async function requestEmailChange(_newEmail: string) {
+  throw new Error('Email changes should be managed via your Clerk Account settings.');
 }
 
-export async function requestPasswordReset(email: string) {
-  const normalizedEmail = email.trim().toLowerCase();
-  if (!normalizedEmail) {
-    throw new Error('Email is required to reset your password.');
-  }
-
-  const redirectTo = getAuthRedirectUrl('/sign-in');
-  const { data, error } = await supabase.auth.resetPasswordForEmail(
-    normalizedEmail,
-    redirectTo ? { redirectTo } : undefined,
-  );
-
-  if (error) throw error;
-  return data;
+export async function requestPasswordReset(_email: string) {
+  throw new Error('Password resets should be handled via the Clerk sign-in flow. Please sign out and click "Forgot Password".');
 }
 
 async function fetchExportTable(target: ExportTableTarget, userId: string) {

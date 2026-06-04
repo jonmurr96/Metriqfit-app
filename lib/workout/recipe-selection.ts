@@ -56,7 +56,7 @@ export function getGoalSlotPriorities(goal: PrimaryGoal): SlotPriority[] {
         { pattern: 'tricep_ext', priority: 5, reason: 'Accessory' },
       ];
 
-    case 'build_strength':
+    case 'get_stronger':
       return [
         { pattern: 'compound_squat', priority: 1, reason: 'Primary strength movement' },
         { pattern: 'compound_hinge', priority: 1, reason: 'Primary strength movement' },
@@ -289,7 +289,7 @@ export function selectBestExerciseForSlot(
         score += 15;
         reasons.push('high calorie burn');
       }
-    } else if (goal === 'build_strength') {
+    } else if (goal === 'get_stronger') {
       if (['barbell', 'heavy', 'deadlift', 'squat'].some((kw) => exercise.toLowerCase().includes(kw))) {
         score += 15;
         reasons.push('strength-focused');

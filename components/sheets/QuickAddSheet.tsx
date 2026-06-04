@@ -23,6 +23,7 @@ import {
   trackQuickAddDismissed,
   type QuickAddActionId,
 } from '../../lib/analytics';
+import { PressableScale } from '@/components/common/PressableScale';
 
 interface QuickAddSheetProps {
   isVisible: boolean;
@@ -271,8 +272,8 @@ export function QuickAddSheet({ isVisible, onClose }: QuickAddSheetProps) {
             ]}
             pointerEvents={isVisible ? 'auto' : 'none'}
           >
-            <Pressable
-              style={({ pressed }) => [
+            <PressableScale
+              style={(pressed) => [
                 styles.itemPressable,
                 { opacity: isDisabled ? 0.45 : pressed ? 0.72 : 1 },
               ]}
@@ -323,7 +324,7 @@ export function QuickAddSheet({ isVisible, onClose }: QuickAddSheetProps) {
               >
                 <TabBarIcon name={action.icon as any} color={c.primary} size={22} />
               </View>
-            </Pressable>
+            </PressableScale>
           </Animated.View>
         );
       })}
@@ -355,8 +356,8 @@ export function QuickAddSheet({ isVisible, onClose }: QuickAddSheetProps) {
         ]}
         pointerEvents="auto"
       >
-        <Pressable
-          style={({ pressed }) => [
+        <PressableScale
+          style={(pressed) => [
             styles.closeBtn,
             {
               backgroundColor: c.primary,
@@ -370,7 +371,7 @@ export function QuickAddSheet({ isVisible, onClose }: QuickAddSheetProps) {
           accessibilityRole="button"
         >
           <TabBarIcon name="close" color={c.bg} size={26} />
-        </Pressable>
+        </PressableScale>
       </Animated.View>
     </Modal>
   );

@@ -18,7 +18,7 @@ export async function checkOnboardingStatus(
   const [answersRes, targetsRes, plansRes, subscriptionsRes, reviewStatesRes] = await Promise.all([
     supabase
       .from('onboarding_answers')
-      .select('completed_at')
+      .select('answers, completed_at')
       .eq('user_id', userId)
       .maybeSingle(),
     supabase

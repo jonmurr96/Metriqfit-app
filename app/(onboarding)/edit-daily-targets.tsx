@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { Alert, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
+import { Alert, Pressable, ScrollView, Text, TextInput, View } from 'react-native';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useTokens } from '../../lib/theme';
@@ -101,93 +101,59 @@ export default function EditDailyTargetsScreen() {
   };
 
   return (
-    <View style={[styles.container, { backgroundColor: c.bg, paddingTop: insets.top + s.md }]}>
-      <View style={[styles.header, { paddingHorizontal: s.lg }]}> 
-        <Pressable style={[styles.iconButton, { backgroundColor: c.surface, borderColor: c.border, borderRadius: r.md }]} onPress={() => router.back()}>
+    <View className="flex-1" style={{ backgroundColor: c.bg, paddingTop: insets.top + s.md }}>
+      <View className="flex-row items-center justify-between mb-4" style={{ paddingHorizontal: s.lg }}>
+        <Pressable
+          className="w-[42px] h-[42px] border items-center justify-center"
+          style={{ backgroundColor: c.surface, borderColor: c.border, borderRadius: r.md }}
+          onPress={() => router.back()}
+        >
           <TabBarIcon name="chevron-back" color={c.text} size={22} />
         </Pressable>
         <Text style={{ color: c.text, fontFamily: ty.heading.familySemibold, fontSize: ty.sizes.lg }}>Edit Daily Targets</Text>
-        <View style={{ width: 42 }} />
+        <View className="w-[42px]" />
       </View>
 
       <ScrollView contentContainerStyle={{ paddingHorizontal: s.lg, paddingBottom: insets.bottom + s.xl }}>
-        <View style={styles.fieldWrap}>
-          <Text style={[styles.label, { color: c.text, fontFamily: ty.body.familySemibold }]}>Daily Water Intake (ml)</Text>
+        <View className="mb-3">
+          <Text className="text-[13px] mb-[6px]" style={{ color: c.text, fontFamily: ty.body.familySemibold }}>Daily Water Intake (ml)</Text>
           <TextInput
             value={waterMl}
             onChangeText={setWaterMl}
             keyboardType="numeric"
-            style={[styles.input, { color: c.text, borderColor: c.border, backgroundColor: c.surface, borderRadius: r.md, fontFamily: ty.body.family }]}
+            className="border h-12 px-3 text-base"
+            style={{ color: c.text, borderColor: c.border, backgroundColor: c.surface, borderRadius: r.md, fontFamily: ty.body.family }}
           />
         </View>
 
-        <View style={styles.fieldWrap}>
-          <Text style={[styles.label, { color: c.text, fontFamily: ty.body.familySemibold }]}>Daily Steps</Text>
+        <View className="mb-3">
+          <Text className="text-[13px] mb-[6px]" style={{ color: c.text, fontFamily: ty.body.familySemibold }}>Daily Steps</Text>
           <TextInput
             value={steps}
             onChangeText={setSteps}
             keyboardType="numeric"
-            style={[styles.input, { color: c.text, borderColor: c.border, backgroundColor: c.surface, borderRadius: r.md, fontFamily: ty.body.family }]}
+            className="border h-12 px-3 text-base"
+            style={{ color: c.text, borderColor: c.border, backgroundColor: c.surface, borderRadius: r.md, fontFamily: ty.body.family }}
           />
         </View>
 
-        <View style={[styles.infoCard, { backgroundColor: c.surface2, borderColor: c.border, borderRadius: r.md }]}> 
-          <Text style={[styles.infoTitle, { color: c.text, fontFamily: ty.body.familySemibold }]}>Maintenance TDEE (read-only)</Text>
+        <View className="mt-2 border p-[14px]" style={{ backgroundColor: c.surface2, borderColor: c.border, borderRadius: r.md }}>
+          <Text className="text-[13px] mb-[6px]" style={{ color: c.text, fontFamily: ty.body.familySemibold }}>Maintenance TDEE (read-only)</Text>
           <Text style={{ color: c.primary, fontFamily: ty.heading.familySemibold, fontSize: ty.sizes.xl }}>{estimated.toLocaleString()} kcal</Text>
           <Text style={{ color: c.textMuted, fontFamily: ty.body.family, marginTop: 6, lineHeight: 18 }}>
             This estimate is derived from your current goal and macro baseline. It updates when you regenerate targets.
           </Text>
         </View>
 
-        <Pressable style={[styles.saveButton, { backgroundColor: c.primary, borderRadius: r.md }]} onPress={save} disabled={updateDaily.isPending}>
+        <Pressable
+          className="h-[52px] items-center justify-center mt-[18px]"
+          style={{ backgroundColor: c.primary, borderRadius: r.md }}
+          onPress={save}
+          disabled={updateDaily.isPending}
+        >
           <Text style={{ color: c.bg, fontFamily: ty.heading.familySemibold }}>Save Changes</Text>
         </Pressable>
       </ScrollView>
     </View>
   );
 }
-
-const styles = StyleSheet.create({
-  container: { flex: 1 },
-  header: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    marginBottom: 16,
-  },
-  iconButton: {
-    width: 42,
-    height: 42,
-    borderWidth: 1,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  fieldWrap: {
-    marginBottom: 12,
-  },
-  label: {
-    fontSize: 13,
-    marginBottom: 6,
-  },
-  input: {
-    borderWidth: 1,
-    height: 48,
-    paddingHorizontal: 12,
-    fontSize: 16,
-  },
-  infoCard: {
-    marginTop: 8,
-    borderWidth: 1,
-    padding: 14,
-  },
-  infoTitle: {
-    fontSize: 13,
-    marginBottom: 6,
-  },
-  saveButton: {
-    height: 52,
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginTop: 18,
-  },
-});

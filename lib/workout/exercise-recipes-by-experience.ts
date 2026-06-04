@@ -34,7 +34,7 @@ export type DayRecipe = {
   totalSets: number;
   estimatedDurationMin: number;
   complexity: 'foundational' | 'mixed' | 'all';
-  goal: 'build_muscle' | 'lose_fat' | 'build_strength' | 'general_fitness';
+  goal: 'build_muscle' | 'lose_fat' | 'get_stronger' | 'general_fitness';
 };
 
 export type ExperienceRecipeSet = {
@@ -671,7 +671,7 @@ const ADVANCED_UPPER_A: DayRecipe = {
   description: 'Maximal strength focus with high-intensity accessories',
   focus: ['upper', 'push', 'pull'],
   complexity: 'all',
-  goal: 'build_strength',
+  goal: 'get_stronger',
   slots: [
     {
       pattern: 'horizontal_push',
@@ -831,7 +831,7 @@ const ADVANCED_LOWER_A: DayRecipe = {
   description: 'Heavy squatting with comprehensive leg development',
   focus: ['lower', 'legs', 'quads'],
   complexity: 'all',
-  goal: 'build_strength',
+  goal: 'get_stronger',
   slots: [
     {
       pattern: 'compound_squat',
@@ -891,7 +891,7 @@ const ADVANCED_LOWER_B: DayRecipe = {
   description: 'Heavy pulling with glute and hamstring emphasis',
   focus: ['lower', 'legs', 'hamstrings', 'glutes'],
   complexity: 'all',
-  goal: 'build_strength',
+  goal: 'get_stronger',
   slots: [
     {
       pattern: 'compound_hinge',
@@ -1178,7 +1178,7 @@ export function applyGoalModifications(recipe: DayRecipe, goal: string): DayReci
       }
       break;
 
-    case 'build_strength':
+    case 'get_stronger':
       // Lower reps, increase rest
       modified.slots = recipe.slots
         .filter((slot) => slot.pattern.includes('compound'))

@@ -5,7 +5,6 @@ import {
   Platform,
   Pressable,
   ScrollView,
-  StyleSheet,
   Text,
   TextInput,
   View,
@@ -474,62 +473,67 @@ export default function EditWorkoutPlanScreen() {
   };
 
   return (
-    <View style={[styles.container, { backgroundColor: c.bg, paddingTop: insets.top + s.md }]}> 
-      <View style={[styles.header, { paddingHorizontal: s.lg }]}> 
-        <Pressable style={[styles.iconButton, { backgroundColor: c.surface, borderColor: c.border, borderRadius: r.md }]} onPress={() => router.back()}>
+    <View className="flex-1" style={{ backgroundColor: c.bg, paddingTop: insets.top + s.md }}>
+      <View className="flex-row items-center justify-between mb-4" style={{ paddingHorizontal: s.lg }}>
+        <Pressable
+          className="w-[42px] h-[42px] border items-center justify-center"
+          style={{ backgroundColor: c.surface, borderColor: c.border, borderRadius: r.md }}
+          onPress={() => router.back()}
+        >
           <TabBarIcon name="chevron-back" color={c.text} size={22} />
         </Pressable>
         <Text style={{ color: c.text, fontFamily: ty.heading.familySemibold, fontSize: ty.sizes.lg }}>Edit Workout Plan</Text>
-        <View style={{ width: 42 }} />
+        <View className="w-[42px]" />
       </View>
 
       <ScrollView contentContainerStyle={{ paddingHorizontal: s.lg, paddingBottom: insets.bottom + s.xl }}>
-        <View style={styles.fieldWrap}>
-          <Text style={[styles.label, { color: c.text, fontFamily: ty.body.familySemibold }]}>Plan name</Text>
+        <View className="mb-3">
+          <Text className="text-[13px] mb-[6px]" style={{ color: c.text, fontFamily: ty.body.familySemibold }}>Plan name</Text>
           <TextInput
             value={name}
             onChangeText={setName}
-            style={[styles.input, { color: c.text, borderColor: c.border, backgroundColor: c.surface, borderRadius: r.md, fontFamily: ty.body.family }]}
+            className="border h-12 px-3 text-base"
+            style={{ color: c.text, borderColor: c.border, backgroundColor: c.surface, borderRadius: r.md, fontFamily: ty.body.family }}
           />
         </View>
 
-        <View style={styles.fieldWrap}>
-          <Text style={[styles.label, { color: c.text, fontFamily: ty.body.familySemibold }]}>Description</Text>
+        <View className="mb-3">
+          <Text className="text-[13px] mb-[6px]" style={{ color: c.text, fontFamily: ty.body.familySemibold }}>Description</Text>
           <TextInput
             value={description}
             onChangeText={setDescription}
             multiline
             numberOfLines={3}
-            style={[styles.textArea, { color: c.text, borderColor: c.border, backgroundColor: c.surface, borderRadius: r.md, fontFamily: ty.body.family }]}
+            className="border px-3 py-[10px] text-[15px]"
+            style={{ color: c.text, borderColor: c.border, backgroundColor: c.surface, borderRadius: r.md, fontFamily: ty.body.family, minHeight: 92, textAlignVertical: 'top' }}
           />
         </View>
 
-        <View style={styles.fieldWrap}>
-          <Text style={[styles.label, { color: c.text, fontFamily: ty.body.familySemibold }]}>Days per week</Text>
+        <View className="mb-3">
+          <Text className="text-[13px] mb-[6px]" style={{ color: c.text, fontFamily: ty.body.familySemibold }}>Days per week</Text>
           <TextInput
             value={daysPerWeek}
             onChangeText={setDaysPerWeek}
             keyboardType="numeric"
-            style={[styles.input, { color: c.text, borderColor: c.border, backgroundColor: c.surface, borderRadius: r.md, fontFamily: ty.body.family }]}
+            className="border h-12 px-3 text-base"
+            style={{ color: c.text, borderColor: c.border, backgroundColor: c.surface, borderRadius: r.md, fontFamily: ty.body.family }}
           />
         </View>
 
-        <View style={styles.fieldWrap}>
-          <Text style={[styles.label, { color: c.text, fontFamily: ty.body.familySemibold }]}>Minutes per workout</Text>
-          <View style={styles.rowWrap}>
+        <View className="mb-3">
+          <Text className="text-[13px] mb-[6px]" style={{ color: c.text, fontFamily: ty.body.familySemibold }}>Minutes per workout</Text>
+          <View className="flex-row flex-wrap gap-2">
             {MINUTE_OPTIONS.map((option) => {
               const selected = minutesPerWorkout === option;
               return (
                 <Pressable
                   key={option}
-                  style={[
-                    styles.chip,
-                    {
-                      backgroundColor: selected ? c.primary : c.surface,
-                      borderColor: selected ? c.primary : c.border,
-                      borderRadius: r.pill,
-                    },
-                  ]}
+                  className="border h-[38px] px-[14px] items-center justify-center"
+                  style={{
+                    backgroundColor: selected ? c.primary : c.surface,
+                    borderColor: selected ? c.primary : c.border,
+                    borderRadius: r.pill,
+                  }}
                   onPress={() => setMinutesPerWorkout(option)}
                 >
                   <Text style={{ color: selected ? c.bg : c.text, fontFamily: ty.body.familySemibold }}>
@@ -541,24 +545,22 @@ export default function EditWorkoutPlanScreen() {
           </View>
         </View>
 
-        <View style={styles.fieldWrap}>
-          <Text style={[styles.label, { color: c.text, fontFamily: ty.body.familySemibold }]}>Preferred days off ({daysOff.length}/{availableDaysOff})</Text>
-          <View style={styles.rowWrap}>
+        <View className="mb-3">
+          <Text className="text-[13px] mb-[6px]" style={{ color: c.text, fontFamily: ty.body.familySemibold }}>Preferred days off ({daysOff.length}/{availableDaysOff})</Text>
+          <View className="flex-row flex-wrap gap-2">
             {WEEKDAYS.map((day) => {
               const selected = daysOff.includes(day.key);
               const disabled = !selected && daysOff.length >= availableDaysOff;
               return (
                 <Pressable
                   key={day.key}
-                  style={[
-                    styles.dayChip,
-                    {
-                      backgroundColor: selected ? c.primary : c.surface,
-                      borderColor: selected ? c.primary : c.border,
-                      borderRadius: r.md,
-                      opacity: disabled ? 0.5 : 1,
-                    },
-                  ]}
+                  className="border w-[58px] h-[38px] items-center justify-center"
+                  style={{
+                    backgroundColor: selected ? c.primary : c.surface,
+                    borderColor: selected ? c.primary : c.border,
+                    borderRadius: r.md,
+                    opacity: disabled ? 0.5 : 1,
+                  }}
                   onPress={() => toggleDayOff(day.key)}
                   disabled={disabled}
                 >
@@ -569,7 +571,7 @@ export default function EditWorkoutPlanScreen() {
           </View>
         </View>
 
-        <View style={[styles.advancedCard, { borderColor: c.border, backgroundColor: c.surface, borderRadius: r.lg }]}> 
+        <View className="border p-3 mt-1" style={{ borderColor: c.border, backgroundColor: c.surface, borderRadius: r.lg }}>
           <Text style={{ color: c.text, fontFamily: ty.heading.familySemibold, fontSize: ty.sizes.md }}>
             Exercise-Level Customization
           </Text>
@@ -577,16 +579,14 @@ export default function EditWorkoutPlanScreen() {
             Expand each workout day to edit sets/reps/rest, reorder exercises, remove blocks, and add new movements.
           </Text>
 
-          <View style={styles.dayActionRow}>
+          <View className="flex-row items-center justify-between">
             <Pressable
-              style={[
-                styles.dayActionButton,
-                {
-                  borderColor: c.primary,
-                  borderRadius: r.pill,
-                  opacity: orderedDays.length >= 6 || isSaving ? 0.5 : 1,
-                },
-              ]}
+              className="border min-h-[30px] px-[10px] flex-row items-center gap-[6px]"
+              style={{
+                borderColor: c.primary,
+                borderRadius: r.pill,
+                opacity: orderedDays.length >= 6 || isSaving ? 0.5 : 1,
+              }}
               onPress={handleAddWorkoutDay}
               disabled={orderedDays.length >= 6 || isSaving}
             >
@@ -605,8 +605,11 @@ export default function EditWorkoutPlanScreen() {
             const dayExercises = day.exercises || [];
             const canRemoveDay = orderedDays.length > 2;
             return (
-              <View key={day.id} style={[styles.dayCard, { borderColor: c.border, borderRadius: r.md, backgroundColor: c.bg }]}> 
-                <Pressable style={styles.dayHeader} onPress={() => toggleDayExpanded(day.id)}>
+              <View key={day.id} className="border mt-2 overflow-hidden" style={{ borderColor: c.border, borderRadius: r.md, backgroundColor: c.bg }}>
+                <Pressable
+                  className="min-h-[48px] px-[10px] py-2 flex-row items-center justify-between gap-[10px]"
+                  onPress={() => toggleDayExpanded(day.id)}
+                >
                   <View style={{ flex: 1 }}>
                     <Text style={{ color: c.text, fontFamily: ty.body.familySemibold }}>
                       Day {day.day_number}: {day.name || 'Workout Day'}
@@ -617,16 +620,14 @@ export default function EditWorkoutPlanScreen() {
                       </Text>
                     ) : null}
                   </View>
-                  <View style={styles.dayHeaderRight}>
+                  <View className="flex-row items-center gap-2">
                     <Pressable
-                      style={[
-                        styles.dayRemoveButton,
-                        {
-                          borderColor: c.border,
-                          borderRadius: r.pill,
-                          opacity: canRemoveDay && !isSaving ? 1 : 0.45,
-                        },
-                      ]}
+                      className="border w-[26px] h-[26px] items-center justify-center"
+                      style={{
+                        borderColor: c.border,
+                        borderRadius: r.pill,
+                        opacity: canRemoveDay && !isSaving ? 1 : 0.45,
+                      }}
                       onPress={(event) => {
                         event?.stopPropagation?.();
                         handleRemoveWorkoutDay(day.id, day.name || `Day ${day.day_number}`);
@@ -640,10 +641,11 @@ export default function EditWorkoutPlanScreen() {
                 </Pressable>
 
                 {isExpanded ? (
-                  <View style={styles.exerciseList}>
-                    <View style={styles.dayActionRow}>
+                  <View className="px-2 pb-2 gap-2">
+                    <View className="flex-row items-center justify-between">
                       <Pressable
-                        style={[styles.dayActionButton, { borderColor: c.primary, borderRadius: r.pill }]}
+                        className="border min-h-[30px] px-[10px] flex-row items-center gap-[6px]"
+                        style={{ borderColor: c.primary, borderRadius: r.pill }}
                         onPress={() => openAddExercisePicker(day.id, day.name || `Day ${day.day_number}`)}
                         disabled={isSaving}
                       >
@@ -659,8 +661,8 @@ export default function EditWorkoutPlanScreen() {
                       const pendingSwapName = selectedSwapName(exercise.id);
 
                       return (
-                        <View key={exercise.id} style={[styles.exerciseCard, { borderColor: c.border, borderRadius: r.md, backgroundColor: c.surface2 }]}> 
-                          <View style={styles.exerciseHeader}>
+                        <View key={exercise.id} className="border p-[10px] gap-2" style={{ borderColor: c.border, borderRadius: r.md, backgroundColor: c.surface2 }}>
+                          <View className="flex-row items-center justify-between gap-[10px]">
                             <View style={{ flex: 1 }}>
                               <Text style={{ color: c.text, fontFamily: ty.body.familySemibold, fontSize: 13 }}>
                                 {exercise.exercise?.name || 'Exercise'}
@@ -672,7 +674,8 @@ export default function EditWorkoutPlanScreen() {
                               ) : null}
                             </View>
                             <Pressable
-                              style={[styles.swapButton, { borderColor: c.primary, borderRadius: r.pill }]}
+                              className="border min-w-[62px] h-[30px] items-center justify-center px-[10px]"
+                              style={{ borderColor: c.primary, borderRadius: r.pill }}
                               onPress={() => openSwapPicker(exercise.id, exercise.exercise?.id || null, exercise.exercise?.name || 'Exercise')}
                               disabled={isSaving}
                             >
@@ -680,23 +683,26 @@ export default function EditWorkoutPlanScreen() {
                             </Pressable>
                           </View>
 
-                          <View style={styles.exerciseToolsRow}>
+                          <View className="flex-row gap-[6px]">
                             <Pressable
-                              style={[styles.toolButton, { borderColor: c.border, borderRadius: r.sm, opacity: idx === 0 ? 0.4 : 1 }]}
+                              className="border w-7 h-7 items-center justify-center"
+                              style={{ borderColor: c.border, borderRadius: r.sm, opacity: idx === 0 ? 0.4 : 1 }}
                               onPress={() => handleMoveExercise(exercise.id, 'up')}
                               disabled={idx === 0 || isSaving}
                             >
                               <TabBarIcon name="chevron-up" color={c.textMuted} size={14} />
                             </Pressable>
                             <Pressable
-                              style={[styles.toolButton, { borderColor: c.border, borderRadius: r.sm, opacity: idx === dayExercises.length - 1 ? 0.4 : 1 }]}
+                              className="border w-7 h-7 items-center justify-center"
+                              style={{ borderColor: c.border, borderRadius: r.sm, opacity: idx === dayExercises.length - 1 ? 0.4 : 1 }}
                               onPress={() => handleMoveExercise(exercise.id, 'down')}
                               disabled={idx === dayExercises.length - 1 || isSaving}
                             >
                               <TabBarIcon name="chevron-down" color={c.textMuted} size={14} />
                             </Pressable>
                             <Pressable
-                              style={[styles.toolButton, { borderColor: c.border, borderRadius: r.sm }]}
+                              className="border w-7 h-7 items-center justify-center"
+                              style={{ borderColor: c.border, borderRadius: r.sm }}
                               onPress={() => handleRemoveExercise(exercise.id)}
                               disabled={isSaving}
                             >
@@ -704,41 +710,45 @@ export default function EditWorkoutPlanScreen() {
                             </Pressable>
                           </View>
 
-                          <View style={styles.metricRow}>
-                            <View style={styles.metricCol}>
-                              <Text style={[styles.metricLabel, { color: c.textMuted, fontFamily: ty.mono.family }]}>Sets</Text>
+                          <View className="flex-row gap-[6px]">
+                            <View className="flex-1">
+                              <Text className="text-[10px] mb-1 uppercase" style={{ color: c.textMuted, fontFamily: ty.mono.family }}>Sets</Text>
                               <TextInput
                                 value={fields.sets_target}
                                 onChangeText={(value) => updateExerciseField(exercise.id, 'sets_target', value)}
                                 keyboardType="numeric"
-                                style={[styles.metricInput, { color: c.text, borderColor: c.border, backgroundColor: c.bg, borderRadius: r.sm, fontFamily: ty.body.family }]}
+                                className="border h-[38px] px-2"
+                                style={{ color: c.text, borderColor: c.border, backgroundColor: c.bg, borderRadius: r.sm, fontFamily: ty.body.family }}
                               />
                             </View>
-                            <View style={styles.metricCol}>
-                              <Text style={[styles.metricLabel, { color: c.textMuted, fontFamily: ty.mono.family }]}>Rep Min</Text>
+                            <View className="flex-1">
+                              <Text className="text-[10px] mb-1 uppercase" style={{ color: c.textMuted, fontFamily: ty.mono.family }}>Rep Min</Text>
                               <TextInput
                                 value={fields.reps_min}
                                 onChangeText={(value) => updateExerciseField(exercise.id, 'reps_min', value)}
                                 keyboardType="numeric"
-                                style={[styles.metricInput, { color: c.text, borderColor: c.border, backgroundColor: c.bg, borderRadius: r.sm, fontFamily: ty.body.family }]}
+                                className="border h-[38px] px-2"
+                                style={{ color: c.text, borderColor: c.border, backgroundColor: c.bg, borderRadius: r.sm, fontFamily: ty.body.family }}
                               />
                             </View>
-                            <View style={styles.metricCol}>
-                              <Text style={[styles.metricLabel, { color: c.textMuted, fontFamily: ty.mono.family }]}>Rep Max</Text>
+                            <View className="flex-1">
+                              <Text className="text-[10px] mb-1 uppercase" style={{ color: c.textMuted, fontFamily: ty.mono.family }}>Rep Max</Text>
                               <TextInput
                                 value={fields.reps_max}
                                 onChangeText={(value) => updateExerciseField(exercise.id, 'reps_max', value)}
                                 keyboardType="numeric"
-                                style={[styles.metricInput, { color: c.text, borderColor: c.border, backgroundColor: c.bg, borderRadius: r.sm, fontFamily: ty.body.family }]}
+                                className="border h-[38px] px-2"
+                                style={{ color: c.text, borderColor: c.border, backgroundColor: c.bg, borderRadius: r.sm, fontFamily: ty.body.family }}
                               />
                             </View>
-                            <View style={styles.metricCol}>
-                              <Text style={[styles.metricLabel, { color: c.textMuted, fontFamily: ty.mono.family }]}>Rest (s)</Text>
+                            <View className="flex-1">
+                              <Text className="text-[10px] mb-1 uppercase" style={{ color: c.textMuted, fontFamily: ty.mono.family }}>Rest (s)</Text>
                               <TextInput
                                 value={fields.rest_seconds}
                                 onChangeText={(value) => updateExerciseField(exercise.id, 'rest_seconds', value)}
                                 keyboardType="numeric"
-                                style={[styles.metricInput, { color: c.text, borderColor: c.border, backgroundColor: c.bg, borderRadius: r.sm, fontFamily: ty.body.family }]}
+                                className="border h-[38px] px-2"
+                                style={{ color: c.text, borderColor: c.border, backgroundColor: c.bg, borderRadius: r.sm, fontFamily: ty.body.family }}
                               />
                             </View>
                           </View>
@@ -752,7 +762,12 @@ export default function EditWorkoutPlanScreen() {
           })}
         </View>
 
-        <Pressable style={[styles.saveButton, { backgroundColor: c.primary, borderRadius: r.md, opacity: isSaving ? 0.7 : 1 }]} onPress={save} disabled={isSaving}>
+        <Pressable
+          className="mt-[14px] h-[52px] items-center justify-center"
+          style={{ backgroundColor: c.primary, borderRadius: r.md, opacity: isSaving ? 0.7 : 1 }}
+          onPress={save}
+          disabled={isSaving}
+        >
           {isSaving ? (
             <ActivityIndicator color={c.bg} size="small" />
           ) : (
@@ -762,10 +777,10 @@ export default function EditWorkoutPlanScreen() {
       </ScrollView>
 
       {(swapTarget || addTargetDay) ? (
-        <View style={styles.overlay}>
-          <Pressable style={StyleSheet.absoluteFill} onPress={() => { setSwapTarget(null); setAddTargetDay(null); }} />
-          <View style={[styles.swapCard, { backgroundColor: c.surface, borderColor: c.border, borderRadius: r.lg }]}> 
-            <View style={styles.swapHeader}>
+        <View className="absolute inset-0 justify-end p-3">
+          <Pressable className="absolute inset-0" onPress={() => { setSwapTarget(null); setAddTargetDay(null); }} />
+          <View className="border p-3" style={{ backgroundColor: c.surface, borderColor: c.border, borderRadius: r.lg, maxHeight: '72%' }}>
+            <View className="flex-row items-center justify-between gap-[10px] mb-2">
               <Text style={{ color: c.text, fontFamily: ty.heading.familySemibold, fontSize: ty.sizes.md, flex: 1 }}>
                 {swapTarget ? `Replace ${swapTarget.exerciseName}` : `Add Exercise: ${addTargetDay?.dayName || ''}`}
               </Text>
@@ -779,11 +794,12 @@ export default function EditWorkoutPlanScreen() {
               onChangeText={setSwapSearch}
               placeholder="Search exercise"
               placeholderTextColor={c.textMuted}
-              style={[styles.searchInput, { color: c.text, borderColor: c.border, backgroundColor: c.bg, borderRadius: r.md, fontFamily: ty.body.family }]}
+              className="border h-11 px-3 mb-2"
+              style={{ color: c.text, borderColor: c.border, backgroundColor: c.bg, borderRadius: r.md, fontFamily: ty.body.family }}
               autoFocus
             />
 
-            <ScrollView style={styles.swapList}>
+            <ScrollView style={{ maxHeight: 340 }}>
               {swapLoading ? (
                 <ActivityIndicator color={c.primary} style={{ marginTop: 20 }} />
               ) : (
@@ -801,7 +817,8 @@ export default function EditWorkoutPlanScreen() {
                   {displayedPickerCandidates.map((exercise) => (
                     <Pressable
                       key={exercise.id}
-                      style={[styles.swapOption, { borderColor: c.border }]}
+                      className="border-b py-[10px] gap-[2px]"
+                      style={{ borderColor: c.border }}
                       onPress={async () => {
                         if (swapTarget) {
                           setExerciseSwapSelection((prev) => ({
@@ -841,192 +858,3 @@ export default function EditWorkoutPlanScreen() {
     </View>
   );
 }
-
-const styles = StyleSheet.create({
-  container: { flex: 1 },
-  header: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    marginBottom: 16,
-  },
-  iconButton: {
-    width: 42,
-    height: 42,
-    borderWidth: 1,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  fieldWrap: { marginBottom: 12 },
-  label: {
-    fontSize: 13,
-    marginBottom: 6,
-  },
-  input: {
-    borderWidth: 1,
-    height: 48,
-    paddingHorizontal: 12,
-    fontSize: 16,
-  },
-  textArea: {
-    borderWidth: 1,
-    minHeight: 92,
-    paddingHorizontal: 12,
-    paddingVertical: 10,
-    fontSize: 15,
-    textAlignVertical: 'top',
-  },
-  rowWrap: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: 8,
-  },
-  chip: {
-    borderWidth: 1,
-    paddingHorizontal: 14,
-    height: 38,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  dayChip: {
-    borderWidth: 1,
-    width: 58,
-    height: 38,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  advancedCard: {
-    borderWidth: 1,
-    padding: 12,
-    marginTop: 4,
-  },
-  dayCard: {
-    borderWidth: 1,
-    marginTop: 8,
-    overflow: 'hidden',
-  },
-  dayHeader: {
-    minHeight: 48,
-    paddingHorizontal: 10,
-    paddingVertical: 8,
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    gap: 10,
-  },
-  dayHeaderRight: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
-  },
-  dayRemoveButton: {
-    borderWidth: 1,
-    width: 26,
-    height: 26,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  exerciseList: {
-    paddingHorizontal: 8,
-    paddingBottom: 8,
-    gap: 8,
-  },
-  dayActionRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-  },
-  dayActionButton: {
-    borderWidth: 1,
-    minHeight: 30,
-    paddingHorizontal: 10,
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 6,
-  },
-  exerciseCard: {
-    borderWidth: 1,
-    padding: 10,
-    gap: 8,
-  },
-  exerciseHeader: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    gap: 10,
-  },
-  swapButton: {
-    borderWidth: 1,
-    minWidth: 62,
-    height: 30,
-    alignItems: 'center',
-    justifyContent: 'center',
-    paddingHorizontal: 10,
-  },
-  exerciseToolsRow: {
-    flexDirection: 'row',
-    gap: 6,
-  },
-  toolButton: {
-    borderWidth: 1,
-    width: 28,
-    height: 28,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  metricRow: {
-    flexDirection: 'row',
-    gap: 6,
-  },
-  metricCol: {
-    flex: 1,
-  },
-  metricLabel: {
-    fontSize: 10,
-    marginBottom: 4,
-    textTransform: 'uppercase',
-  },
-  metricInput: {
-    borderWidth: 1,
-    height: 38,
-    paddingHorizontal: 8,
-    fontSize: 14,
-  },
-  saveButton: {
-    marginTop: 14,
-    height: 52,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  overlay: {
-    ...StyleSheet.absoluteFillObject,
-    justifyContent: 'flex-end',
-    padding: 12,
-  },
-  swapCard: {
-    borderWidth: 1,
-    maxHeight: '72%',
-    padding: 12,
-  },
-  swapHeader: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    gap: 10,
-    marginBottom: 8,
-  },
-  searchInput: {
-    borderWidth: 1,
-    height: 44,
-    paddingHorizontal: 12,
-    marginBottom: 8,
-  },
-  swapList: {
-    maxHeight: 340,
-  },
-  swapOption: {
-    borderBottomWidth: 1,
-    paddingVertical: 10,
-    gap: 2,
-  },
-});

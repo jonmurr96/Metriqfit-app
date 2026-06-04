@@ -2,6 +2,7 @@
 import Constants from 'expo-constants';
 import { supabase } from '../lib/supabase';
 import type { Database } from '../lib/supabase/types';
+import { getClerkSupabaseToken } from '../lib/auth/getClerkToken';
 import { getNutritionPlanMeal, repairNutritionPlanMappings } from './planService';
 import { toLocalDateKey } from '../lib/home/dashboard-state';
 import { awardXP, updateStreak } from './gamificationService';
@@ -292,8 +293,10 @@ async function invokeEdgeFunction<T>(
     throw new Error('Supabase edge functions are not configured');
   }
 
-  const { data: sessionData, error: sessionError } = await supabase.auth.getSession();
-  if (sessionError || !sessionData.session?.access_token) {
+  let token: string;
+  try {
+    token = await getClerkSupabaseToken();
+  } catch (err) {
     throw new Error('Sign in is required to use this nutrition tool.');
   }
 
@@ -302,7 +305,7 @@ async function invokeEdgeFunction<T>(
     headers: {
       'Content-Type': 'application/json',
       apikey: edgeFunctionAnonKey,
-      Authorization: `Bearer ${sessionData.session.access_token}`,
+      Authorization: `Bearer ${token}`,
     },
     body: JSON.stringify(body),
     signal,

@@ -1,9 +1,10 @@
 import React, { useState, useEffect } from 'react';
-import { StyleSheet, View, Text, Pressable, Platform, Alert } from 'react-native';
+import { StyleSheet, View, Text, Platform, Alert } from 'react-native';
 import { Audio } from 'expo-av';
 import { MotiView } from 'moti';
 import { Ionicons } from '@expo/vector-icons';
 import { useTokens } from '../../lib/theme';
+import { PressableScale } from '@/components/common/PressableScale';
 import * as FileSystem from 'expo-file-system';
 
 interface VoiceInputProps {
@@ -83,11 +84,11 @@ export const VoiceInput = ({ onTranscription, isProcessing = false }: VoiceInput
 
     return (
         <View style={styles.container}>
-            <Pressable
+            <PressableScale
                 onPressIn={startRecording}
                 onPressOut={stopRecording}
                 disabled={isProcessing}
-                style={({ pressed }) => [
+                style={(pressed) => [
                     styles.button,
                     {
                         backgroundColor: isRecording ? c.primary : c.surface2,
@@ -115,7 +116,7 @@ export const VoiceInput = ({ onTranscription, isProcessing = false }: VoiceInput
                     size={24}
                     color={isRecording ? c.bg : c.text}
                 />
-            </Pressable>
+            </PressableScale>
 
             {isRecording && (
                 <MotiView

@@ -2,6 +2,7 @@ import React from 'react';
 import { Modal, Platform, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { MotiView } from 'moti';
+import { PressableScale } from '@/components/common/PressableScale';
 import { useTokens } from '../../lib/theme';
 import { TabBarIcon } from '../navigation/TabBarIcon';
 
@@ -80,11 +81,11 @@ export function CoachSheet({
               ) : null}
             </View>
 
-            <Pressable
+            <PressableScale
               accessibilityRole="button"
               accessibilityLabel="Close sheet"
               onPress={onClose}
-              style={({ pressed }) => [
+              style={(pressed) => [
                 styles.closeButton,
                 {
                   backgroundColor: pressed ? c.surface2 : c.surface,
@@ -95,7 +96,7 @@ export function CoachSheet({
               ]}
             >
               <TabBarIcon name="close" color={c.textMuted} size={18} />
-            </Pressable>
+            </PressableScale>
           </View>
 
           <ScrollView

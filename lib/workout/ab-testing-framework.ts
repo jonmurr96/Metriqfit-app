@@ -237,7 +237,7 @@ export const PREDEFINED_EXPERIMENTS: Experiment[] = [
     ],
     targetPopulation: {
       experienceLevels: ['intermediate'],
-      primaryGoals: ['build_muscle', 'build_strength'],
+      primaryGoals: ['build_muscle', 'get_stronger'],
       minDaysPerWeek: 3,
       maxDaysPerWeek: 5,
     },

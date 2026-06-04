@@ -30,6 +30,7 @@ import { PremiumBackground } from '../components/premium/PremiumBackground';
 import { GlassCard } from '../components/premium/GlassCard';
 import { useUserAchievements, useAchievementStats } from '../hooks/useGamification';
 import type { Achievement } from '../types/gamification';
+import { PressableScale } from '@/components/common/PressableScale';
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
 const CARD_PADDING = 16;
@@ -251,9 +252,9 @@ export default function AchievementsScreen() {
                 animate={{ opacity: 1, scale: 1 }}
                 transition={{ type: 'timing', duration: 300, delay: 200 + index * 50 }}
               >
-                <Pressable
+                <PressableScale
                   onPress={() => setSelectedCategory(category)}
-                  style={({ pressed }) => [
+                  style={(pressed) => [
                     styles.filterChip,
                     {
                       backgroundColor: isSelected ? c.primary : c.surfaceSubtle,
@@ -295,7 +296,7 @@ export default function AchievementsScreen() {
                       </Text>
                     </View>
                   )}
-                </Pressable>
+                </PressableScale>
               </MotiView>
             );
           })}
@@ -390,8 +391,8 @@ function AchievementCard({ achievement, index, cardSize }: AchievementCardProps)
       layout={Layout.springify().damping(15)}
       style={{ width: cardSize }}
     >
-      <Pressable
-        style={({ pressed }) => [
+      <PressableScale
+        style={(pressed) => [
           styles.achievementCard,
           {
             backgroundColor: isUnlocked ? c.surfaceSubtle : `${c.surfaceSubtle}60`,
@@ -468,7 +469,7 @@ function AchievementCard({ achievement, index, cardSize }: AchievementCardProps)
             <Ionicons name="lock-closed" size={16} color={c.textMuted} />
           </View>
         )}
-      </Pressable>
+      </PressableScale>
     </Animated.View>
   );
 }

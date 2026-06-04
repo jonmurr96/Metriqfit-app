@@ -1,6 +1,7 @@
 import React from 'react';
-import { View, Text, ScrollView, Pressable, StyleSheet } from 'react-native';
+import { View, Text, ScrollView, StyleSheet } from 'react-native';
 import { MotiView } from 'moti';
+import { PressableScale } from '@/components/common/PressableScale';
 import { useTokens } from '../../lib/theme';
 import { TabBarIcon } from '../../components/navigation/TabBarIcon';
 
@@ -69,8 +70,8 @@ export function SuggestionChips({
               delay: 300 + index * 60,
             } as any}
           >
-            <Pressable
-              style={({ pressed }) => [
+            <PressableScale
+              style={(pressed) => [
                 styles.chip,
                 {
                   backgroundColor: pressed ? c.surface2 : c.surface,
@@ -110,7 +111,7 @@ export function SuggestionChips({
               >
                 {suggestion.label}
               </Text>
-            </Pressable>
+            </PressableScale>
           </MotiView>
         ))}
       </ScrollView>

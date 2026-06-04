@@ -26,6 +26,7 @@ import Animated, {
 import { useTokens } from '../../lib/theme';
 import type { Achievement, AchievementRarity } from '../../types/gamification';
 import { getRarityBorderColor } from '../../types/gamification';
+import { PressableScale } from '@/components/common/PressableScale';
 
 const { width, height } = Dimensions.get('window');
 
@@ -237,9 +238,9 @@ export function AchievementUnlockModal({
             )}
 
             {/* Claim Button */}
-            <Pressable
+            <PressableScale
               onPress={onDismiss}
-              style={({ pressed }) => [
+              style={(pressed) => [
                 styles.claimButton,
                 {
                   backgroundColor: pressed ? c.primaryActive : c.primary,
@@ -257,7 +258,7 @@ export function AchievementUnlockModal({
               >
                 Claim Reward
               </Text>
-            </Pressable>
+            </PressableScale>
           </Animated.View>
         </Pressable>
       </BlurView>

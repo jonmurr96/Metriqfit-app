@@ -30,6 +30,7 @@ export default function SignInScreen() {
   const { c, ty, s, theme } = useTokens();
   const { signIn, fetchStatus } = useSignIn();
   const { startOAuthFlow: startGoogleOAuth } = useOAuth({ strategy: 'oauth_google' });
+  const { startOAuthFlow: startAppleOAuth } = useOAuth({ strategy: 'oauth_apple' });
 
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
@@ -95,6 +96,24 @@ export default function SignInScreen() {
     }
   };
 
+  const handleAppleSignIn = async () => {
+    setLoading(true);
+    setError('');
+    setSuccessMessage('');
+
+    try {
+      const { createdSessionId, setActive } = await startAppleOAuth();
+      if (createdSessionId && setActive) {
+        await setActive({ session: createdSessionId });
+        router.replace('/');
+      }
+    } catch (err: any) {
+      setError(normalizeError(err?.message));
+    } finally {
+      setLoading(false);
+    }
+  };
+
   return (
     <AuthScreenShell
       title="Metriqfit"
@@ -116,16 +135,29 @@ export default function SignInScreen() {
           onPress={handleGoogleSignIn}
           disabled={isBusy}
         />
-        <AuthProviderButton provider="apple" disabled />
+        <AuthProviderButton
+          provider="apple"
+          onPress={handleAppleSignIn}
+          disabled={isBusy}
+        />
       </View>
 
       {/* Divider */}
-      <View style={styles.dividerRow}>
-        <View style={[styles.dividerLine, { backgroundColor: `${c.primary}${theme.auth.dividerOpacity}` }]} />
-        <Text style={[styles.dividerText, { color: c.textMuted, fontFamily: ty.body.family }]}>
+      <View className="flex-row items-center gap-3 my-1">
+        <View
+          className="flex-1"
+          style={{ height: StyleSheet.hairlineWidth, backgroundColor: `${c.primary}${theme.auth.dividerOpacity}` }}
+        />
+        <Text
+          className="text-[11px] text-center uppercase"
+          style={{ letterSpacing: 0.5, color: c.textMuted, fontFamily: ty.body.family }}
+        >
           or continue with email
         </Text>
-        <View style={[styles.dividerLine, { backgroundColor: `${c.primary}${theme.auth.dividerOpacity}` }]} />
+        <View
+          className="flex-1"
+          style={{ height: StyleSheet.hairlineWidth, backgroundColor: `${c.primary}${theme.auth.dividerOpacity}` }}
+        />
       </View>
 
       {/* Email */}
@@ -169,9 +201,12 @@ export default function SignInScreen() {
             disabled={isBusy}
             accessibilityRole="link"
             accessibilityLabel="Forgot password"
-            style={styles.forgotWrap}
+            className="self-end mt-2 px-1"
           >
-            <Text style={[styles.forgotText, { color: c.primary, fontFamily: ty.body.familySemibold }]}>
+            <Text
+              className="text-[13px]"
+              style={{ color: c.primary, fontFamily: ty.body.familySemibold }}
+            >
               Forgot password?
             </Text>
           </Pressable>
@@ -184,9 +219,21 @@ export default function SignInScreen() {
           from={{ opacity: 0, translateX: -8 }}
           animate={{ opacity: 1, translateX: 0 }}
           transition={{ type: 'spring', damping: 14 }}
-          style={[styles.messageBox, { borderLeftColor: c.danger, backgroundColor: `${c.danger}12` }]}
+          style={{
+            borderLeftWidth: 3,
+            borderRadius: 8,
+            paddingVertical: 10,
+            paddingHorizontal: 14,
+            borderLeftColor: c.danger,
+            backgroundColor: `${c.danger}12`,
+          }}
         >
-          <Text style={[styles.messageText, { color: c.danger, fontFamily: ty.body.family }]}>{error}</Text>
+          <Text
+            className="text-[13px] leading-[18px]"
+            style={{ color: c.danger, fontFamily: ty.body.family }}
+          >
+            {error}
+          </Text>
         </MotiView>
       ) : null}
 
@@ -194,9 +241,21 @@ export default function SignInScreen() {
         <MotiView
           from={{ opacity: 0 }}
           animate={{ opacity: 1 }}
-          style={[styles.messageBox, { borderLeftColor: c.success, backgroundColor: `${c.success}12` }]}
+          style={{
+            borderLeftWidth: 3,
+            borderRadius: 8,
+            paddingVertical: 10,
+            paddingHorizontal: 14,
+            borderLeftColor: c.success,
+            backgroundColor: `${c.success}12`,
+          }}
         >
-          <Text style={[styles.messageText, { color: c.success, fontFamily: ty.body.family }]}>{successMessage}</Text>
+          <Text
+            className="text-[13px] leading-[18px]"
+            style={{ color: c.success, fontFamily: ty.body.family }}
+          >
+            {successMessage}
+          </Text>
         </MotiView>
       ) : null}
 
@@ -210,40 +269,3 @@ export default function SignInScreen() {
     </AuthScreenShell>
   );
 }
-
-const styles = StyleSheet.create({
-  dividerRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 12,
-    marginVertical: 4,
-  },
-  dividerLine: {
-    flex: 1,
-    height: StyleSheet.hairlineWidth,
-  },
-  dividerText: {
-    fontSize: 11,
-    textAlign: 'center',
-    letterSpacing: 0.5,
-    textTransform: 'uppercase',
-  },
-  forgotWrap: {
-    alignSelf: 'flex-end',
-    marginTop: 8,
-    paddingHorizontal: 4,
-  },
-  forgotText: {
-    fontSize: 13,
-  },
-  messageBox: {
-    borderLeftWidth: 3,
-    borderRadius: 8,
-    paddingVertical: 10,
-    paddingHorizontal: 14,
-  },
-  messageText: {
-    fontSize: 13,
-    lineHeight: 18,
-  },
-});

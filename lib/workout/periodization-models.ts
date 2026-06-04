@@ -312,7 +312,7 @@ function getBeginnerConfig(goal: PrimaryGoal, weeks: number): PeriodizationConfi
 
 function getIntermediateConfig(goal: PrimaryGoal, weeks: number): PeriodizationConfig {
   // Intermediates: Block periodization or DUP
-  if (goal === 'build_strength') {
+  if (goal === 'get_stronger') {
     return {
       model: 'block',
       blocks: [BLOCK_HYPERTROPHY_FOCUS, BLOCK_STRENGTH_FOCUS],
@@ -355,7 +355,7 @@ function getAdvancedConfig(goal: PrimaryGoal, weeks: number): PeriodizationConfi
     deloadStrategy: DELOAD_STRATEGIES.advanced,
   };
 
-  if (goal === 'build_strength') {
+  if (goal === 'get_stronger') {
     config.blocks = [BLOCK_STRENGTH_FOCUS, BLOCK_STRENGTH_FOCUS, LINEAR_PEAKING_BLOCK];
   }
 

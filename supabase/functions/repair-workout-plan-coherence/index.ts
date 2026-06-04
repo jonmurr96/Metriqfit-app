@@ -1,6 +1,7 @@
 /* eslint-disable import/no-unresolved */
 import { serve } from "https://deno.land/std@0.224.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.49.1";
+import { verifyClerkRequest } from "../_shared/clerkAuth.ts";
 import {
   auditPlanDaysForRepair,
   buildTemplateContextCatalog,
@@ -50,10 +51,7 @@ serve(async (req) => {
       },
     });
 
-    const {
-      data: { user },
-      error: authError,
-    } = await supabase.auth.getUser();
+    const { data: { user }, error: authError } = await verifyClerkRequest(req);
 
     if (authError || !user) {
       return jsonResponse({ success: false, error: "Authentication required" }, 401);

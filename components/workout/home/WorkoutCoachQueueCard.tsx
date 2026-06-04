@@ -1,9 +1,10 @@
 import React from 'react';
-import { Pressable, Text, View } from 'react-native';
+import { Text, View } from 'react-native';
 
 import { GlassCard } from '../../premium/GlassCard';
 import { TabBarIcon } from '../../navigation/TabBarIcon';
 import { useTokens } from '../../../lib/theme';
+import { PressableScale } from '@/components/common/PressableScale';
 import type { WorkoutCoachQueueState } from '../../../lib/workout/dashboard-state';
 
 type Props = {
@@ -121,10 +122,10 @@ export function WorkoutCoachQueueCard({
                   {item.rationale}
                 </Text>
                 <View style={{ flexDirection: 'row', gap: s.sm }}>
-                  <Pressable
+                  <PressableScale
                     disabled={disabled}
                     onPress={() => onAcceptRecommendation?.(item.id)}
-                    style={({ pressed }) => ({
+                    style={(pressed) => ({
                       flex: 1,
                       minHeight: 42,
                       borderRadius: r.pill,
@@ -143,11 +144,11 @@ export function WorkoutCoachQueueCard({
                     >
                       Accept
                     </Text>
-                  </Pressable>
-                  <Pressable
+                  </PressableScale>
+                  <PressableScale
                     disabled={disabled}
                     onPress={() => onRejectRecommendation?.(item.id)}
-                    style={({ pressed }) => ({
+                    style={(pressed) => ({
                       flex: 1,
                       minHeight: 42,
                       borderRadius: r.pill,
@@ -168,16 +169,16 @@ export function WorkoutCoachQueueCard({
                     >
                       Keep Current
                     </Text>
-                  </Pressable>
+                  </PressableScale>
                 </View>
               </View>
             ))}
 
             {state.reviewAllAction && onReviewAllPress ? (
-              <Pressable
+              <PressableScale
                 disabled={disabled}
                 onPress={onReviewAllPress}
-                style={({ pressed }) => ({
+                style={(pressed) => ({
                   alignSelf: 'flex-start',
                   paddingVertical: s.sm,
                   opacity: disabled ? 0.5 : pressed ? 0.75 : 1,
@@ -192,7 +193,7 @@ export function WorkoutCoachQueueCard({
                 >
                   Review All
                 </Text>
-              </Pressable>
+              </PressableScale>
             ) : null}
           </View>
         ) : (
@@ -226,10 +227,10 @@ export function WorkoutCoachQueueCard({
               {state.subtitle}
             </Text>
             {state.primaryLabel && onPrimaryPress ? (
-              <Pressable
+              <PressableScale
                 disabled={disabled}
                 onPress={onPrimaryPress}
-                style={({ pressed }) => ({
+                style={(pressed) => ({
                   alignSelf: 'flex-start',
                   paddingHorizontal: s.lg,
                   minHeight: 42,
@@ -251,7 +252,7 @@ export function WorkoutCoachQueueCard({
                 >
                   {state.primaryLabel}
                 </Text>
-              </Pressable>
+              </PressableScale>
             ) : null}
           </View>
         )}

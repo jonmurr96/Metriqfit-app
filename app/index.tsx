@@ -45,14 +45,7 @@ export default function IndexPage() {
   // to prevent the fall-through-to-home race on the first render after auth.
   if (authLoading || (isAuthenticated && (checkingOnboarding || !onboardingStatus))) {
     return (
-      <View
-        style={{
-          flex: 1,
-          justifyContent: 'center',
-          alignItems: 'center',
-          backgroundColor: metriqfitTheme.colors.bg,
-        }}
-      >
+      <View className="flex-1 justify-center items-center bg-[#03060D]">
         <MotiView
           from={{ opacity: 0.6, scale: 0.96 }}
           animate={{ opacity: 1, scale: 1 }}

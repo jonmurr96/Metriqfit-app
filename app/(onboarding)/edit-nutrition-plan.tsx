@@ -258,7 +258,6 @@ export default function EditNutritionPlanScreen() {
   };
 
   const openMealEditor = (mealId: string) => {
-    // Use local onboarding route to stay within onboarding navigation group
     router.push({
       pathname: '/(onboarding)/plan-meal-editor',
       params: {
@@ -297,57 +296,61 @@ export default function EditNutritionPlanScreen() {
   };
 
   return (
-    <View style={[styles.container, { backgroundColor: c.bg, paddingTop: insets.top + s.md }]}> 
-      <View style={[styles.header, { paddingHorizontal: s.lg }]}> 
-        <Pressable style={[styles.iconButton, { backgroundColor: c.surface, borderColor: c.border, borderRadius: r.md }]} onPress={() => router.back()}>
+    <View className="flex-1" style={{ backgroundColor: c.bg, paddingTop: insets.top + s.md }}>
+      <View className="flex-row items-center justify-between mb-4" style={{ paddingHorizontal: s.lg }}>
+        <Pressable
+          className="w-[42px] h-[42px] border items-center justify-center"
+          style={{ backgroundColor: c.surface, borderColor: c.border, borderRadius: r.md }}
+          onPress={() => router.back()}
+        >
           <TabBarIcon name="chevron-back" color={c.text} size={22} />
         </Pressable>
         <Text style={{ color: c.text, fontFamily: ty.heading.familySemibold, fontSize: ty.sizes.lg }}>Edit Nutrition Plan</Text>
-        <View style={{ width: 42 }} />
+        <View className="w-[42px]" />
       </View>
 
       <ScrollView contentContainerStyle={{ paddingHorizontal: s.lg, paddingBottom: insets.bottom + s.xl }}>
-        <View style={styles.fieldWrap}>
-          <Text style={[styles.label, { color: c.text, fontFamily: ty.body.familySemibold }]}>Plan name</Text>
+        <View className="mb-3">
+          <Text className="text-[13px] mb-[6px]" style={{ color: c.text, fontFamily: ty.body.familySemibold }}>Plan name</Text>
           <TextInput
             value={name}
             onChangeText={setName}
-            style={[styles.input, { color: c.text, borderColor: c.border, backgroundColor: c.surface, borderRadius: r.md, fontFamily: ty.body.family }]}
+            className="border h-12 px-3 text-base"
+            style={{ color: c.text, borderColor: c.border, backgroundColor: c.surface, borderRadius: r.md, fontFamily: ty.body.family }}
           />
         </View>
 
-        <View style={styles.fieldWrap}>
-          <Text style={[styles.label, { color: c.text, fontFamily: ty.body.familySemibold }]}>Description</Text>
+        <View className="mb-3">
+          <Text className="text-[13px] mb-[6px]" style={{ color: c.text, fontFamily: ty.body.familySemibold }}>Description</Text>
           <TextInput
             value={description}
             onChangeText={setDescription}
             multiline
             numberOfLines={3}
-            style={[styles.textArea, { color: c.text, borderColor: c.border, backgroundColor: c.surface, borderRadius: r.md, fontFamily: ty.body.family }]}
+            className="border px-3 py-[10px] text-[15px]"
+            style={{ color: c.text, borderColor: c.border, backgroundColor: c.surface, borderRadius: r.md, fontFamily: ty.body.family, minHeight: 92, textAlignVertical: 'top' }}
           />
         </View>
 
-        <View style={styles.fieldWrap}>
-          <Text style={[styles.label, { color: c.text, fontFamily: ty.body.familySemibold }]}>Meals per day</Text>
+        <View className="mb-3">
+          <Text className="text-[13px] mb-[6px]" style={{ color: c.text, fontFamily: ty.body.familySemibold }}>Meals per day</Text>
           {mealFrequencyRecommendation && (
-            <Text style={[styles.helperText, { color: c.textMuted, fontFamily: ty.body.family }]}>
+            <Text className="text-xs mb-[10px]" style={{ color: c.textMuted, fontFamily: ty.body.family }}>
               Recommended: {formatMealFrequencyLabel(mealFrequencyRecommendation.recommendedMealsPerDay, mealFrequencyRecommendation)}
             </Text>
           )}
-          <View style={styles.rowWrap}>
+          <View className="flex-row flex-wrap gap-2">
             {MEAL_OPTIONS.map((option) => {
               const selected = mealsPerDay === option;
               return (
                 <Pressable
                   key={option}
-                  style={[
-                    styles.chip,
-                    {
-                      backgroundColor: selected ? c.primary : c.surface,
-                      borderColor: selected ? c.primary : c.border,
-                      borderRadius: r.pill,
-                    },
-                  ]}
+                  className="border h-[38px] px-[14px] items-center justify-center"
+                  style={{
+                    backgroundColor: selected ? c.primary : c.surface,
+                    borderColor: selected ? c.primary : c.border,
+                    borderRadius: r.pill,
+                  }}
                   onPress={() => setMealsPerDay(option)}
                 >
                   <Text style={{ color: selected ? c.bg : c.text, fontFamily: ty.body.familySemibold }}>
@@ -359,22 +362,20 @@ export default function EditNutritionPlanScreen() {
           </View>
         </View>
 
-        <View style={styles.fieldWrap}>
-          <Text style={[styles.label, { color: c.text, fontFamily: ty.body.familySemibold }]}>Dietary preference</Text>
-          <View style={styles.rowWrap}>
+        <View className="mb-3">
+          <Text className="text-[13px] mb-[6px]" style={{ color: c.text, fontFamily: ty.body.familySemibold }}>Dietary preference</Text>
+          <View className="flex-row flex-wrap gap-2">
             {DIET_OPTIONS.map((option) => {
               const selected = dietaryPreference === option;
               return (
                 <Pressable
                   key={option}
-                  style={[
-                    styles.chip,
-                    {
-                      backgroundColor: selected ? c.primary : c.surface,
-                      borderColor: selected ? c.primary : c.border,
-                      borderRadius: r.pill,
-                    },
-                  ]}
+                  className="border h-[38px] px-[14px] items-center justify-center"
+                  style={{
+                    backgroundColor: selected ? c.primary : c.surface,
+                    borderColor: selected ? c.primary : c.border,
+                    borderRadius: r.pill,
+                  }}
                   onPress={() => setDietaryPreference(option)}
                 >
                   <Text style={{ color: selected ? c.bg : c.text, fontFamily: ty.body.familySemibold }}>{option}</Text>
@@ -384,39 +385,42 @@ export default function EditNutritionPlanScreen() {
           </View>
         </View>
 
-        <View style={styles.fieldWrap}>
-          <Text style={[styles.label, { color: c.text, fontFamily: ty.body.familySemibold }]}>Allergies / exclusions (comma separated)</Text>
+        <View className="mb-3">
+          <Text className="text-[13px] mb-[6px]" style={{ color: c.text, fontFamily: ty.body.familySemibold }}>Allergies / exclusions (comma separated)</Text>
           <TextInput
             value={allergies}
             onChangeText={setAllergies}
-            style={[styles.input, { color: c.text, borderColor: c.border, backgroundColor: c.surface, borderRadius: r.md, fontFamily: ty.body.family }]}
+            className="border h-12 px-3 text-base"
+            style={{ color: c.text, borderColor: c.border, backgroundColor: c.surface, borderRadius: r.md, fontFamily: ty.body.family }}
             placeholder="e.g. dairy, peanuts"
             placeholderTextColor={c.textSubtle}
           />
         </View>
 
-        <View style={styles.fieldWrap}>
-          <Text style={[styles.label, { color: c.text, fontFamily: ty.body.familySemibold }]}>Refused foods (comma separated)</Text>
+        <View className="mb-3">
+          <Text className="text-[13px] mb-[6px]" style={{ color: c.text, fontFamily: ty.body.familySemibold }}>Refused foods (comma separated)</Text>
           <TextInput
             value={refusedFoods}
             onChangeText={setRefusedFoods}
-            style={[styles.input, { color: c.text, borderColor: c.border, backgroundColor: c.surface, borderRadius: r.md, fontFamily: ty.body.family }]}
+            className="border h-12 px-3 text-base"
+            style={{ color: c.text, borderColor: c.border, backgroundColor: c.surface, borderRadius: r.md, fontFamily: ty.body.family }}
             placeholder="e.g. pork, shellfish"
             placeholderTextColor={c.textSubtle}
           />
         </View>
 
-        <View style={[styles.advancedCard, { borderColor: c.border, backgroundColor: c.surface, borderRadius: r.lg }]}> 
+        <View className="border p-3 mt-1" style={{ borderColor: c.border, backgroundColor: c.surface, borderRadius: r.lg }}>
           <Text style={{ color: c.text, fontFamily: ty.heading.familySemibold, fontSize: ty.sizes.md }}>
             Meal-Level Customization
           </Text>
           <Text style={{ color: c.textMuted, fontFamily: ty.body.family, marginTop: 4, fontSize: 12 }}>
-            Pick a day and edit each meal’s ingredients, volumes, and macros.
+            Pick a day and edit each meal&apos;s ingredients, volumes, and macros.
           </Text>
 
-          <View style={styles.actionRow}>
+          <View className="mt-[10px] flex-row gap-2">
             <Pressable
-              style={[styles.actionButton, { borderColor: c.primary, borderRadius: r.pill, opacity: nextAvailableSlot ? 1 : 0.5 }]}
+              className="border min-h-[32px] px-[10px] items-center justify-center flex-row gap-[6px]"
+              style={{ borderColor: c.primary, borderRadius: r.pill, opacity: nextAvailableSlot ? 1 : 0.5 }}
               onPress={handleAddMeal}
               disabled={!nextAvailableSlot || isApplyingStructuralChanges}
             >
@@ -426,7 +430,8 @@ export default function EditNutritionPlanScreen() {
               </Text>
             </Pressable>
             <Pressable
-              style={[styles.actionButton, { borderColor: c.border, borderRadius: r.pill }]}
+              className="border min-h-[32px] px-[10px] items-center justify-center flex-row gap-[6px]"
+              style={{ borderColor: c.border, borderRadius: r.pill }}
               onPress={openCopySheet}
               disabled={isApplyingStructuralChanges}
             >
@@ -437,20 +442,18 @@ export default function EditNutritionPlanScreen() {
             </Pressable>
           </View>
 
-          <View style={[styles.rowWrap, { marginTop: 10 }]}>
+          <View className="flex-row flex-wrap gap-2 mt-[10px]">
             {DAY_OPTIONS.map((option) => {
               const selected = selectedDay === option.value;
               return (
                 <Pressable
                   key={option.value}
-                  style={[
-                    styles.dayChip,
-                    {
-                      borderColor: selected ? c.primary : c.border,
-                      backgroundColor: selected ? c.primary : c.bg,
-                      borderRadius: r.md,
-                    },
-                  ]}
+                  className="border min-w-[52px] h-[34px] px-[10px] items-center justify-center"
+                  style={{
+                    borderColor: selected ? c.primary : c.border,
+                    backgroundColor: selected ? c.primary : c.bg,
+                    borderRadius: r.md,
+                  }}
                   onPress={() => setSelectedDay(option.value)}
                 >
                   <Text style={{ color: selected ? c.bg : c.text, fontFamily: ty.body.familySemibold, fontSize: 12 }}>
@@ -461,7 +464,7 @@ export default function EditNutritionPlanScreen() {
             })}
           </View>
 
-          <View style={{ marginTop: 10 }}>
+          <View className="mt-[10px]">
             {selectedDayMealsLoading ? (
               <ActivityIndicator color={c.primary} style={{ marginVertical: 20 }} />
             ) : !sortedMeals.length ? (
@@ -479,9 +482,9 @@ export default function EditNutritionPlanScreen() {
                 const canMoveDown = idx < sortedMeals.length - 1;
 
                 return (
-                  <View key={meal.id} style={[styles.mealCard, { borderColor: c.border, borderRadius: r.md, backgroundColor: c.bg }]}> 
-                    <View style={styles.mealHeader}>
-                      <View style={{ flex: 1 }}>
+                  <View key={meal.id} className="border p-[10px] mt-2" style={{ borderColor: c.border, borderRadius: r.md, backgroundColor: c.bg }}>
+                    <View className="flex-row items-center justify-between gap-[10px]">
+                      <View className="flex-1">
                         <Text style={{ color: c.text, fontFamily: ty.body.familySemibold }}>
                           {slotLabel(meal.meal_slot)}: {src?.name || meal.name}
                         </Text>
@@ -497,7 +500,8 @@ export default function EditNutritionPlanScreen() {
                         />
                       </View>
                       <Pressable
-                        style={[styles.editMealButton, { borderColor: c.primary, borderRadius: r.pill }]}
+                        className="border h-[30px] min-w-[78px] items-center justify-center px-[10px]"
+                        style={{ borderColor: c.primary, borderRadius: r.pill }}
                         onPress={() => openMealEditor(meal.id)}
                         disabled={isApplyingStructuralChanges}
                       >
@@ -505,23 +509,26 @@ export default function EditNutritionPlanScreen() {
                       </Pressable>
                     </View>
 
-                    <View style={styles.mealToolsRow}>
+                    <View className="mt-2 flex-row gap-[6px]">
                       <Pressable
-                        style={[styles.toolButton, { borderColor: c.border, borderRadius: r.sm, opacity: canMoveUp ? 1 : 0.4 }]}
+                        className="border w-7 h-7 items-center justify-center"
+                        style={{ borderColor: c.border, borderRadius: r.sm, opacity: canMoveUp ? 1 : 0.4 }}
                         onPress={() => handleMoveMeal(meal.id, 'up')}
                         disabled={!canMoveUp || isApplyingStructuralChanges}
                       >
                         <TabBarIcon name="chevron-up" color={c.textMuted} size={14} />
                       </Pressable>
                       <Pressable
-                        style={[styles.toolButton, { borderColor: c.border, borderRadius: r.sm, opacity: canMoveDown ? 1 : 0.4 }]}
+                        className="border w-7 h-7 items-center justify-center"
+                        style={{ borderColor: c.border, borderRadius: r.sm, opacity: canMoveDown ? 1 : 0.4 }}
                         onPress={() => handleMoveMeal(meal.id, 'down')}
                         disabled={!canMoveDown || isApplyingStructuralChanges}
                       >
                         <TabBarIcon name="chevron-down" color={c.textMuted} size={14} />
                       </Pressable>
                       <Pressable
-                        style={[styles.toolButton, { borderColor: c.border, borderRadius: r.sm }]}
+                        className="border w-7 h-7 items-center justify-center"
+                        style={{ borderColor: c.border, borderRadius: r.sm }}
                         onPress={() => handleRemoveMeal(meal.id)}
                         disabled={isApplyingStructuralChanges}
                       >
@@ -535,7 +542,12 @@ export default function EditNutritionPlanScreen() {
           </View>
         </View>
 
-        <Pressable style={[styles.saveButton, { backgroundColor: c.primary, borderRadius: r.md, opacity: updateNutrition.isPending ? 0.7 : 1 }]} onPress={save} disabled={updateNutrition.isPending}>
+        <Pressable
+          className="mt-[14px] h-[52px] items-center justify-center"
+          style={{ backgroundColor: c.primary, borderRadius: r.md, opacity: updateNutrition.isPending ? 0.7 : 1 }}
+          onPress={save}
+          disabled={updateNutrition.isPending}
+        >
           {updateNutrition.isPending ? (
             <ActivityIndicator color={c.bg} size="small" />
           ) : (
@@ -545,10 +557,10 @@ export default function EditNutritionPlanScreen() {
       </ScrollView>
 
       {showCopySheet ? (
-        <View style={styles.overlay}>
+        <View className="absolute inset-0 justify-end p-3">
           <Pressable style={StyleSheet.absoluteFill} onPress={() => setShowCopySheet(false)} />
-          <View style={[styles.copySheet, { backgroundColor: c.surface, borderColor: c.border, borderRadius: r.lg }]}> 
-            <View style={styles.copyHeader}>
+          <View className="border p-3 gap-2" style={{ backgroundColor: c.surface, borderColor: c.border, borderRadius: r.lg }}>
+            <View className="flex-row items-center justify-between gap-[10px]">
               <Text style={{ color: c.text, fontFamily: ty.heading.familySemibold, fontSize: ty.sizes.md }}>
                 Copy Day Plan
               </Text>
@@ -559,20 +571,18 @@ export default function EditNutritionPlanScreen() {
             <Text style={{ color: c.textMuted, fontFamily: ty.body.family, fontSize: 12, marginBottom: 10 }}>
               Source: {DAY_OPTIONS.find((option) => option.value === selectedDay)?.label}. Select destination days.
             </Text>
-            <View style={styles.rowWrap}>
+            <View className="flex-row flex-wrap gap-2">
               {DAY_OPTIONS.filter((option) => option.value !== selectedDay).map((option) => {
                 const selected = copyTargets.includes(option.value);
                 return (
                   <Pressable
                     key={option.value}
-                    style={[
-                      styles.dayChip,
-                      {
-                        borderColor: selected ? c.primary : c.border,
-                        backgroundColor: selected ? c.primary : c.bg,
-                        borderRadius: r.md,
-                      },
-                    ]}
+                    className="border min-w-[52px] h-[34px] px-[10px] items-center justify-center"
+                    style={{
+                      borderColor: selected ? c.primary : c.border,
+                      backgroundColor: selected ? c.primary : c.bg,
+                      borderRadius: r.md,
+                    }}
                     onPress={() => toggleCopyTarget(option.value)}
                   >
                     <Text style={{ color: selected ? c.bg : c.text, fontFamily: ty.body.familySemibold, fontSize: 12 }}>
@@ -583,7 +593,8 @@ export default function EditNutritionPlanScreen() {
               })}
             </View>
             <Pressable
-              style={[styles.copyApplyButton, { backgroundColor: c.primary, borderRadius: r.md, opacity: copyDayMutation.isPending ? 0.7 : 1 }]}
+              className="mt-2 h-[46px] items-center justify-center"
+              style={{ backgroundColor: c.primary, borderRadius: r.md, opacity: copyDayMutation.isPending ? 0.7 : 1 }}
               onPress={handleApplyCopy}
               disabled={copyDayMutation.isPending}
             >
@@ -599,141 +610,3 @@ export default function EditNutritionPlanScreen() {
     </View>
   );
 }
-
-const styles = StyleSheet.create({
-  container: { flex: 1 },
-  header: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    marginBottom: 16,
-  },
-  iconButton: {
-    width: 42,
-    height: 42,
-    borderWidth: 1,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  fieldWrap: { marginBottom: 12 },
-  label: {
-    fontSize: 13,
-    marginBottom: 6,
-  },
-  helperText: {
-    fontSize: 12,
-    marginBottom: 10,
-  },
-  input: {
-    borderWidth: 1,
-    height: 48,
-    paddingHorizontal: 12,
-    fontSize: 16,
-  },
-  textArea: {
-    borderWidth: 1,
-    minHeight: 92,
-    paddingHorizontal: 12,
-    paddingVertical: 10,
-    fontSize: 15,
-    textAlignVertical: 'top',
-  },
-  rowWrap: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: 8,
-  },
-  chip: {
-    borderWidth: 1,
-    paddingHorizontal: 14,
-    height: 38,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  dayChip: {
-    borderWidth: 1,
-    minWidth: 52,
-    height: 34,
-    paddingHorizontal: 10,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  advancedCard: {
-    borderWidth: 1,
-    padding: 12,
-    marginTop: 4,
-  },
-  actionRow: {
-    marginTop: 10,
-    flexDirection: 'row',
-    gap: 8,
-  },
-  actionButton: {
-    borderWidth: 1,
-    minHeight: 32,
-    paddingHorizontal: 10,
-    alignItems: 'center',
-    justifyContent: 'center',
-    flexDirection: 'row',
-    gap: 6,
-  },
-  mealCard: {
-    borderWidth: 1,
-    padding: 10,
-    marginTop: 8,
-  },
-  mealHeader: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    gap: 10,
-  },
-  editMealButton: {
-    borderWidth: 1,
-    height: 30,
-    minWidth: 78,
-    alignItems: 'center',
-    justifyContent: 'center',
-    paddingHorizontal: 10,
-  },
-  mealToolsRow: {
-    marginTop: 8,
-    flexDirection: 'row',
-    gap: 6,
-  },
-  toolButton: {
-    borderWidth: 1,
-    width: 28,
-    height: 28,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  saveButton: {
-    marginTop: 14,
-    height: 52,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  overlay: {
-    ...StyleSheet.absoluteFillObject,
-    justifyContent: 'flex-end',
-    padding: 12,
-  },
-  copySheet: {
-    borderWidth: 1,
-    padding: 12,
-    gap: 8,
-  },
-  copyHeader: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    gap: 10,
-  },
-  copyApplyButton: {
-    marginTop: 8,
-    height: 46,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-});

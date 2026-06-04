@@ -250,22 +250,22 @@ export default function TrainingScreen() {
           style={styles.content}
         >
           {/* Title */}
-          <View style={styles.titleBlock}>
+          <View className="mb-7">
             <Text style={styles.titleLine1}>Set up your</Text>
             <Text style={[styles.titleAccent, { color: PURPLE }]}>training</Text>
           </View>
 
           {/* Training days — direct day selection */}
-          <View style={styles.section}>
+          <View className="mb-8">
             <Text style={styles.sectionLabel}>Training Days</Text>
             <Text style={styles.sectionHint}>
               {trainingCount === 0
-                ? "Select 2\u20136 days you'll train each week"
+                ? "Select 2–6 days you'll train each week"
                 : trainingCount === 1
-                ? '1 day selected \u2014 pick at least 2'
-                : `${trainingCount} day${trainingCount > 1 ? 's' : ''} / week${restDays.length > 0 ? ' \u00b7 Rest: ' + restDays.map((d) => d.label.slice(0, 3)).join(', ') : ''}`}
+                ? '1 day selected — pick at least 2'
+                : `${trainingCount} day${trainingCount > 1 ? 's' : ''} / week${restDays.length > 0 ? ' · Rest: ' + restDays.map((d) => d.label.slice(0, 3)).join(', ') : ''}`}
             </Text>
-            <View style={styles.weekdayRow}>
+            <View className="flex-row justify-between gap-[6px] mt-1">
               {WEEKDAY_OPTIONS.map((d) => {
                 const sel = selectedDays.includes(d.value);
                 const atMax = !sel && trainingCount >= 6;
@@ -278,7 +278,7 @@ export default function TrainingScreen() {
                       atMax && styles.weekdayChipDisabled,
                     ]}
                     onPress={() => !atMax && handleDayToggle(d.value)}
-                    accessibilityLabel={`${d.label}${sel ? ' \u2014 training day' : ' \u2014 rest day'}`}
+                    accessibilityLabel={`${d.label}${sel ? ' — training day' : ' — rest day'}`}
                   >
                     <Text style={[styles.weekdayChipText, sel && styles.weekdayChipTextSelected]}>
                       {d.abbr}
@@ -288,11 +288,11 @@ export default function TrainingScreen() {
               })}
             </View>
             {trainingCount > 3 && trainingCount < 7 && (
-              <View style={styles.infoRow}>
+              <View className="flex-row items-start gap-[6px] mt-[10px] px-[2px]">
                 <Ionicons name="information-circle-outline" size={13} color={`${CYAN}99`} />
                 <Text style={styles.infoText}>
                   {trainingCount >= 5
-                    ? "High frequency \u2014 make sure you're getting adequate rest and sleep."
+                    ? "High frequency — make sure you're getting adequate rest and sleep."
                     : 'Solid frequency for consistent progress.'}
                 </Text>
               </View>
@@ -300,9 +300,9 @@ export default function TrainingScreen() {
           </View>
 
           {/* Minutes per workout */}
-          <View style={styles.section}>
+          <View className="mb-8">
             <Text style={styles.sectionLabel}>Duration / Session</Text>
-            <View style={styles.chipRowWrap}>
+            <View className="flex-row flex-wrap gap-2">
               {MINUTES.map((m) => {
                 const sel = data.minutes_per_workout === m.value;
                 return (
@@ -319,10 +319,10 @@ export default function TrainingScreen() {
           </View>
 
           {/* Injuries */}
-          <View style={styles.section}>
+          <View className="mb-8">
             <Text style={styles.sectionLabel}>Injuries / Limitations</Text>
-            <Text style={styles.sectionHint}>We'll modify exercises to protect you</Text>
-            <View style={styles.chipRowWrap}>
+            <Text style={styles.sectionHint}>We&apos;ll modify exercises to protect you</Text>
+            <View className="flex-row flex-wrap gap-2">
               {INJURIES_UI.map((inj) => {
                 const sel = isInjurySelected(inj.mapsTo);
                 return (
@@ -351,7 +351,7 @@ export default function TrainingScreen() {
           </View>
 
           {/* Equipment */}
-          <View style={styles.section}>
+          <View className="mb-8">
             <Text style={styles.sectionLabel}>Equipment Access</Text>
             {EQUIPMENT.map((eq) => {
               const sel = data.equipment_access === eq.value;
@@ -377,7 +377,7 @@ export default function TrainingScreen() {
           </View>
 
           {/* Preferred Split */}
-          <View style={styles.section}>
+          <View className="mb-8">
             <Text style={styles.sectionLabel}>Preferred Training Split</Text>
             <Text style={styles.sectionHint}>AI will always adapt to your available days</Text>
             {SPLIT_OPTIONS.map((opt) => {
@@ -409,7 +409,7 @@ export default function TrainingScreen() {
                   <View style={[styles.listIcon, { backgroundColor: sel ? opt.color : `${opt.color}20`, opacity: isDisabled ? 0.4 : 1 }]}>
                     <Ionicons name={opt.icon} size={20} color={sel ? BG : opt.color} />
                   </View>
-                  <View style={{ flex: 1 }}>
+                  <View className="flex-1">
                     <Text style={[styles.listLabel, sel && { color: opt.color }, isDisabled && { color: 'rgba(255,255,255,0.25)' }]}>
                       {opt.label}
                     </Text>
@@ -443,10 +443,8 @@ const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: BG },
   scrollContent: { flexGrow: 1, paddingBottom: 32 },
   content: { paddingHorizontal: s.xl, paddingTop: s.lg },
-  titleBlock: { marginBottom: 28 },
   titleLine1: { fontSize: 28, fontFamily: 'Unbounded_700Bold', color: '#FFFFFF' },
   titleAccent: { fontSize: 28, fontFamily: 'Unbounded_700Bold' },
-  section: { marginBottom: 32 },
   sectionLabel: {
     fontSize: 12,
     fontFamily: 'Sora_600SemiBold',
@@ -462,14 +460,7 @@ const styles = StyleSheet.create({
     marginTop: -8,
     marginBottom: 14,
   },
-  chipRowWrap: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
   // 7-day weekly training day toggle grid
-  weekdayRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    gap: 6,
-    marginTop: 4,
-  },
   weekdayChip: {
     flex: 1,
     height: 52,
@@ -497,13 +488,6 @@ const styles = StyleSheet.create({
     color: 'rgba(255,255,255,0.45)',
   },
   weekdayChipTextSelected: { color: '#FFFFFF' },
-  infoRow: {
-    flexDirection: 'row',
-    alignItems: 'flex-start',
-    gap: 6,
-    marginTop: 10,
-    paddingHorizontal: 2,
-  },
   infoText: {
     flex: 1,
     fontSize: 11,

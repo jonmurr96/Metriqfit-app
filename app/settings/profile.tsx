@@ -18,6 +18,7 @@ import { useTokens } from '../../lib/theme';
 import { TabBarIcon } from '../../components/navigation/TabBarIcon';
 import { GlassCard } from '../../components/premium/GlassCard';
 import { useProfile, useUpdateProfile } from '../../hooks/useUser';
+import { PressableScale } from '@/components/common/PressableScale';
 
 export default function EditProfileScreen() {
   const { c, s, ty, r, shadow } = useTokens();
@@ -236,8 +237,8 @@ export default function EditProfileScreen() {
       </ScrollView>
 
       <View style={[styles.footer, { paddingBottom: insets.bottom + s.lg, backgroundColor: c.bg, borderTopColor: c.border }]}>
-        <Pressable
-          style={({ pressed }) => [
+        <PressableScale
+          style={(pressed) => [
             styles.saveButton,
             {
               backgroundColor: c.primary,
@@ -256,7 +257,7 @@ export default function EditProfileScreen() {
               Save Changes
             </Text>
           )}
-        </Pressable>
+        </PressableScale>
       </View>
     </View>
   );

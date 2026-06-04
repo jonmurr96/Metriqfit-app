@@ -48,10 +48,10 @@ export function createMockExercise(overrides: Partial<PoolExercise> = {}): PoolE
 }
 
 export function createMockExerciseByPattern(
-  pattern: PatternSlot,
+  pattern: string,
   overrides: Partial<PoolExercise> = {}
 ): PoolExercise {
-  const patternDefaults: Record<PatternSlot, Partial<PoolExercise>> = {
+  const patternDefaults: Record<string, Partial<PoolExercise>> = {
     compound_squat: {
       name: 'Barbell Back Squat',
       primary_muscle: 'quads',
@@ -193,7 +193,7 @@ export function createMockExerciseByPattern(
   };
 
   return createMockExercise({
-    ...patternDefaults[pattern],
+    ...(patternDefaults[pattern] || patternDefaults.unknown),
     ...overrides,
   });
 }
@@ -456,7 +456,7 @@ export function measureExecutionTime<T>(
 
 export function createLargeExercisePool(size: number): PoolExercise[] {
   const pool: PoolExercise[] = [];
-  const patterns: PatternSlot[] = [
+  const patterns: string[] = [
     'compound_squat', 'compound_hinge', 'horizontal_push', 'horizontal_pull',
     'vertical_push', 'vertical_pull', 'incline_push', 'chest_fly', 'shoulder_raise',
     'rear_delt', 'bicep_curl', 'tricep_ext', 'leg_extension', 'leg_curl', 'calf',

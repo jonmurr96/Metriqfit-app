@@ -1,9 +1,10 @@
 import React from 'react';
-import { View, Text, Pressable, StyleSheet, Platform } from 'react-native';
+import { View, Text, StyleSheet, Platform } from 'react-native';
 import { MotiView } from 'moti';
 import { useRouter } from 'expo-router';
 import { useTokens } from '../../lib/theme';
 import { TabBarIcon } from '../../components/navigation/TabBarIcon';
+import { PressableScale } from '@/components/common/PressableScale';
 
 interface NextWorkoutCardProps {
     workoutName?: string;
@@ -39,9 +40,9 @@ export function NextWorkoutCard({
             animate={{ opacity: 1, translateY: 0 }}
             transition={{ type: 'timing', duration: 500, delay }}
         >
-            <Pressable
+            <PressableScale
                 onPress={handlePress}
-                style={({ pressed }) => [
+                style={(pressed) => [
                     styles.container,
                     {
                         backgroundColor: glass.background,
@@ -152,7 +153,7 @@ export function NextWorkoutCard({
                 >
                     <TabBarIcon name="play" color={c.primary} size={20} />
                 </View>
-            </Pressable>
+            </PressableScale>
         </MotiView>
     );
 }

@@ -22,6 +22,7 @@ import { useTokens } from '../../../lib/theme';
 import { TabBarIcon } from '../../../components/navigation/TabBarIcon';
 import { PremiumBackground } from '../../../components/premium/PremiumBackground';
 import { GlassCard } from '../../../components/premium/GlassCard';
+import { PressableScale } from '@/components/common/PressableScale';
 import {
   useActiveWorkoutPlan,
   useRepairWorkoutPlanPreview,
@@ -809,8 +810,8 @@ export default function MyWorkoutPlanScreen() {
                         animate={{ opacity: 1, translateX: 0 }}
                         transition={{ type: 'timing', duration: 350, delay: 200 + index * 55 }}
                       >
-                        <Pressable
-                          style={({ pressed }) => [
+                        <PressableScale
+                          style={(pressed) => [
                             styles.dayCard,
                             {
                               backgroundColor: pressed ? c.surface2 : c.surface,
@@ -900,7 +901,7 @@ export default function MyWorkoutPlanScreen() {
                               <TabBarIcon name="chevron-forward" color={c.textSubtle} size={18} />
                             )}
                           </View>
-                        </Pressable>
+                        </PressableScale>
                       </MotiView>
                     ))
                 ) : (
@@ -920,8 +921,8 @@ export default function MyWorkoutPlanScreen() {
             style={{ marginTop: s.xl, gap: s.sm }}
           >
             {/* Regenerate primary */}
-            <Pressable
-              style={({ pressed }) => [
+            <PressableScale
+              style={(pressed) => [
                 styles.regenerateButton,
                 {
                   backgroundColor: pressed ? `${c.primary}20` : `${c.primary}12`,
@@ -943,7 +944,7 @@ export default function MyWorkoutPlanScreen() {
               >
                 Regenerate with AI
               </Text>
-            </Pressable>
+            </PressableScale>
 
             <Text
               style={{
