@@ -1365,12 +1365,27 @@ serve(async (req: Request) => {
     const strictTemplateSource = typedBody.strict_template_source === true;
     const generationMode: GenerationMode = typedBody.generation_mode === "regenerate" ? "regenerate" : "initial";
     const activationMode: ActivationMode = typedBody.activation_mode === "preview" ? "preview" : "activate";
-    const generationVersion = typedBody.generation_version || "v1";
+    const requestedGenerationVersion = typedBody.generation_version || "v1";
+    const enableV3EdgePipeline = (Deno as any).env.get("ENABLE_V3_EDGE_PIPELINE") === "true";
+    // V3 currently performs a full spec-driven generation, validation, DB
+    // persistence, and response serialization inside a single Edge Function
+    // invocation. In production that path can exceed Supabase's compute
+    // limits for real onboarding payloads. Until V3 is split into smaller
+    // jobs, route V3 requests through the stable V2 hybrid generator so
+    // onboarding can complete reliably. This server-side guard also fixes
+    // already-installed clients that still send generation_version: "v3".
+    const generationVersion: "v1" | "v2" | "v3" = requestedGenerationVersion === "v3" && enableV3EdgePipeline
+      ? "v3"
+      : requestedGenerationVersion === "v1"
+        ? "v1"
+        : "v2";
 
     // 🔍 BRANCH INTEGRITY: Log resolved generation branch so deployment drift is immediately visible
     console.log('[generate-user-plans] Branch decision:', {
       requested_generation_version: typedBody.generation_version ?? '(not set — defaulting to v1)',
       resolved_generation_version: generationVersion,
+      v3_edge_pipeline_enabled: enableV3EdgePipeline,
+      v3_request_routed_to_stable_generator: requestedGenerationVersion === "v3" && generationVersion !== "v3",
       resolved_planner_mode: generationVersion === 'v1' ? 'deterministic' : (generationVersion === 'v3' ? 'spec_driven' : 'hybrid'),
       resolved_source_model: generationVersion === 'v1' ? 'v1_architect' : (generationVersion === 'v3' ? 'v3_spec' : 'v2_template'),
     });

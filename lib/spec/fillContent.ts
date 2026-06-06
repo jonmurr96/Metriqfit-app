@@ -595,6 +595,11 @@ interface MealCandidate {
   readonly items: ReadonlyArray<PlanMealItem>;
 }
 
+const MAX_PROTEIN_CANDIDATES = 28;
+const MAX_CARB_CANDIDATES = 28;
+const MAX_FAT_CANDIDATES = 12;
+const TOP_MEAL_CANDIDATES = 4; // default meal + 3 variants
+
 function tripleKeyFor(p: FoodRow, c: FoodRow, f: FoodRow | null): string {
   return `${p.id}|${c.id}|${f?.id ?? "none"}`;
 }
@@ -662,6 +667,80 @@ function scoreTriple(
   return score;
 }
 
+function poolScore(
+  f: FoodRow,
+  role: "protein" | "carb" | "fat",
+  shape: SlotShape,
+  spec: PlanSpec,
+  isTraining: boolean,
+  state: NutritionWeekState,
+  seed: number,
+): number {
+  let score = 0;
+  if (role === "protein") {
+    score += f.protein_g_per_g * 20;
+    if (f.fat_g_per_g <= 0.12) score += 1;
+  } else if (role === "carb") {
+    score += f.carb_g_per_g * 16;
+    if (shape.carb_density === "high" && f.carb_g_per_g >= 0.25) score += 4;
+    if (shape.carb_density === "low" && f.carb_g_per_g < 0.18) score += 4;
+    if (isTraining && f.carb_g_per_g >= 0.25) score += 2;
+  } else {
+    score += f.fat_g_per_g * 12;
+    if (shape.is_snack) score -= 2;
+  }
+
+  for (const min of spec.nutrition.weekly_food_minimums) {
+    const tag = min.tag;
+    const matches =
+      f.id.includes(tag) ||
+      f.name.toLowerCase().includes(tag) ||
+      f.tags.some((t) => t === tag || t.includes(tag));
+    if (!matches) continue;
+    const appearances = state.foodAppearances.get(f.id) ?? 0;
+    const deficit = Math.max(0, min.min_appearances - appearances);
+    score += deficit * 6;
+  }
+
+  // Slightly prefer foods not already used this week, while keeping
+  // deterministic seed-based variety for tie breaks.
+  score -= (state.foodAppearances.get(f.id) ?? 0) * 1.5;
+  score += ((seed ^ djb2(`${role}:${f.id}`)) >>> 0) / 0xffffffff;
+  return score;
+}
+
+function limitPool(
+  pool: ReadonlyArray<FoodRow>,
+  role: "protein" | "carb" | "fat",
+  limit: number,
+  shape: SlotShape,
+  spec: PlanSpec,
+  isTraining: boolean,
+  state: NutritionWeekState,
+  seed: number,
+): ReadonlyArray<FoodRow> {
+  if (pool.length <= limit) return pool;
+  return [...pool]
+    .sort((a, b) =>
+      poolScore(b, role, shape, spec, isTraining, state, seed) -
+      poolScore(a, role, shape, spec, isTraining, state, seed)
+    )
+    .slice(0, limit);
+}
+
+function pushTopMealCandidate(top: MealCandidate[], candidate: MealCandidate): void {
+  const existingIndex = top.findIndex((c) => c.tripleKey === candidate.tripleKey);
+  if (existingIndex >= 0) {
+    if (top[existingIndex].score >= candidate.score) return;
+    top.splice(existingIndex, 1);
+  }
+
+  let insertAt = top.findIndex((c) => candidate.score > c.score);
+  if (insertAt < 0) insertAt = top.length;
+  top.splice(insertAt, 0, candidate);
+  if (top.length > TOP_MEAL_CANDIDATES) top.length = TOP_MEAL_CANDIDATES;
+}
+
 function countAppearancesByTag(
   appearances: Map<string, number>,
   tag: string,
@@ -696,23 +775,32 @@ function generateMealCandidates(
   const vegPool = allowed.filter((f) => f.category === "vegetable" || f.category === "fruit");
   const veg = vegPool[seed % Math.max(1, vegPool.length)] || null;
 
+  const proteins = limitPool(
+    proteinPool, "protein", MAX_PROTEIN_CANDIDATES, shape, spec, isTraining, state, seed + 101,
+  );
+  const carbs = limitPool(
+    carbPool, "carb", MAX_CARB_CANDIDATES, shape, spec, isTraining, state, seed + 211,
+  );
+  const fats = shape.is_snack
+    ? []
+    : limitPool(fatPool, "fat", MAX_FAT_CANDIDATES, shape, spec, isTraining, state, seed + 307);
+
   const candidates: MealCandidate[] = [];
   const maxRepeats = spec.nutrition.max_repeats_of_template_per_week;
 
-  for (const p of proteinPool) {
-    for (const c of carbPool) {
-      const fatChoices = shape.is_snack ? [null] : (fatPool.length ? fatPool : [null]);
+  for (const p of proteins) {
+    for (const c of carbs) {
+      const fatChoices = shape.is_snack ? [null] : (fats.length ? fats : [null]);
       for (const f of fatChoices) {
         const key = tripleKeyFor(p, c, f);
         if ((state.tripleCount.get(key) ?? 0) >= maxRepeats) continue;
         const items = buildItems(p, c, f, veg, shape, targets);
         const score = scoreTriple(p, c, f, shape, spec, isTraining, state, seed);
-        candidates.push({ protein: p, carb: c, fat: f, veg, tripleKey: key, score, items });
+        pushTopMealCandidate(candidates, { protein: p, carb: c, fat: f, veg, tripleKey: key, score, items });
       }
     }
   }
 
-  candidates.sort((a, b) => b.score - a.score);
   return candidates;
 }
 
