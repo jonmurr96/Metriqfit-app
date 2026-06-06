@@ -1407,8 +1407,8 @@ serve(async (req: Request) => {
       resolved_generation_version: generationVersion,
       v3_edge_pipeline_enabled: enableV3EdgePipeline,
       v3_request_routed_to_stable_generator: requestedGenerationVersion === "v3" && generationVersion !== "v3",
-      resolved_planner_mode: generationVersion === 'v1' ? 'deterministic' : (generationVersion === 'v3' ? 'spec_driven' : 'hybrid'),
-      resolved_source_model: generationVersion === 'v1' ? 'v1_architect' : (generationVersion === 'v3' ? 'v3_spec' : 'v2_template'),
+      resolved_planner_mode: generationVersion === 'v1' ? 'deterministic' : (generationVersion === 'v3' ? 'deterministic_v3' : 'hybrid'),
+      resolved_source_model: generationVersion === 'v1' ? 'v1_architect' : (generationVersion === 'v3' ? 'v3_deterministic' : 'v2_template'),
     });
 
     // -------- V3 branch (Phase 1) --------
@@ -1430,6 +1430,16 @@ serve(async (req: Request) => {
             status: "pending",
             planner_mode: "deterministic_v3",
             generation_version: 3,
+            orchestration_status: "queued",
+            current_stage: "queued",
+            queued_at: new Date().toISOString(),
+            stage_updated_at: new Date().toISOString(),
+            stage_history_json: [{
+              stage: "queued",
+              orchestration_status: "queued",
+              at: new Date().toISOString(),
+              details: { trigger_source: "v3_pipeline" },
+            }],
             input_context: {
               generation_mode: generationMode,
               activation_mode: activationMode,
@@ -1483,6 +1493,17 @@ serve(async (req: Request) => {
         });
       } catch (err: any) {
         console.error(`[generate-user-plans] [${requestId}] V3 pipeline error:`, err);
+        await updateGenerationRunFailure(baseClient, v3RunId, {
+          status: "failed",
+          validationErrors: [err?.message || String(err)],
+          warnings: [],
+          errorStep: "v3_pipeline",
+          errorCode: "v3_pipeline_failed",
+          errorContext: {
+            requestId,
+            generation_version: "v3",
+          },
+        });
         return jsonResponse({
           success: false,
           error: 'V3 pipeline failed',
@@ -1681,6 +1702,16 @@ serve(async (req: Request) => {
           generation_version: generationVersion === 'v1' ? 1 : 2,
           idempotency_key: idempotencyKey,
           correlation_id: requestCorrelationId,
+          orchestration_status: "running",
+          current_stage: "run_initialization",
+          queued_at: new Date().toISOString(),
+          stage_updated_at: new Date().toISOString(),
+          stage_history_json: [{
+            stage: "run_initialization",
+            orchestration_status: "running",
+            at: new Date().toISOString(),
+            details: { generation_version: generationVersion },
+          }],
           input_context: {
             generation_mode: generationMode,
             activation_mode: activationMode,
@@ -2315,40 +2346,18 @@ serve(async (req: Request) => {
             5,
           );
 
-          try {
-            nutritionResult = await generateScientificMealPlan(
-              supabase,
-              userId,
-              runId,
-              nutritionContext,
-              activationMode,
-              nutritionHorizon,
-              currentNutritionPlanContext?.planId || null,
-              workoutSchedule,
-              scientificMealsPerDay,
-            );
-          } catch (scientificErr: any) {
-            // Scientific meal engine failed — fall back to the legacy plan generator
-            // so plan generation succeeds rather than producing a 500 for the user.
-            console.error("[generate-user-plans] Scientific meal engine failed, falling back to legacy:", scientificErr.message);
-            warnings.push(`Meal preferences could not be applied (${scientificErr.message}). A standard nutrition plan was generated instead.`);
-            const nutritionMealSlots = resolveNutritionMealSlots(nutritionContext, nutritionRegeneration, currentNutritionPlanContext);
-            nutritionResult = await storeNutritionPlan(
-              supabase,
-              userId,
-              runId,
-              nutritionContext,
-              macroTolerancePercent,
-              includeVariants,
-              nutritionHorizon,
-              strictMacroMode,
-              varietyProfile,
-              activationMode,
-              currentNutritionPlanContext?.planId || null,
-              nutritionMealSlots,
-              dryRun,
-            );
-          }
+          nutritionResult = await generateScientificMealPlan(
+            supabase,
+            userId,
+            runId,
+            nutritionContext,
+            activationMode,
+            nutritionHorizon,
+            currentNutritionPlanContext?.planId || null,
+            workoutSchedule,
+            scientificMealsPerDay,
+            macroTolerancePercent,
+          );
         } else {
           // Fallback to legacy meal generation
           const nutritionMealSlots = resolveNutritionMealSlots(nutritionContext, nutritionRegeneration, currentNutritionPlanContext);
@@ -2402,6 +2411,9 @@ serve(async (req: Request) => {
         .from("plan_generation_runs")
         .update({
           status: "success",
+          orchestration_status: "success",
+          current_stage: "complete",
+          stage_updated_at: new Date().toISOString(),
           completed_at: new Date().toISOString(),
           duration_ms: durationMs,
           ai_response: {

@@ -9,6 +9,7 @@ import type { SupabaseClient } from "https://esm.sh/@supabase/supabase-js@2.49.1
 import {
   generateDailyMeals,
   getSlotTemplate,
+  applyHardRestrictions,
   type FoodWithMetadata,
   type UserNutritionSelections,
   type ScheduleConfig,
@@ -23,7 +24,7 @@ import type {
   UserContext,
 } from "../index.ts";
 import { NUTRITION_PREVIEW_NAME_PREFIX } from "../index.ts";
-import { round1 } from "../helpers/scalars.ts";
+import { calculateMacroDiffPercent, round1 } from "../helpers/scalars.ts";
 
 export function getDefaultPortionBounds(category: string | null): { min: number; max: number } {
   const normalized = String(category || "").toLowerCase();
@@ -164,6 +165,35 @@ export function macroTargetsForDay(context: UserContext, hasWorkout: boolean): M
   return normalizeDayTypeTarget(hasWorkout ? dayTypeTargets.trainingDay : dayTypeTargets.restDay, fallback);
 }
 
+function assertDailyMacroTolerance(
+  dayIndex: number,
+  target: MacroTargets,
+  meals: GeneratedMeal[],
+  macroTolerancePercent: number,
+) {
+  const totals = meals.reduce(
+    (sum, meal) => ({
+      calories: sum.calories + Number(meal.macros.calories || 0),
+      protein_g: sum.protein_g + Number(meal.macros.protein || 0),
+      carbs_g: sum.carbs_g + Number(meal.macros.carbs || 0),
+      fat_g: sum.fat_g + Number(meal.macros.fat || 0),
+    }),
+    { calories: 0, protein_g: 0, carbs_g: 0, fat_g: 0 },
+  );
+  const maxDiff = Math.max(
+    calculateMacroDiffPercent(target.calories, totals.calories),
+    calculateMacroDiffPercent(target.protein_g, totals.protein_g),
+    calculateMacroDiffPercent(target.carbs_g, totals.carbs_g),
+    calculateMacroDiffPercent(target.fat_g, totals.fat_g),
+  );
+
+  if (maxDiff > macroTolerancePercent) {
+    throw new Error(
+      `Day ${dayIndex + 1} scientific nutrition plan exceeds the ${macroTolerancePercent}% macro tolerance (${round1(maxDiff)}%). Adjust meal preferences or macro targets and try again.`,
+    );
+  }
+}
+
 /**
  * Generate meals using the scientific meal engine
  * Used when user has preferred proteins, carbs, and fats selected
@@ -178,6 +208,7 @@ export async function generateScientificMealPlan(
   currentPlanId: string | null,
   workoutSchedule: Array<{ day: number; hasWorkout: boolean; time: string | null }>,
   mealsPerDay?: number,
+  macroTolerancePercent: number = 5,
 ): Promise<{ planId: string; variantCount: number; warnings: string[] }> {
   const warnings: string[] = [];
   const nutritionDays = Math.max(7, Math.min(14, horizonDays));
@@ -195,8 +226,20 @@ export async function generateScientificMealPlan(
     throw new Error("User must select proteins, carbs, and fats for scientific meal generation");
   }
 
-  // Convert foods to scientific format
+  // Convert and hard-filter foods before generation. generateDailyMeals applies
+  // the same restrictions again, but this preflight lets us fail with a clear
+  // onboarding correction before any meal rows are written.
   const scientificFoods = convertFoodsToScientificFormat(context.foods);
+  const hardRestrictionOptions = {
+    dietaryPreference: context.onboarding.dietary_preference,
+    allergies: context.onboarding.allergies_exclusions,
+    refusedFoods: context.onboarding.refused_foods,
+  };
+  const hardRestrictionResult = applyHardRestrictions(scientificFoods, hardRestrictionOptions);
+  if (!hardRestrictionResult.allowed.length) {
+    throw new Error("No loggable foods matched your dietary restrictions. Adjust allergies, exclusions, or dietary preference and try again.");
+  }
+  const restrictedScientificFoods = hardRestrictionResult.allowed;
 
   // Determine goal — exhaustive mapping from all onboarding goal types
   function resolveGoalType(goalType: string): "muscle_gain" | "fat_loss" | "maintenance" {
@@ -261,6 +304,7 @@ export async function generateScientificMealPlan(
     throw new Error(`Failed to create nutrition plan: ${planError?.message || "unknown"}`);
   }
 
+  try {
   // Phase 1: Generate all days independently (with cross-day variety via previousDaysMeals)
   const dayPlans: { meals: GeneratedMeal[]; slots: MealSlot[]; dayIndex: number }[] = [];
   const allDayMeals: GeneratedMeal[][] = [];
@@ -302,7 +346,7 @@ export async function generateScientificMealPlan(
     };
 
     const { meals: dailyMeals, warnings: dailyWarnings, logs: dailyLogs } = generateDailyMeals(
-      scientificFoods,
+      restrictedScientificFoods,
       selections,
       slots,
       dayTargets,
@@ -342,7 +386,7 @@ export async function generateScientificMealPlan(
   console.log(`[generate-user-plans] Pre-coherence score: ${preCoherence.realismScore} (${preCoherence.realismLabel})`);
 
   const { meals: rebalancedDays, warnings: rebalanceWarnings, logs: rebalanceLogs } = rebalanceWeeklyMeals(
-    scientificFoods,
+    restrictedScientificFoods,
     selections,
     allSlots,
     allDayTargets,
@@ -356,6 +400,10 @@ export async function generateScientificMealPlan(
 
   const postCoherence = analyzeWeeklyCoherence(rebalancedDays);
   console.log(`[generate-user-plans] Post-coherence score: ${postCoherence.realismScore} (${postCoherence.realismLabel})`);
+
+  for (let dayIndex = 0; dayIndex < nutritionDays; dayIndex++) {
+    assertDailyMacroTolerance(dayIndex, allDayTargets[dayIndex], rebalancedDays[dayIndex] || [], macroTolerancePercent);
+  }
 
   const generatedSlots = Array.from(new Set(rebalancedDays.flat().map((meal) => meal.slot)));
   if (generatedSlots.length) {
@@ -541,13 +589,11 @@ export async function generateScientificMealPlan(
     }
   }
 
-  // Guard: if no meals were stored at all, the plan is useless. Throw so the
-  // outer catch block can fall back to the legacy storeNutritionPlan generator.
+  // Guard: if no meals were stored at all, the plan is useless.
   if (variantCount === 0) {
     throw new Error(
       "Scientific meal engine produced 0 meal variants across all days. " +
-      "This likely means isFeasible rejected every food combination. " +
-      "Falling back to legacy meal generator."
+      "This likely means isFeasible rejected every food combination."
     );
   }
 
@@ -556,4 +602,11 @@ export async function generateScientificMealPlan(
     variantCount,
     warnings: Array.from(new Set(warnings)),
   };
+  } catch (error) {
+    await supabase
+      .from("user_nutrition_plans")
+      .delete()
+      .eq("id", nutritionPlan.id);
+    throw error;
+  }
 }

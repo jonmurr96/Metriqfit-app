@@ -108,6 +108,8 @@ export async function storeNutritionPlan(
         allergies: context.onboarding.allergies_exclusions,
         refused_foods: context.onboarding.refused_foods,
         preferred_proteins: context.onboarding.preferred_proteins,
+        preferred_carbs: context.onboarding.preferred_carbs,
+        preferred_fats: context.onboarding.preferred_fats,
       },
     })
     .select("id")

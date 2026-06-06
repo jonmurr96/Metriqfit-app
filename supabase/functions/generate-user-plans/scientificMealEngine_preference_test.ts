@@ -4,7 +4,7 @@
 // Run with:
 //   deno test supabase/functions/generate-user-plans/scientificMealEngine_preference_test.ts
 
-import { assertEquals, assertGreaterOrEqual, assertMatch } from "https://deno.land/std@0.220.0/assert/mod.ts";
+import { assertEquals, assertGreaterOrEqual, assertMatch, assertThrows } from "https://deno.land/std@0.220.0/assert/mod.ts";
 import {
   generateDailyMeals,
   type FoodWithMetadata,
@@ -202,4 +202,53 @@ Deno.test("scientific meal engine uses variety pressure when meals repeat", () =
   assertGreaterOrEqual(new Set(proteinFamilies).size, 2, "Protein families should vary across meals");
   assertGreaterOrEqual(new Set(carbFamilies).size, 2, "Carb families should vary across meals");
   assertGreaterOrEqual(new Set(fatFamilies).size, 2, "Fat families should vary across meals");
+});
+
+Deno.test("scientific meal engine does not reintroduce refused preferred foods through fallback", () => {
+  const result = generateDailyMeals(
+    [
+      ...deterministicCatalog,
+      food({
+        id: "protein-tofu",
+        name: "Tofu",
+        category: "protein",
+        variety_family: "tofu",
+        tags: ["tofu", "soy", "vegan"],
+        calories_per_100g: 90,
+        protein_per_100g: 16,
+        carbs_per_100g: 2,
+        fat_per_100g: 5,
+        lunch_dinner_score: 3,
+        min_grams: 120,
+        max_grams: 350,
+      }),
+    ],
+    { ...selection, proteins: ["chicken", "tofu"] },
+    [lunchSlot],
+    targets,
+    "maintenance",
+    { ...options, refusedFoods: ["chicken"] },
+  );
+
+  assertEquals(result.meals.length, 1, "Expected a meal from the remaining allowed pool");
+  assertEquals(result.meals[0].items.protein.food.variety_family, "tofu", "Refused chicken must not be used as a fallback");
+});
+
+Deno.test("scientific meal engine fails when hard restrictions remove all usable macro categories", () => {
+  assertThrows(
+    () => generateDailyMeals(
+      deterministicCatalog,
+      selection,
+      [lunchSlot],
+      targets,
+      "maintenance",
+      {
+        ...options,
+        allergies: ["dairy", "gluten", "eggs", "soy", "fish", "shellfish", "peanuts"],
+        refusedFoods: ["chicken", "beef", "rice", "oats", "avocado", "olive oil"],
+      },
+    ),
+    Error,
+    "CRITICAL",
+  );
 });

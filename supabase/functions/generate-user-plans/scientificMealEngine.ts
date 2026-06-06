@@ -1477,8 +1477,8 @@ function scalePortions(meals: GeneratedMeal[], targets: MacroTargets): Generated
     return meals;
   }
 
-  // Distribute error proportionally across meals, respecting portion bounds
-  return meals.map((meal) => {
+  // Distribute error proportionally across meals, respecting portion bounds.
+  const initiallyScaled = meals.map((meal) => {
     const pFood = meal.items.protein.food;
     const cFood = meal.items.carb.food;
     const fFood = meal.items.fat.food;
@@ -1539,6 +1539,8 @@ function scalePortions(meals: GeneratedMeal[], targets: MacroTargets): Generated
       macros,
     };
   });
+
+  return repairMacroPortions(initiallyScaled, targets);
 }
 
 function sumMealMacros(meals: GeneratedMeal[]) {
@@ -1551,6 +1553,94 @@ function sumMealMacros(meals: GeneratedMeal[]) {
     }),
     { calories: 0, protein: 0, carbs: 0, fat: 0 }
   );
+}
+
+function withUpdatedPortions(
+  meal: GeneratedMeal,
+  next: { protein?: number; carb?: number; fat?: number },
+): GeneratedMeal {
+  const pFood = meal.items.protein.food;
+  const cFood = meal.items.carb.food;
+  const fFood = meal.items.fat.food;
+  const produceItem = meal.items.produce;
+  const pGrams = next.protein ?? meal.items.protein.grams;
+  const cGrams = next.carb ?? meal.items.carb.grams;
+  const fGrams = next.fat ?? meal.items.fat.grams;
+  const produceMacros = produceItem
+    ? calculateFoodMacros(produceItem.food, produceItem.grams)
+    : { calories: 0, protein: 0, carbs: 0, fat: 0 };
+
+  const pMacros = calculateFoodMacros(pFood, pGrams);
+  const cMacros = calculateFoodMacros(cFood, cGrams);
+  const fMacros = calculateFoodMacros(fFood, fGrams);
+  const macros = {
+    calories: pMacros.calories + cMacros.calories + fMacros.calories + produceMacros.calories,
+    protein: pMacros.protein + cMacros.protein + fMacros.protein + produceMacros.protein,
+    carbs: pMacros.carbs + cMacros.carbs + fMacros.carbs + produceMacros.carbs,
+    fat: pMacros.fat + cMacros.fat + fMacros.fat + produceMacros.fat,
+  };
+
+  return {
+    ...meal,
+    items: {
+      protein: { food: pFood, grams: pGrams },
+      carb: { food: cFood, grams: cGrams },
+      fat: { food: fFood, grams: fGrams },
+      ...(produceItem ? { produce: produceItem } : {}),
+    },
+    macros,
+  };
+}
+
+function adjustMacroPortions(
+  meals: GeneratedMeal[],
+  component: "protein" | "carb" | "fat",
+  diffGrams: number,
+): GeneratedMeal[] {
+  if (Math.abs(diffGrams) < 1) return meals;
+
+  const macroField = component === "protein" ? "protein_per_100g" : component === "carb" ? "carbs_per_100g" : "fat_per_100g";
+  const capacities = meals.map((meal, index) => {
+    const item = meal.items[component];
+    const macroDensity = Number(item.food[macroField] || 0) / 100;
+    if (macroDensity <= 0) return { index, capacityMacro: 0, macroDensity };
+    const current = item.grams;
+    const min = item.food.min_grams ?? (component === "fat" ? 5 : 30);
+    const baseMax = item.food.max_grams ?? (component === "fat" ? 100 : 500);
+    const max = component === "carb" && diffGrams > 0 ? baseMax * 1.5 : baseMax;
+    const capacityGrams = diffGrams > 0 ? Math.max(0, max - current) : Math.max(0, current - min);
+    return { index, capacityMacro: capacityGrams * macroDensity, macroDensity };
+  });
+
+  const totalCapacity = capacities.reduce((sum, item) => sum + item.capacityMacro, 0);
+  if (totalCapacity <= 0) return meals;
+
+  let remaining = Math.min(Math.abs(diffGrams), totalCapacity);
+  let nextMeals = meals;
+  for (const capacity of capacities) {
+    if (remaining <= 0 || capacity.capacityMacro <= 0 || capacity.macroDensity <= 0) continue;
+    const macroDelta = Math.min(remaining, capacity.capacityMacro);
+    const gramDelta = macroDelta / capacity.macroDensity * (diffGrams > 0 ? 1 : -1);
+    const meal = nextMeals[capacity.index];
+    const currentGrams = meal.items[component].grams;
+    nextMeals = nextMeals.map((entry, idx) =>
+      idx === capacity.index ? withUpdatedPortions(entry, { [component]: Math.round(currentGrams + gramDelta) }) : entry
+    );
+    remaining -= macroDelta;
+  }
+
+  return nextMeals;
+}
+
+function repairMacroPortions(meals: GeneratedMeal[], targets: MacroTargets): GeneratedMeal[] {
+  let repaired = meals;
+  for (let attempt = 0; attempt < 2; attempt += 1) {
+    const totals = sumMealMacros(repaired);
+    repaired = adjustMacroPortions(repaired, "protein", targets.protein_g - totals.protein);
+    repaired = adjustMacroPortions(repaired, "carb", targets.carbs_g - sumMealMacros(repaired).carbs);
+    repaired = adjustMacroPortions(repaired, "fat", targets.fat_g - sumMealMacros(repaired).fat);
+  }
+  return repaired;
 }
 
 function subtractMacros(current: MacroTargets, used: { calories: number; protein: number; carbs: number; fat: number }): MacroTargets {

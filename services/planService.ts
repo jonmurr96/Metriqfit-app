@@ -472,6 +472,13 @@ export type PlanGenerationRun = {
   user_id: string;
   plan_type: 'workout' | 'nutrition' | 'both';
   status: LegacyPlanGenerationStatus;
+  orchestration_status?: 'queued' | 'running' | 'success' | 'failed' | 'validation_failed' | 'cancelled' | null;
+  current_stage?: string | null;
+  stage_history_json?: any;
+  diagnostics_json?: any;
+  spec_seed_hex?: string | null;
+  generation_version?: number;
+  planner_mode?: string | null;
   created_at: string;
   completed_at: string | null;
   validation_errors?: any;
@@ -3190,6 +3197,25 @@ export async function getGenerationHistory(
   }
 
   return (data || []) as PlanGenerationRun[];
+}
+
+export async function getGenerationRun(
+  userId: string,
+  runId: string,
+): Promise<PlanGenerationRun | null> {
+  const { data, error } = await supabase
+    .from('plan_generation_runs')
+    .select('*')
+    .eq('user_id', userId)
+    .eq('id', runId)
+    .maybeSingle();
+
+  if (error) {
+    console.error('Failed to fetch generation run:', error);
+    return null;
+  }
+
+  return (data || null) as PlanGenerationRun | null;
 }
 
 /**

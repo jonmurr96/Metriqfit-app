@@ -759,7 +759,16 @@ export interface Database {
           tokens_used: number | null
           duration_ms: number | null
           generation_version: number
-          planner_mode: 'deterministic' | 'ai' | 'hybrid'
+          planner_mode: 'deterministic' | 'ai' | 'hybrid' | 'deterministic_v3'
+          diagnostics_json: Json | null
+          spec_seed_hex: string | null
+          idempotency_key: string | null
+          correlation_id: string | null
+          orchestration_status: 'queued' | 'running' | 'success' | 'failed' | 'validation_failed' | 'cancelled' | null
+          current_stage: string | null
+          stage_history_json: Json | null
+          queued_at: string | null
+          stage_updated_at: string | null
           warnings_json: Json | null
           error_step: string | null
           error_code: string | null
@@ -778,7 +787,16 @@ export interface Database {
           tokens_used?: number | null
           duration_ms?: number | null
           generation_version?: number
-          planner_mode?: 'deterministic' | 'ai' | 'hybrid'
+          planner_mode?: 'deterministic' | 'ai' | 'hybrid' | 'deterministic_v3'
+          diagnostics_json?: Json | null
+          spec_seed_hex?: string | null
+          idempotency_key?: string | null
+          correlation_id?: string | null
+          orchestration_status?: 'queued' | 'running' | 'success' | 'failed' | 'validation_failed' | 'cancelled' | null
+          current_stage?: string | null
+          stage_history_json?: Json | null
+          queued_at?: string | null
+          stage_updated_at?: string | null
           warnings_json?: Json | null
           error_step?: string | null
           error_code?: string | null
@@ -797,7 +815,16 @@ export interface Database {
           tokens_used?: number | null
           duration_ms?: number | null
           generation_version?: number
-          planner_mode?: 'deterministic' | 'ai' | 'hybrid'
+          planner_mode?: 'deterministic' | 'ai' | 'hybrid' | 'deterministic_v3'
+          diagnostics_json?: Json | null
+          spec_seed_hex?: string | null
+          idempotency_key?: string | null
+          correlation_id?: string | null
+          orchestration_status?: 'queued' | 'running' | 'success' | 'failed' | 'validation_failed' | 'cancelled' | null
+          current_stage?: string | null
+          stage_history_json?: Json | null
+          queued_at?: string | null
+          stage_updated_at?: string | null
           warnings_json?: Json | null
           error_step?: string | null
           error_code?: string | null

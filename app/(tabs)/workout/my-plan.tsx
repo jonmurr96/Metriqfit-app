@@ -507,6 +507,10 @@ export default function MyWorkoutPlanScreen() {
                             ? 'Template'
                             : workoutPlan.programMeta?.sourceModel === 'legacy_template'
                               ? 'Legacy'
+                              : workoutPlan.programMeta?.sourceModel === 'v1_architect'
+                                ? 'V1 Architect'
+                                : workoutPlan.programMeta?.sourceModel === 'v3_deterministic'
+                                  ? 'V3'
                               : 'Generated'}
                       </Text>
                     </View>

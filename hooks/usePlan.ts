@@ -49,6 +49,7 @@ import {
   getWorkoutPlanCoherenceReport,
   repairNutritionPlanMappings,
   repairWorkoutPlanCoherencePreview,
+  getGenerationRun,
   type UserWorkoutPlan,
   type UserWorkoutPlanDay,
   type UserNutritionPlan,
@@ -108,6 +109,7 @@ export const planKeys = {
   consistencyLatest: (userId: string) => [...planKeys.consistency(), 'latest', userId] as const,
 
   generations: (userId: string) => [...planKeys.all, 'generations', userId] as const,
+  generationRun: (userId: string, runId: string) => [...planKeys.all, 'generation-run', userId, runId] as const,
 };
 
 /**
@@ -319,6 +321,24 @@ export function useGenerationHistory() {
     queryFn: () => getGenerationHistory(user!.id),
     enabled: !!user,
     staleTime: 5 * 60 * 1000,
+  });
+}
+
+export function useGenerationRun(runId?: string | null, options?: { enabled?: boolean; poll?: boolean }) {
+  const { user } = useAuth();
+
+  return useQuery({
+    queryKey: planKeys.generationRun(user?.id || '', runId || ''),
+    queryFn: () => getGenerationRun(user!.id, runId!),
+    enabled: !!user && !!runId && (options?.enabled ?? true),
+    refetchInterval: (query) => {
+      if (!options?.poll) return false;
+      const run = query.state.data;
+      return run?.orchestration_status === 'queued' || run?.orchestration_status === 'running' || run?.status === 'pending'
+        ? 2500
+        : false;
+    },
+    staleTime: 1000,
   });
 }
 

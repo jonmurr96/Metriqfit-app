@@ -3,6 +3,65 @@
 
 import type { SupabaseClient } from "https://esm.sh/@supabase/supabase-js@2.49.1";
 
+export type GenerationOrchestrationStatus =
+  | "queued"
+  | "running"
+  | "success"
+  | "failed"
+  | "validation_failed"
+  | "cancelled";
+
+export async function updateGenerationRunStage(
+  supabase: SupabaseClient,
+  runId: string,
+  params: {
+    stage: string;
+    orchestrationStatus?: GenerationOrchestrationStatus;
+    details?: Record<string, unknown> | null;
+  },
+) {
+  const { data: runRow, error: readError } = await supabase
+    .from("plan_generation_runs")
+    .select("stage_history_json")
+    .eq("id", runId)
+    .maybeSingle();
+
+  if (readError) {
+    console.warn("[generate-user-plans] Failed to read generation stage history:", {
+      runId,
+      error: readError.message,
+    });
+  }
+
+  const history = Array.isArray(runRow?.stage_history_json)
+    ? runRow.stage_history_json
+    : [];
+  const nextEvent = {
+    stage: params.stage,
+    orchestration_status: params.orchestrationStatus ?? "running",
+    details: params.details ?? null,
+    at: new Date().toISOString(),
+  };
+
+  const { error } = await supabase
+    .from("plan_generation_runs")
+    .update({
+      orchestration_status: params.orchestrationStatus ?? "running",
+      current_stage: params.stage,
+      stage_updated_at: nextEvent.at,
+      stage_history_json: [...history, nextEvent],
+    })
+    .eq("id", runId);
+
+  if (error) {
+    console.warn("[generate-user-plans] Failed to update generation stage:", {
+      runId,
+      stage: params.stage,
+      error: error.message,
+    });
+  }
+}
+
 export async function updateGenerationRunFailure(
   supabase: SupabaseClient,
   runId: string,
@@ -24,6 +83,9 @@ export async function updateGenerationRunFailure(
     error_step: params.errorStep ?? null,
     error_code: params.errorCode ?? null,
     error_context: params.errorContext ?? null,
+    orchestration_status: params.status,
+    current_stage: params.errorStep ?? params.status,
+    stage_updated_at: new Date().toISOString(),
   };
 
   if (params.aiResponse !== undefined) {
@@ -60,6 +122,9 @@ export async function updateGenerationRunV3(
     completed_at: new Date().toISOString(),
     generation_version: 3,
     planner_mode: "deterministic_v3",
+    orchestration_status: params.status,
+    current_stage: params.status === "success" ? "complete" : "validation_failed",
+    stage_updated_at: new Date().toISOString(),
     diagnostics_json: params.diagnostics,
     spec_seed_hex: params.specSeedHex,
     validation_errors: params.validationErrors ?? [],

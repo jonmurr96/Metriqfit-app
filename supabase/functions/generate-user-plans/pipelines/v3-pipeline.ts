@@ -18,7 +18,7 @@ import {
   type ValidationResult,
 } from "../../../../lib/spec/validatePlan.ts";
 import { writeV3Plans } from "../db/v3-writers.ts";
-import { updateGenerationRunV3 } from "../db/generation-runs.ts";
+import { updateGenerationRunStage, updateGenerationRunV3 } from "../db/generation-runs.ts";
 import type { LiftCategory, MovementPattern, PrescriptionUnit, MusclePattern } from "../../../../lib/spec/PlanSpec.ts";
 
 export interface V3Result {
@@ -56,6 +56,17 @@ export async function runV3Pipeline(
   now: Date = new Date(),
   options: V3PipelineOptions = {},
 ): Promise<V3Result> {
+  const markStage = async (stage: string, details?: Record<string, unknown>) => {
+    if (!options.runId) return;
+    await updateGenerationRunStage(supabase, options.runId, {
+      stage,
+      orchestrationStatus: "running",
+      details,
+    });
+  };
+
+  await markStage("context_load");
+
   // 1) Load onboarding
   const { data: onboardingRow, error: onbErr } = await supabase
     .from("onboarding_answers")
@@ -68,15 +79,21 @@ export async function runV3Pipeline(
   }
 
   // 2) Build canonical UserState
+  await markStage("user_state_build");
   const state = buildUserState(onboardingRow.answers as Record<string, unknown>, now);
 
   // 3) Load catalogs
+  await markStage("catalog_load");
   const [exercisesData, foodsData] = await Promise.all([
     loadExerciseCatalog(supabase),
     loadFoodCatalog(supabase),
   ]);
 
   // 4) Layer 1
+  await markStage("spec_build", {
+    exercises_loaded: exercisesData.length,
+    foods_loaded: foodsData.length,
+  });
   const spec = buildPlanSpec({ state, now });
 
   // 5) Layer 2 + Layer 3 with bounded retry on validation failure.
@@ -89,11 +106,15 @@ export async function runV3Pipeline(
   // failed validation still returns the latest plan so the consumer can decide
   // (gate the write, write with diagnostics_json, or surface the violations
   // to the client).
+  await markStage("content_fill", { attempt: 1 });
   let plan = fillContent({ spec, exercises: exercisesData, foods: foodsData });
+  await markStage("validation", { attempt: 1 });
   let validation = validatePlan(plan, spec);
   let attempts = 1;
   while (!validation.passed && attempts < MAX_VALIDATION_ATTEMPTS) {
+    await markStage("content_fill", { attempt: attempts + 1 });
     plan = fillContent({ spec, exercises: exercisesData, foods: foodsData });
+    await markStage("validation", { attempt: attempts + 1 });
     validation = validatePlan(plan, spec);
     attempts += 1;
   }
@@ -103,6 +124,7 @@ export async function runV3Pipeline(
   // 6) Optional persistence — only when the caller passed a runId.
   let persistence: V3Result["diagnostics"]["persistence"] | undefined;
   if (options.persist && options.runId && validation.passed) {
+    await markStage("persistence", { activate: options.activate ?? validation.passed });
     try {
       const writeResult = await writeV3Plans(supabase, userId, options.runId, spec, plan, {
         activate: options.activate ?? validation.passed,
@@ -113,11 +135,12 @@ export async function runV3Pipeline(
         warnings: writeResult.warnings,
       };
     } catch (err) {
-      persistence = {
-        workout_plan_id: null,
-        nutrition_plan_id: null,
-        warnings: [`V3 persistence failed: ${(err as Error).message}`],
-      };
+      await updateGenerationRunStage(supabase, options.runId, {
+        stage: "persistence_failed",
+        orchestrationStatus: "failed",
+        details: { message: (err as Error).message },
+      });
+      throw new Error(`V3 persistence failed: ${(err as Error).message}`);
     }
   } else if (options.persist && options.runId && !validation.passed) {
     persistence = {
@@ -125,6 +148,11 @@ export async function runV3Pipeline(
       nutrition_plan_id: null,
       warnings: ["V3 validation failed; plans were not persisted."],
     };
+    await updateGenerationRunStage(supabase, options.runId, {
+      stage: "validation_failed",
+      orchestrationStatus: "validation_failed",
+      details: { violation_summary: violationSummary },
+    });
 
     // Update plan_generation_runs with diagnostics + spec seed regardless of
     // persistence outcome — we always want the audit trail.

@@ -146,7 +146,7 @@ Deno.test("Persona 4: Endurance user — higher carbs, fast carb preference", ()
   const r = runPersona("endurance", selections, options, trainingDaySlots, targets);
 
   assertGreater(r.mealCount, 0, "Should produce meals");
-  assertGreater(r.totals.carbs, 250, "Should allocate high carbs for endurance");
+  assertGreater(r.totals.carbs, 250, `Should allocate high carbs for endurance: ${JSON.stringify(r.totals)}`);
 });
 
 Deno.test("Persona 5: Narrow-preference user — only 1 protein, 1 carb, 1 fat", () => {

@@ -2,7 +2,9 @@ export type WorkoutProgramSourceModel =
   | 'generated'
   | 'v2_template'
   | 'custom_builder'
-  | 'legacy_template';
+  | 'legacy_template'
+  | 'v1_architect'
+  | 'v3_deterministic';
 
 export type WeekdayCode =
   | 'mon'
