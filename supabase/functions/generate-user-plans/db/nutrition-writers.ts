@@ -59,6 +59,18 @@ export async function storeNutritionPlan(
   const nutritionDays = Math.max(7, Math.min(14, horizonDays));
   const normalizedMealSlots = normalizeNutritionSlots(mealSlots);
   const slotRatio = buildNutritionSlotRatio(normalizedMealSlots);
+  const goal = (() => {
+    switch (context.onboarding.goal_type) {
+      case "build_muscle":
+      case "gain_weight":
+        return "muscle_gain" as const;
+      case "lose_weight":
+      case "get_fitter":
+        return "fat_loss" as const;
+      default:
+        return "maintenance" as const;
+    }
+  })();
 
   const { data: maxVersionData } = await supabase
     .from("user_nutrition_plans")
@@ -70,22 +82,14 @@ export async function storeNutritionPlan(
 
   const version = (maxVersionData?.version || 0) + 1;
 
-  if (activationMode === "activate") {
-    await supabase
-      .from("user_nutrition_plans")
-      .update({ is_active: false, lifecycle_state: "archived" })
-      .eq("user_id", userId)
-      .eq("is_active", true);
-  }
-
   const { data: nutritionPlan, error: planError } = await supabase
     .from("user_nutrition_plans")
     .insert({
       user_id: userId,
       generation_run_id: runId,
       version,
-      is_active: activationMode === "activate",
-      lifecycle_state: activationMode === "preview" ? "preview" : "live",
+      is_active: false,
+      lifecycle_state: "preview",
       replaces_plan_id: activationMode === "preview" ? currentPlanId : null,
       name: activationMode === "preview"
         ? `${NUTRITION_PREVIEW_NAME_PREFIX}MetriqFit Adaptive Nutrition Plan`
@@ -121,24 +125,17 @@ export async function storeNutritionPlan(
   );
 
   if (!allowedFoods.length) {
-    warnings.push("No foods matched dietary filters. Falling back to full library.");
+    throw new Error("No foods matched your dietary restrictions. Adjust allergies, exclusions, or dietary preference and try again.");
   }
 
   const dbFoodLookup = buildFoodRecordLookup(context.foods);
-  const mappedAllowedFoods = (allowedFoods.length ? allowedFoods : FOOD_LIBRARY).filter((food) =>
-    !!findBestFoodRecordMatch(food.name, dbFoodLookup)
-  );
-  const mappedFallbackFoods = FOOD_LIBRARY.filter((food) =>
+  const mappedAllowedFoods = allowedFoods.filter((food) =>
     !!findBestFoodRecordMatch(food.name, dbFoodLookup)
   );
 
-  if (!mappedAllowedFoods.length && allowedFoods.length) {
-    warnings.push("Dietary-filtered foods did not fully map to the food database. Falling back to mapped foods from the full library.");
-  }
-
-  const workingFoods = mappedAllowedFoods.length ? mappedAllowedFoods : mappedFallbackFoods;
+  const workingFoods = mappedAllowedFoods;
   if (!workingFoods.length) {
-    throw new Error("No mapped foods are available to build a loggable nutrition plan.");
+    throw new Error("No loggable foods matched your dietary restrictions. Adjust allergies, exclusions, or dietary preference and try again.");
   }
 
   const proteinPool = buildMacroRotationPool(workingFoods, "protein", varietyProfile, context.onboarding.preferred_proteins || []);
@@ -396,7 +393,7 @@ export async function storeNutritionPlan(
     const dayFatDiff = calculateMacroDiffPercent(dayTargets.fat, dayActualTotals.fat);
     const dayMaxDiff = Math.max(dayCaloriesDiff, dayProteinDiff, dayCarbsDiff, dayFatDiff);
     if (dayMaxDiff > macroTolerancePercent) {
-      warnings.push(`Day ${dayIndex + 1} aggregate exceeds tolerance (${round1(dayMaxDiff)}%). Minimal relaxation applied.`);
+      throw new Error(`Day ${dayIndex + 1} nutrition plan exceeds the ${macroTolerancePercent}% macro tolerance (${round1(dayMaxDiff)}%). Adjust meal preferences or macro targets and try again.`);
     }
   }
 

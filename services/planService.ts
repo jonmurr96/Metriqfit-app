@@ -975,6 +975,27 @@ export async function getActiveNutritionPlan(
   return data ? decorateNutritionPlan(data as NutritionPlanWithDetails) : null;
 }
 
+export async function getNutritionPlanByGenerationRun(
+  userId: string,
+  generationRunId: string,
+): Promise<NutritionPlanWithDetails | null> {
+  const { data, error } = await supabase
+    .from('user_nutrition_plans')
+    .select('*')
+    .eq('user_id', userId)
+    .eq('generation_run_id', generationRunId)
+    .order('created_at', { ascending: false })
+    .limit(1)
+    .maybeSingle();
+
+  if (error) {
+    console.error('Failed to fetch nutrition plan by generation run:', error);
+    return null;
+  }
+
+  return data ? decorateNutritionPlan(data as NutritionPlanWithDetails) : null;
+}
+
 export async function repairNutritionPlanMappings(planId: string): Promise<NutritionPlanRepairSummary> {
   const { data: meals, error } = await db
     .from('user_nutrition_plan_meals')
@@ -1706,7 +1727,7 @@ export async function regeneratePlans(
   const { data, parsedError, rawError } = await invokeFunction(() =>
     supabase.functions.invoke('generate-user-plans', {
       headers: { Authorization: `Bearer ${token}` },
-      body: { user_id: userId, generation_version: 'v3', ...options },
+      body: { user_id: userId, generation_version: 'v2', ...options },
     })
   );
 
@@ -1992,7 +2013,7 @@ export async function triggerPlanGeneration(
         body: {
           user_id: userId,
           plan_type: planType,
-          generation_version: options.generation_version || 'v3',
+          generation_version: options.generation_version || 'v2',
           correlation_id: correlationId,
           ...options,
         },
@@ -2287,7 +2308,7 @@ export async function generateNutritionPlanPreview(
       body: {
         user_id: userId,
         plan_type: 'nutrition',
-        generation_version: 'v3',
+        generation_version: 'v2',
         generation_horizon_days: { nutrition: 7 },
         generation_mode: 'regenerate',
         activation_mode: 'preview',
@@ -2525,7 +2546,7 @@ export async function generateWorkoutPlanPreview(
       body: {
         user_id: userId,
         plan_type: 'workout',
-        generation_version: 'v3',
+        generation_version: 'v2',
         generation_horizon_days: { workout: 28 },
         generation_mode: 'regenerate',
         activation_mode: 'preview',

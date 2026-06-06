@@ -102,7 +102,7 @@ export async function runV3Pipeline(
 
   // 6) Optional persistence — only when the caller passed a runId.
   let persistence: V3Result["diagnostics"]["persistence"] | undefined;
-  if (options.persist && options.runId) {
+  if (options.persist && options.runId && validation.passed) {
     try {
       const writeResult = await writeV3Plans(supabase, userId, options.runId, spec, plan, {
         activate: options.activate ?? validation.passed,
@@ -119,11 +119,19 @@ export async function runV3Pipeline(
         warnings: [`V3 persistence failed: ${(err as Error).message}`],
       };
     }
+  } else if (options.persist && options.runId && !validation.passed) {
+    persistence = {
+      workout_plan_id: null,
+      nutrition_plan_id: null,
+      warnings: ["V3 validation failed; plans were not persisted."],
+    };
 
     // Update plan_generation_runs with diagnostics + spec seed regardless of
     // persistence outcome — we always want the audit trail.
+  }
+  if (options.persist && options.runId) {
     await updateGenerationRunV3(supabase, options.runId, {
-      status: validation.passed ? "completed" : "validation_failed",
+      status: validation.passed ? "success" : "validation_failed",
       diagnostics: {
         attempts,
         validation_passed: validation.passed,

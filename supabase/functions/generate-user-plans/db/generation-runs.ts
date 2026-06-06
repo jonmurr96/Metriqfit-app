@@ -48,7 +48,7 @@ export async function updateGenerationRunV3(
   supabase: SupabaseClient,
   runId: string,
   params: {
-    status: "completed" | "validation_failed";
+    status: "success" | "validation_failed";
     diagnostics: Record<string, unknown>;
     specSeedHex: string;
     validationErrors?: string[];

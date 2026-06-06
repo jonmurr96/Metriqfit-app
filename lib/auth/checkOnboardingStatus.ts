@@ -15,7 +15,7 @@ export type { OnboardingStatus } from './onboardingStatus';
 export async function checkOnboardingStatus(
   userId: string
 ): Promise<OnboardingStatus> {
-  const [answersRes, targetsRes, plansRes, subscriptionsRes, reviewStatesRes] = await Promise.all([
+  const [answersRes, targetsRes, workoutPlansRes, nutritionPlansRes, subscriptionsRes, reviewStatesRes] = await Promise.all([
     supabase
       .from('onboarding_answers')
       .select('answers, completed_at')
@@ -28,7 +28,13 @@ export async function checkOnboardingStatus(
       .maybeSingle(),
     supabase
       .from('user_workout_plans')
-      .select('id')
+      .select('id, generation_run_id')
+      .eq('user_id', userId)
+      .eq('is_active', true)
+      .maybeSingle(),
+    supabase
+      .from('user_nutrition_plans')
+      .select('id, generation_run_id')
       .eq('user_id', userId)
       .eq('is_active', true)
       .maybeSingle(),
@@ -49,12 +55,18 @@ export async function checkOnboardingStatus(
   const hasPaidSubscription = !subscriptionsRes.error
     && Boolean(subscriptionsRes.data?.some((subscription: any) => subscription.plan_type !== 'free'));
   const hasPricingDecision = !reviewStatesRes.error && Boolean(reviewStatesRes.data?.length);
+  const activeWorkoutPlan = !workoutPlansRes.error ? workoutPlansRes.data : null;
+  const activeNutritionPlan = !nutritionPlansRes.error ? nutritionPlansRes.data : null;
+  const workoutRunId = activeWorkoutPlan?.generation_run_id || null;
+  const nutritionRunId = activeNutritionPlan?.generation_run_id || null;
+  const hasCompletePlanPair = Boolean(activeWorkoutPlan && activeNutritionPlan)
+    && (!workoutRunId || !nutritionRunId || workoutRunId === nutritionRunId);
 
   return deriveOnboardingStatus({
     answers: !answersRes.error ? (answersRes.data as OnboardingAnswersStatusRow | null) : null,
     answersError: answersRes.error,
     hasTargets: !targetsRes.error && !!targetsRes.data,
-    hasPlans: !plansRes.error && !!plansRes.data,
+    hasPlans: hasCompletePlanPair,
     hasPaywallCompletion: hasPricingDecision || hasPaidSubscription,
   });
 }

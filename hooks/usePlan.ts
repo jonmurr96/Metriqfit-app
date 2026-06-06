@@ -10,6 +10,7 @@ import {
   getActiveWorkoutPlan,
   getWorkoutPlanByGenerationRun,
   getActiveNutritionPlan,
+  getNutritionPlanByGenerationRun,
   getPlanHistory,
   getLatestNutritionPlanPreview,
   getLatestWorkoutPlanPreview,
@@ -92,6 +93,8 @@ export const planKeys = {
 
   nutrition: () => [...planKeys.all, 'nutrition'] as const,
   nutritionActive: (userId: string) => [...planKeys.nutrition(), 'active', userId] as const,
+  nutritionByGenerationRun: (userId: string, generationRunId: string) =>
+    [...planKeys.nutrition(), 'generation-run', userId, generationRunId] as const,
   nutritionHistory: (userId: string) => [...planKeys.nutrition(), 'history', userId] as const,
   nutritionPreview: (userId: string, replacesPlanId?: string | null) =>
     [...planKeys.nutrition(), 'preview', userId, replacesPlanId || 'latest'] as const,
@@ -143,6 +146,17 @@ export function useActiveNutritionPlan() {
     queryFn: () => getActiveNutritionPlan(user!.id),
     enabled: !!user,
     staleTime: 5 * 60 * 1000,
+  });
+}
+
+export function useNutritionPlanByGenerationRun(generationRunId?: string | null, options?: { enabled?: boolean }) {
+  const { user } = useAuth();
+
+  return useQuery<NutritionPlanWithDetails | null>({
+    queryKey: planKeys.nutritionByGenerationRun(user?.id || '', generationRunId || ''),
+    queryFn: () => getNutritionPlanByGenerationRun(user!.id, generationRunId!),
+    enabled: !!user && !!generationRunId && (options?.enabled ?? true),
+    staleTime: 30 * 1000,
   });
 }
 

@@ -59,7 +59,7 @@ export async function storeV1WorkoutPlan(
     generation_run_id: runId,
     version,
     is_active: false,
-    lifecycle_state: config.activationMode === "preview" ? "preview" : "live",
+    lifecycle_state: "preview",
     replaces_plan_id: config.currentPlanContext?.planId || null,
     source_model: "v1_architect",
     program_template_v2_id: null,

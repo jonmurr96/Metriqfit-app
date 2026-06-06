@@ -8,9 +8,8 @@
 //    mode (see the activate flag).
 //  - Writes are tagged source_model='v3_deterministic' and planner_mode is
 //    set on the plan_generation_runs row by updateGenerationRunV3.
-//  - Exercise / food name lookups are tolerant: a V3 plan that references an
-//    exercise/food not present in the live DB will skip that row and emit
-//    a warning rather than throw.
+//  - Exercise / food name lookups are authoritative: a V3 plan that references
+//    content not present in the live DB fails before partial persistence.
 
 import type { SupabaseClient } from "https://esm.sh/@supabase/supabase-js@2.49.1";
 import type { Plan, PlanExercise, PlanMeal, PlanMealItem } from "../../../../lib/spec/fillContent.ts";
@@ -80,7 +79,7 @@ async function writeV3WorkoutPlan(
       start_date: new Date().toISOString().slice(0, 10),
       total_weeks: totalWeeks,
       days_per_week: daysPerWeek,
-      progression_model: spec.workout.progression_model,
+      progression_model: `v3_${spec.workout.split_family}`,
       training_style_tags: [],
       goal_tags: [],
     })
@@ -127,8 +126,7 @@ async function writeV3WorkoutPlan(
       for (const ex of day.exercises) {
         const resolved = exerciseIdMap.get(ex.exercise_id);
         if (!resolved) {
-          warnings.push(`V3: exercise "${ex.exercise_name}" (${ex.exercise_id}) not in public.exercises — skipped`);
-          continue;
+          throw new Error(`V3: exercise "${ex.exercise_name}" (${ex.exercise_id}) not in public.exercises`);
         }
         const { error: exErr } = await supabase
           .from("user_workout_plan_exercises")
@@ -323,8 +321,7 @@ async function writeVariant(
   for (const [i, item] of items.entries()) {
     const resolved = foodIdMap.get(item.food_id);
     if (!resolved) {
-      warnings.push(`V3: food "${item.food_name}" (${item.food_id}) not in food_items — skipped (${weekday}/${slot})`);
-      continue;
+      throw new Error(`V3: food "${item.food_name}" (${item.food_id}) not in food_items (${weekday}/${slot})`);
     }
     const { error } = await supabase.from("user_nutrition_plan_meal_variant_items").insert({
       variant_id: variantRow.id,

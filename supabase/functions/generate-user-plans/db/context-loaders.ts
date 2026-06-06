@@ -13,11 +13,18 @@ import type { WorkoutPlanComparable } from "../../../../lib/workout/plan-regener
 import type {
   CurrentNutritionPlanContext,
   CurrentWorkoutPlanContext,
+  MealsPerDayChoice,
   OnboardingAnswers,
   UserContext,
 } from "../index.ts";
 import { inferFoodTags } from "../helpers/food.ts";
 import { clamp, formatDate } from "../helpers/scalars.ts";
+
+function normalizeMealsPerDayChoice(value: unknown): MealsPerDayChoice {
+  return value === "2" || value === "3" || value === "4" || value === "5_plus" || value === "no_preference"
+    ? value
+    : "no_preference";
+}
 import { normalizeNutritionSlots } from "../helpers/nutrition-slots.ts";
 
 export async function fetchUserContext(supabase: SupabaseClient, userId: string): Promise<UserContext> {
@@ -99,6 +106,7 @@ export async function fetchUserContext(supabase: SupabaseClient, userId: string)
       preferred_proteins: answers.preferred_proteins || [],
       preferred_carbs: answers.preferred_carbs || [],
       preferred_fats: answers.preferred_fats || [],
+      meals_per_day: normalizeMealsPerDayChoice(answers.meals_per_day),
       traditional_meals: answers.traditional_meals !== false, // default true
       training_time: answers.training_time || null,
       wake_time: answers.wake_time || null,

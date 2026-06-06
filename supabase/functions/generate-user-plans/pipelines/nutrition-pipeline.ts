@@ -228,22 +228,14 @@ export async function generateScientificMealPlan(
 
   const version = (maxVersionData?.version || 0) + 1;
 
-  if (activationMode === "activate") {
-    await supabase
-      .from("user_nutrition_plans")
-      .update({ is_active: false, lifecycle_state: "archived" })
-      .eq("user_id", userId)
-      .eq("is_active", true);
-  }
-
   const { data: nutritionPlan, error: planError } = await supabase
     .from("user_nutrition_plans")
     .insert({
       user_id: userId,
       generation_run_id: runId,
       version,
-      is_active: activationMode === "activate",
-      lifecycle_state: activationMode === "preview" ? "preview" : "live",
+      is_active: false,
+      lifecycle_state: "preview",
       replaces_plan_id: activationMode === "preview" ? currentPlanId : null,
       name: activationMode === "preview"
         ? `${NUTRITION_PREVIEW_NAME_PREFIX}Scientific Precision Plan`

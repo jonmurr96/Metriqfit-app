@@ -26,6 +26,7 @@ import {
   useActiveWorkoutPlan,
   useWorkoutPlanByGenerationRun,
   useEditableNutritionPlanContext,
+  useNutritionPlanByGenerationRun,
   useNutritionPlanDay,
   useWorkoutScheduleByPlanId,
   useWorkoutPlanPreview,
@@ -127,10 +128,11 @@ export default function PlanReviewScreen() {
   const previewWorkoutQuery = useWorkoutPlanPreview(null, { enabled: !generatedWorkoutQuery.data && !activeWorkoutQuery.data });
   const workoutPlan = generatedWorkoutQuery.data || activeWorkoutQuery.data || previewWorkoutQuery.data || null;
   const workoutLoading = activeWorkoutQuery.isLoading || generatedWorkoutQuery.isLoading || previewWorkoutQuery.isLoading;
+  const generatedNutritionQuery = useNutritionPlanByGenerationRun(resolvedRunId, { enabled: Boolean(resolvedRunId) });
   const nutritionContextQuery = useEditableNutritionPlanContext();
-  const nutritionPlan = nutritionContextQuery.data?.editablePlan || null;
-  const nutritionPlanSource = nutritionContextQuery.data?.source || 'none';
-  const nutritionLoading = nutritionContextQuery.isLoading;
+  const nutritionPlan = generatedNutritionQuery.data || nutritionContextQuery.data?.editablePlan || null;
+  const nutritionPlanSource = generatedNutritionQuery.data ? 'generated' : nutritionContextQuery.data?.source || 'none';
+  const nutritionLoading = generatedNutritionQuery.isLoading || nutritionContextQuery.isLoading;
   const answerPayload = (onboardingAnswers?.answers || {}) as Record<string, any>;
   const targets = useMemo(
     () => ({

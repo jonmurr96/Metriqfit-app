@@ -130,7 +130,6 @@ import {
 } from "./helpers/nutrition-slots.ts";
 import {
   deleteWorkoutPlanTree,
-  finalizeStoredWorkoutPlanActivation,
   insertWorkoutPlanDayWithFallback,
   insertWorkoutPlanWithFallback,
   loadStoredWorkoutPlanValidationData,
@@ -183,6 +182,25 @@ export type ActivationMode = "preview" | "activate";
 // Extended to match the DB CHECK constraint in migration 084 which allows
 // scientific engine slots alongside the four legacy slots.
 export type NutritionMealSlot = "breakfast" | "lunch" | "dinner" | "snack" | "pre-workout" | "post-workout" | "evening";
+export type MealsPerDayChoice = "2" | "3" | "4" | "5_plus" | "no_preference";
+
+function normalizeCorrelationId(value: string | null): string | null {
+  const trimmed = String(value || "").trim();
+  return /^[A-Za-z0-9._:-]{8,120}$/.test(trimmed) ? trimmed : null;
+}
+
+function stableStringify(value: unknown): string {
+  if (value === null || typeof value !== "object") return JSON.stringify(value);
+  if (Array.isArray(value)) return `[${value.map((item) => stableStringify(item)).join(",")}]`;
+  const record = value as Record<string, unknown>;
+  return `{${Object.keys(record).sort().map((key) => `${JSON.stringify(key)}:${stableStringify(record[key])}`).join(",")}}`;
+}
+
+async function sha256Hex(value: string): Promise<string> {
+  const bytes = new TextEncoder().encode(value);
+  const digest = await crypto.subtle.digest("SHA-256", bytes);
+  return Array.from(new Uint8Array(digest)).map((byte) => byte.toString(16).padStart(2, "0")).join("");
+}
 
 type WorkoutRegenerationReason =
   | "not_seeing_results"
@@ -297,6 +315,7 @@ export type OnboardingAnswers = {
   preferred_proteins?: string[];
   preferred_carbs?: string[];
   preferred_fats?: string[];
+  meals_per_day?: MealsPerDayChoice;
   traditional_meals?: boolean;
   training_time?: string;
   wake_time?: string;
@@ -331,6 +350,7 @@ export type UserContext = {
     preferred_proteins: string[];
     preferred_carbs: string[];
     preferred_fats: string[];
+    meals_per_day: MealsPerDayChoice;
     traditional_meals: boolean;
     training_time: string | null;
     wake_time: string | null;
@@ -1170,7 +1190,8 @@ async function seedConsistency(supabase: SupabaseClient, userId: string) {
 
 serve(async (req: Request) => {
   // Generate request ID for correlation across frontend/backend/logs
-  const requestId = crypto.randomUUID();
+  const incomingCorrelationId = normalizeCorrelationId(req.headers.get("X-Correlation-Id"));
+  const requestId = incomingCorrelationId || crypto.randomUUID();
   const startTime = Date.now();
   
   console.log(`[generate-user-plans] [${requestId}] Function invoked:`, req.method);
@@ -1365,7 +1386,7 @@ serve(async (req: Request) => {
     const strictTemplateSource = typedBody.strict_template_source === true;
     const generationMode: GenerationMode = typedBody.generation_mode === "regenerate" ? "regenerate" : "initial";
     const activationMode: ActivationMode = typedBody.activation_mode === "preview" ? "preview" : "activate";
-    const requestedGenerationVersion = typedBody.generation_version || "v1";
+    const requestedGenerationVersion = typedBody.generation_version || "v2";
     const enableV3EdgePipeline = (Deno as any).env.get("ENABLE_V3_EDGE_PIPELINE") === "true";
     // V3 currently performs a full spec-driven generation, validation, DB
     // persistence, and response serialization inside a single Edge Function
@@ -1382,7 +1403,7 @@ serve(async (req: Request) => {
 
     // 🔍 BRANCH INTEGRITY: Log resolved generation branch so deployment drift is immediately visible
     console.log('[generate-user-plans] Branch decision:', {
-      requested_generation_version: typedBody.generation_version ?? '(not set — defaulting to v1)',
+      requested_generation_version: typedBody.generation_version ?? '(not set - defaulting to v2)',
       resolved_generation_version: generationVersion,
       v3_edge_pipeline_enabled: enableV3EdgePipeline,
       v3_request_routed_to_stable_generator: requestedGenerationVersion === "v3" && generationVersion !== "v3",
@@ -1438,6 +1459,18 @@ serve(async (req: Request) => {
           persist: true,
           activate: activationMode === "activate",
         });
+        if (!v3Result.validation.passed) {
+          return jsonResponse({
+            success: false,
+            status: "validation_failed",
+            requestId,
+            runId: v3RunId,
+            run_id: v3RunId,
+            step: "v3_validation",
+            error: "V3 plan validation failed; plans were not persisted.",
+            diagnostics: v3Result.diagnostics,
+          }, 422);
+        }
         return jsonResponse({
           success: true,
           requestId,
@@ -1490,6 +1523,90 @@ serve(async (req: Request) => {
     const defaultTolerance = strictMacroMode ? 5 : 10;
     const macroTolerancePercent = clamp(Number(typedBody.macro_tolerance_percent ?? defaultTolerance), 5, 20);
     const includeVariants = typedBody.include_variants !== false;
+    const requestCorrelationId = normalizeCorrelationId(String((body as any)?.correlation_id || "")) || incomingCorrelationId || requestId;
+
+    const [idempotencyAnswersRes, idempotencyTargetsRes] = await Promise.all([
+      baseClient
+        .from("onboarding_answers")
+        .select("answers, completed_at")
+        .eq("user_id", userId)
+        .maybeSingle(),
+      baseClient
+        .from("user_targets")
+        .select("calories, protein_g, carbs_g, fat_g, water_ml, day_type_targets_json, target_diagnostics_json, updated_at")
+        .eq("user_id", userId)
+        .maybeSingle(),
+    ]);
+
+    const idempotencyKey = await sha256Hex(stableStringify({
+      user_id: userId,
+      plan_type: planType,
+      generation_version: generationVersion,
+      generation_mode: generationMode,
+      activation_mode: activationMode,
+      workout_horizon: workoutHorizon,
+      nutrition_horizon: nutritionHorizon,
+      strict_days_match: strictDaysMatch,
+      strict_macro_mode: strictMacroMode,
+      strict_template_source: strictTemplateSource,
+      macro_tolerance_percent: macroTolerancePercent,
+      include_variants: includeVariants,
+      variety_profile: varietyProfile,
+      split_override: typedBody.split_override || null,
+      program_family_preference: programFamilyPreference,
+      training_style_preferences: trainingStylePreferences,
+      progression_preference: progressionPreference,
+      workout_regeneration: workoutRegeneration,
+      nutrition_regeneration: nutritionRegeneration,
+      onboarding_answers: idempotencyAnswersRes.data?.answers || null,
+      onboarding_completed_at: idempotencyAnswersRes.data?.completed_at || null,
+      targets: idempotencyTargetsRes.data || null,
+    }));
+
+    if (!dryRun) {
+      const { data: existingRun, error: existingRunError } = await baseClient
+        .from("plan_generation_runs")
+        .select("id, status, ai_response, warnings_json, created_at")
+        .eq("user_id", userId)
+        .eq("idempotency_key", idempotencyKey)
+        .in("status", ["pending", "success"])
+        .order("created_at", { ascending: false })
+        .limit(1)
+        .maybeSingle();
+
+      if (existingRunError) {
+        console.warn(`[generate-user-plans] [${requestId}] Idempotency lookup failed:`, existingRunError.message);
+      } else if (existingRun?.status === "success") {
+        const aiResponse = (existingRun.ai_response || {}) as Record<string, any>;
+        return jsonResponse({
+          success: true,
+          status: activationMode === "preview" ? "preview_ready" : "success",
+          requestId,
+          run_id: existingRun.id,
+          runId: existingRun.id,
+          workout_plan_id: aiResponse.workout_plan_id,
+          workoutPlanId: aiResponse.workout_plan_id,
+          nutrition_plan_id: aiResponse.nutrition_plan_id,
+          nutritionPlanId: aiResponse.nutrition_plan_id,
+          workout_schedule_count: aiResponse.workout_schedule_count || 0,
+          nutrition_variant_count: aiResponse.nutrition_variant_count || 0,
+          consistency_seeded: aiResponse.consistency_seeded || false,
+          warnings: existingRun.warnings_json || [],
+          idempotent_replay: true,
+        });
+      } else if (existingRun?.status === "pending") {
+        return jsonResponse({
+          success: false,
+          status: "pending",
+          error: "Plan generation is already in progress for these onboarding answers.",
+          error_code: "generation_in_progress",
+          requestId,
+          run_id: existingRun.id,
+          runId: existingRun.id,
+          step: "idempotency",
+        }, 409);
+      }
+    }
 
     // Wrap Supabase client for dry run if requested
     const supabase = dryRun ? new Proxy(baseClient, {
@@ -1561,7 +1678,9 @@ serve(async (req: Request) => {
           plan_type: planType,
           status: "pending",
           planner_mode: generationVersion === 'v1' ? 'deterministic' : 'hybrid',
-          generation_version: generationVersion === 'v1' ? 1 : 4,
+          generation_version: generationVersion === 'v1' ? 1 : 2,
+          idempotency_key: idempotencyKey,
+          correlation_id: requestCorrelationId,
           input_context: {
             generation_mode: generationMode,
             activation_mode: activationMode,
@@ -1601,9 +1720,50 @@ serve(async (req: Request) => {
         .select("id")
         .single();
 
-      if (runError || !runData) {
-        throw new Error(`Failed to create generation run: ${runError?.message || "unknown"}`);
-      }
+	      if (runError || !runData) {
+	        if ((runError as any)?.code === "23505" && !dryRun) {
+	          const { data: existingRun } = await baseClient
+	            .from("plan_generation_runs")
+	            .select("id, status, ai_response, warnings_json")
+	            .eq("user_id", userId)
+	            .eq("idempotency_key", idempotencyKey)
+	            .in("status", ["pending", "success"])
+	            .order("created_at", { ascending: false })
+	            .limit(1)
+	            .maybeSingle();
+	          if (existingRun?.status === "success") {
+	            const aiResponse = (existingRun.ai_response || {}) as Record<string, any>;
+	            return jsonResponse({
+	              success: true,
+	              status: activationMode === "preview" ? "preview_ready" : "success",
+	              requestId,
+	              run_id: existingRun.id,
+	              runId: existingRun.id,
+	              workout_plan_id: aiResponse.workout_plan_id,
+	              workoutPlanId: aiResponse.workout_plan_id,
+	              nutrition_plan_id: aiResponse.nutrition_plan_id,
+	              nutritionPlanId: aiResponse.nutrition_plan_id,
+	              workout_schedule_count: aiResponse.workout_schedule_count || 0,
+	              nutrition_variant_count: aiResponse.nutrition_variant_count || 0,
+	              warnings: existingRun.warnings_json || [],
+	              idempotent_replay: true,
+	            });
+	          }
+	          if (existingRun?.status === "pending") {
+	            return jsonResponse({
+	              success: false,
+	              status: "pending",
+	              error: "Plan generation is already in progress for these onboarding answers.",
+	              error_code: "generation_in_progress",
+	              requestId,
+	              run_id: existingRun.id,
+	              runId: existingRun.id,
+	              step: "idempotency",
+	            }, 409);
+	          }
+	        }
+	        throw new Error(`Failed to create generation run: ${runError?.message || "unknown"}`);
+	      }
 
       runId = runData.id;
       console.log(`[generate-user-plans] [${requestId}] Run created: ${runId}`);
@@ -1619,6 +1779,8 @@ serve(async (req: Request) => {
     }
 
     const warnings: string[] = [];
+    let stagedWorkoutPlanId: string | null = null;
+    let stagedNutritionPlanId: string | null = null;
 
     try {
       // STEP 1: Fetch user context
@@ -1988,26 +2150,7 @@ serve(async (req: Request) => {
             throw e;
           }
 
-          // STEP 5: Activate plan
-          console.log(`[V1] [${requestId}] Step 5/5: Activating plan...`, { activationMode, hasPlanId: !!workoutResult?.planId });
-          if (activationMode !== 'preview' && workoutResult?.planId) {
-            try {
-              console.log(`[V1] [${requestId}] Calling finalizeStoredWorkoutPlanActivation...`);
-              await finalizeStoredWorkoutPlanActivation(supabase, {
-                userId,
-                planId: workoutResult.planId,
-                activationMode,
-                currentPlanId: currentPlanContext?.planId || null,
-              });
-              console.log(`[V1] [${requestId}] Activation Success: TRUE, Plan ID:`, workoutResult.planId);
-            } catch (e: any) {
-              console.error(`[V1] [${requestId}] Activation Success: FALSE -`, e.message);
-              console.error(`[V1] [${requestId}] Activation error stack:`, e.stack);
-              warnings.push(`V1 activation warning: ${e.message}`);
-            }
-          } else {
-            console.log(`[V1] [${requestId}] Skipping activation:`, { activationMode, planId: workoutResult?.planId });
-          }
+	          console.log(`[V1] [${requestId}] Stored staged workout plan:`, { activationMode, planId: workoutResult?.planId });
           
           console.log(`[V1] [${requestId}] =============================================`);
 
@@ -2123,10 +2266,11 @@ serve(async (req: Request) => {
               }
             }
           }
-        }
-      }
+	        }
+	      }
+	      stagedWorkoutPlanId = workoutResult?.planId || null;
 
-      if (planType === "nutrition" || planType === "both") {
+	      if (planType === "nutrition" || planType === "both") {
         // Check if user has scientific nutrition preferences (proteins, carbs, fats)
         const hasScientificPreferences =
           nutritionContext.onboarding.preferred_proteins?.length > 0 &&
@@ -2225,10 +2369,31 @@ serve(async (req: Request) => {
           );
         }
 
-        warnings.push(...nutritionResult.warnings);
-      }
+	        warnings.push(...nutritionResult.warnings);
+	      }
+	      stagedNutritionPlanId = nutritionResult?.planId || null;
 
-      const consistencySeeded = await seedConsistency(supabase, userId);
+	      const requiresWorkoutPlan = planType === "workout" || planType === "both";
+	      const requiresNutritionPlan = planType === "nutrition" || planType === "both";
+	      if (requiresWorkoutPlan && !workoutResult?.planId) {
+	        throw new Error("Workout generation completed without a workout plan id.");
+	      }
+	      if (requiresNutritionPlan && !nutritionResult?.planId) {
+	        throw new Error("Nutrition generation completed without a nutrition plan id.");
+	      }
+
+	      if (activationMode === "activate" && !dryRun) {
+	        const { error: promotionError } = await supabase.rpc("promote_generated_plans", {
+	          p_user_id: userId,
+	          p_workout_plan_id: workoutResult?.planId || null,
+	          p_nutrition_plan_id: nutritionResult?.planId || null,
+	        });
+	        if (promotionError) {
+	          throw new Error(`Failed to atomically activate generated plans: ${promotionError.message}`);
+	        }
+	      }
+
+	      const consistencySeeded = await seedConsistency(supabase, userId);
 
       const durationMs = Date.now() - startedAt;
       const dedupedWarnings = Array.from(new Set(warnings));
@@ -2307,11 +2472,16 @@ serve(async (req: Request) => {
         new Set([
           ...warnings,
           ...(generationError instanceof StrictTemplateSelectionError ? generationError.warnings : []),
-          ...(generationError instanceof WorkoutGenerationValidationError ? (generationError as WorkoutGenerationValidationError).warnings : []),
-        ]),
-      );
+	          ...(generationError instanceof WorkoutGenerationValidationError ? (generationError as WorkoutGenerationValidationError).warnings : []),
+	        ]),
+	      );
 
-      if (generationError instanceof StrictTemplateSelectionError) {
+	      await Promise.allSettled([
+	        stagedWorkoutPlanId ? deleteWorkoutPlanTree(supabase, stagedWorkoutPlanId) : Promise.resolve(),
+	        stagedNutritionPlanId ? deleteNutritionPlanTree(supabase, stagedNutritionPlanId) : Promise.resolve(),
+	      ]);
+
+	      if (generationError instanceof StrictTemplateSelectionError) {
         await updateGenerationRunFailure(supabase, runId, {
           status: "validation_failed",
           validationErrors: [err.message],

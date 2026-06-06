@@ -48,7 +48,6 @@ import {
 } from "../helpers/scalars.ts";
 import {
   deleteWorkoutPlanTree,
-  finalizeStoredWorkoutPlanActivation,
   insertWorkoutPlanDayWithFallback,
   insertWorkoutPlanWithFallback,
   seedWorkoutScheduleFromLayout,
@@ -436,7 +435,7 @@ export async function storeWorkoutPlanFromTemplateV2(
     generation_run_id: runId,
     version,
     is_active: false,
-    lifecycle_state: config.activationMode === "preview" ? "preview" : "live",
+    lifecycle_state: "preview",
     replaces_plan_id: config.currentPlanContext?.planId || null,
     source_model: "v2_template",
     program_template_v2_id: template.id,
@@ -861,13 +860,6 @@ export async function storeWorkoutPlanFromTemplateV2(
   });
   warnings.push(...coherenceValidation.warnings);
 
-  await finalizeStoredWorkoutPlanActivation(supabase, {
-    userId,
-    planId,
-    activationMode: config.activationMode,
-    currentPlanId: config.currentPlanContext?.planId || null,
-  });
-
   const dedupedWarnings = Array.from(new Set(warnings));
 
   return {
@@ -914,7 +906,7 @@ export async function storeWorkoutPlan(
     generation_run_id: runId,
     version,
     is_active: false,
-    lifecycle_state: config.activationMode === "preview" ? "preview" : "live",
+    lifecycle_state: "preview",
     replaces_plan_id: config.currentPlanContext?.planId || null,
     source_model: "generated",
     program_template_v2_id: null,
@@ -1053,13 +1045,6 @@ export async function storeWorkoutPlan(
     goalTags: context.onboarding.goal_type ? [context.onboarding.goal_type] : [],
   });
   warnings.push(...coherenceValidation.warnings);
-
-  await finalizeStoredWorkoutPlanActivation(supabase, {
-    userId,
-    planId,
-    activationMode: config.activationMode,
-    currentPlanId: config.currentPlanContext?.planId || null,
-  });
 
   return {
     planId,

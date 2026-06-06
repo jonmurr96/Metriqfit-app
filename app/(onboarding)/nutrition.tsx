@@ -225,6 +225,8 @@ export default function NutritionScreen() {
     dietary_preference: !!data.dietary_preference,
     allergies_exclusions: data.allergies_exclusions.length > 0,
     preferred_proteins: data.preferred_proteins.length > 0,
+    preferred_carbs: data.preferred_carbs.length > 0,
+    preferred_fats: data.preferred_fats.length > 0,
     wake_time: !!data.wake_time,
     first_meal_delay: !!data.first_meal_delay,
     last_meal_before_bed: !!data.last_meal_before_bed,
@@ -240,6 +242,8 @@ export default function NutritionScreen() {
     data.first_meal_delay,
     data.last_meal_before_bed,
     data.meals_per_day,
+    data.preferred_carbs,
+    data.preferred_fats,
     data.preferred_proteins,
     data.training_time,
     data.wake_time,
@@ -258,6 +262,8 @@ export default function NutritionScreen() {
         dietary: data.dietary_preference,
         allergies: data.allergies_exclusions,
         proteins: data.preferred_proteins,
+        carbs: data.preferred_carbs,
+        fats: data.preferred_fats,
         wake: data.wake_time,
         firstMeal: data.first_meal_delay,
         lastMeal: data.last_meal_before_bed,
@@ -394,6 +400,8 @@ export default function NutritionScreen() {
           fiber_g: targets.fiber_g,
           water_ml: targets.water_ml,
           computation_method: targets.computation_method || 'mifflin_st_jeor_training_load_v2',
+          day_type_targets_json: targets.day_type_targets as unknown as Database['public']['Tables']['user_targets']['Insert']['day_type_targets_json'],
+          target_diagnostics_json: targets.target_diagnostics as unknown as Database['public']['Tables']['user_targets']['Insert']['target_diagnostics_json'],
         }, { onConflict: 'user_id' });
       if (targetsError) throw targetsError;
 
