@@ -34,17 +34,34 @@ export async function writeV3Plans(
   options: V3WriteOptions,
 ): Promise<V3WriteResult> {
   const warnings: string[] = [];
+  let workoutPlanId: string | null = null;
+  let nutritionPlanId: string | null = null;
 
-  if (options.activate) {
-    await archiveActiveV3Plans(supabase, userId);
+  try {
+    workoutPlanId = await writeV3WorkoutPlan(
+      supabase, userId, runId, spec, plan, warnings,
+    );
+    nutritionPlanId = await writeV3NutritionPlan(
+      supabase, userId, runId, spec, plan, warnings,
+    );
+
+    if (options.activate) {
+      const { error } = await supabase.rpc("promote_generated_plans", {
+        p_user_id: userId,
+        p_workout_plan_id: workoutPlanId,
+        p_nutrition_plan_id: nutritionPlanId,
+      });
+      if (error) {
+        throw new Error(`V3 promoteGeneratedPlans: ${error.message}`);
+      }
+    }
+  } catch (error) {
+    await Promise.allSettled([
+      workoutPlanId ? deleteV3WorkoutPlanTree(supabase, workoutPlanId) : Promise.resolve(),
+      nutritionPlanId ? deleteV3NutritionPlanTree(supabase, nutritionPlanId) : Promise.resolve(),
+    ]);
+    throw error;
   }
-
-  const workoutPlanId = await writeV3WorkoutPlan(
-    supabase, userId, runId, spec, plan, options.activate, warnings,
-  );
-  const nutritionPlanId = await writeV3NutritionPlan(
-    supabase, userId, runId, spec, plan, options.activate, warnings,
-  );
 
   return { workoutPlanId, nutritionPlanId, warnings };
 }
@@ -57,13 +74,13 @@ async function writeV3WorkoutPlan(
   runId: string,
   spec: PlanSpec,
   plan: Plan,
-  activate: boolean,
   warnings: string[],
 ): Promise<string> {
   const version = await nextVersion(supabase, "user_workout_plans", userId);
 
   const daysPerWeek = plan.workout_weeks[0]?.workout_days.length ?? 0;
   const totalWeeks = plan.workout_weeks.length;
+  let planId: string | null = null;
 
   const { data: planRow, error: planErr } = await supabase
     .from("user_workout_plans")
@@ -71,8 +88,8 @@ async function writeV3WorkoutPlan(
       user_id: userId,
       generation_run_id: runId,
       version,
-      is_active: activate,
-      lifecycle_state: activate ? "live" : "preview",
+      is_active: false,
+      lifecycle_state: "preview",
       source_model: "v3_deterministic",
       name: `MetriqFit V3 Plan v${version}`,
       description: "Deterministic V3 plan generated from your onboarding answers.",
@@ -89,56 +106,60 @@ async function writeV3WorkoutPlan(
   if (planErr || !planRow) {
     throw new Error(`V3 writeWorkoutPlan: ${planErr?.message ?? "insert returned no row"}`);
   }
-  const planId: string = planRow.id;
+  planId = planRow.id;
 
-  // Collect every exercise name in the plan and resolve to public.exercises ids in one shot.
-  const allExerciseIds = new Set<string>();
-  for (const w of plan.workout_weeks) {
-    for (const d of w.workout_days) {
-      for (const ex of d.exercises) allExerciseIds.add(ex.exercise_id);
-    }
-  }
-  const exerciseIdMap = await resolveExerciseIds(supabase, [...allExerciseIds]);
-
-  // Write each week × day × exercise.
-  for (const week of plan.workout_weeks) {
-    for (const day of week.workout_days) {
-      const dayNumber = (week.week_index - 1) * 7 + weekdayIndex(day.weekday) + 1;
-
-      const { data: dayRow, error: dayErr } = await supabase
-        .from("user_workout_plan_days")
-        .insert({
-          plan_id: planId,
-          day_number: dayNumber,
-          name: `Week ${week.week_index} ${day.weekday.toUpperCase()}`,
-          focus: day.focus,
-          day_type: "workout",
-          estimated_duration_min: day.estimated_minutes,
-        })
-        .select("id")
-        .single();
-      if (dayErr || !dayRow) {
-        warnings.push(`V3: failed to write workout_day W${week.week_index}/${day.weekday}: ${dayErr?.message}`);
-        continue;
-      }
-      const dayId: string = dayRow.id;
-
-      for (const ex of day.exercises) {
-        const resolved = exerciseIdMap.get(ex.exercise_id);
-        if (!resolved) {
-          throw new Error(`V3: exercise "${ex.exercise_name}" (${ex.exercise_id}) not in public.exercises`);
-        }
-        const { error: exErr } = await supabase
-          .from("user_workout_plan_exercises")
-          .insert(buildExerciseRow(dayId, resolved, ex));
-        if (exErr) {
-          warnings.push(`V3: failed to write exercise ${ex.exercise_name} W${week.week_index}/${day.weekday}: ${exErr.message}`);
-        }
+  try {
+    // Collect every exercise name in the plan and resolve to public.exercises ids in one shot.
+    const allExerciseIds = new Set<string>();
+    for (const w of plan.workout_weeks) {
+      for (const d of w.workout_days) {
+        for (const ex of d.exercises) allExerciseIds.add(ex.exercise_id);
       }
     }
+    const exerciseIdMap = await resolveExerciseIds(supabase, [...allExerciseIds]);
+
+    // Write each week × day × exercise.
+    for (const week of plan.workout_weeks) {
+      for (const day of week.workout_days) {
+        const dayNumber = (week.week_index - 1) * 7 + weekdayIndex(day.weekday) + 1;
+
+        const { data: dayRow, error: dayErr } = await supabase
+          .from("user_workout_plan_days")
+          .insert({
+            plan_id: planId,
+            day_number: dayNumber,
+            name: `Week ${week.week_index} ${day.weekday.toUpperCase()}`,
+            focus: day.focus,
+            day_type: "workout",
+            estimated_duration_min: day.estimated_minutes,
+          })
+          .select("id")
+          .single();
+        if (dayErr || !dayRow) {
+          throw new Error(`V3: failed to write workout_day W${week.week_index}/${day.weekday}: ${dayErr?.message ?? "insert returned no row"}`);
+        }
+        const dayId: string = dayRow.id;
+
+        for (const ex of day.exercises) {
+          const resolved = exerciseIdMap.get(ex.exercise_id);
+          if (!resolved) {
+            throw new Error(`V3: exercise "${ex.exercise_name}" (${ex.exercise_id}) not in public.exercises`);
+          }
+          const { error: exErr } = await supabase
+            .from("user_workout_plan_exercises")
+            .insert(buildExerciseRow(dayId, resolved, ex));
+          if (exErr) {
+            throw new Error(`V3: failed to write exercise ${ex.exercise_name} W${week.week_index}/${day.weekday}: ${exErr.message}`);
+          }
+        }
+      }
+    }
+  } catch (error) {
+    if (planId) await deleteV3WorkoutPlanTree(supabase, planId);
+    throw error;
   }
 
-  return planId;
+  return planId!;
 }
 
 function buildExerciseRow(dayId: string, exerciseDbId: string, ex: PlanExercise): Record<string, unknown> {
@@ -169,10 +190,10 @@ async function writeV3NutritionPlan(
   runId: string,
   spec: PlanSpec,
   plan: Plan,
-  activate: boolean,
   warnings: string[],
 ): Promise<string> {
   const version = await nextVersion(supabase, "user_nutrition_plans", userId);
+  let planId: string | null = null;
 
   const { data: planRow, error: planErr } = await supabase
     .from("user_nutrition_plans")
@@ -180,8 +201,8 @@ async function writeV3NutritionPlan(
       user_id: userId,
       generation_run_id: runId,
       version,
-      is_active: activate,
-      lifecycle_state: activate ? "live" : "preview",
+      is_active: false,
+      lifecycle_state: "preview",
       name: `MetriqFit V3 Nutrition v${version}`,
       description: "Deterministic V3 nutrition plan with carb cycling.",
       meal_structure: {
@@ -214,58 +235,62 @@ async function writeV3NutritionPlan(
   if (planErr || !planRow) {
     throw new Error(`V3 writeNutritionPlan: ${planErr?.message ?? "insert returned no row"}`);
   }
-  const planId: string = planRow.id;
+  planId = planRow.id;
 
-  // Resolve all food ids referenced in the plan in one shot.
-  const allFoodIds = new Set<string>();
-  for (const d of plan.nutrition_days) {
-    for (const m of d.meals) {
-      for (const it of m.items) allFoodIds.add(it.food_id);
-      for (const v of m.variants) for (const it of v.items) allFoodIds.add(it.food_id);
-    }
-  }
-  const foodIdMap = await resolveFoodIds(supabase, [...allFoodIds]);
-
-  for (const day of plan.nutrition_days) {
-    const dayOfWeek = weekdayIndex(day.weekday); // 0..6 to match existing data
-    for (const meal of day.meals) {
-      const { data: mealRow, error: mealErr } = await supabase
-        .from("user_nutrition_plan_meals")
-        .insert({
-          plan_id: planId,
-          day_of_week: dayOfWeek,
-          meal_slot: dbMealSlot(meal.slot),
-          name: `${meal.slot} (${day.is_training_day ? "training" : "rest"})`,
-          target_calories: meal.target_kcal,
-          target_protein: meal.target_protein_g,
-          target_carbs: meal.target_carb_g,
-          target_fat: meal.target_fat_g,
-        })
-        .select("id")
-        .single();
-      if (mealErr || !mealRow) {
-        warnings.push(`V3: failed to write meal ${day.weekday}/${meal.slot}: ${mealErr?.message}`);
-        continue;
-      }
-      const mealId: string = mealRow.id;
-
-      // Primary serving — stored as a "primary" variant since the schema has no
-      // separate user_nutrition_plan_meal_items table; all items live under
-      // user_nutrition_plan_meal_variant_items keyed by variant_id.
-      await writeVariant(supabase, mealId, "primary", "Primary serving", 0, meal.items, foodIdMap, warnings, day.weekday, meal.slot);
-
-      // Alternative variants.
-      for (const [vIdx, variant] of meal.variants.entries()) {
-        await writeVariant(
-          supabase, mealId, "alternative",
-          variant.name ?? `Alternative ${vIdx + 1}`,
-          vIdx + 1, variant.items, foodIdMap, warnings, day.weekday, meal.slot,
-        );
+  try {
+    // Resolve all food ids referenced in the plan in one shot.
+    const allFoodIds = new Set<string>();
+    for (const d of plan.nutrition_days) {
+      for (const m of d.meals) {
+        for (const it of m.items) allFoodIds.add(it.food_id);
+        for (const v of m.variants) for (const it of v.items) allFoodIds.add(it.food_id);
       }
     }
+    const foodIdMap = await resolveFoodIds(supabase, [...allFoodIds]);
+
+    for (const day of plan.nutrition_days) {
+      const dayOfWeek = weekdayIndex(day.weekday); // 0..6 to match existing data
+      for (const meal of day.meals) {
+        const { data: mealRow, error: mealErr } = await supabase
+          .from("user_nutrition_plan_meals")
+          .insert({
+            plan_id: planId,
+            day_of_week: dayOfWeek,
+            meal_slot: dbMealSlot(meal.slot),
+            name: `${meal.slot} (${day.is_training_day ? "training" : "rest"})`,
+            target_calories: meal.target_kcal,
+            target_protein: meal.target_protein_g,
+            target_carbs: meal.target_carb_g,
+            target_fat: meal.target_fat_g,
+          })
+          .select("id")
+          .single();
+        if (mealErr || !mealRow) {
+          throw new Error(`V3: failed to write meal ${day.weekday}/${meal.slot}: ${mealErr?.message ?? "insert returned no row"}`);
+        }
+        const mealId: string = mealRow.id;
+
+        // Primary serving — stored as a "primary" variant since the schema has no
+        // separate user_nutrition_plan_meal_items table; all items live under
+        // user_nutrition_plan_meal_variant_items keyed by variant_id.
+        await writeVariant(supabase, mealId, "primary", "Primary serving", 0, meal.items, foodIdMap, warnings, day.weekday, meal.slot);
+
+        // Alternative variants.
+        for (const [vIdx, variant] of meal.variants.entries()) {
+          await writeVariant(
+            supabase, mealId, "alternative",
+            variant.name ?? `Alternative ${vIdx + 1}`,
+            vIdx + 1, variant.items, foodIdMap, warnings, day.weekday, meal.slot,
+          );
+        }
+      }
+    }
+  } catch (error) {
+    if (planId) await deleteV3NutritionPlanTree(supabase, planId);
+    throw error;
   }
 
-  return planId;
+  return planId!;
 }
 
 function dbMealSlot(specSlot: string): string {
@@ -314,8 +339,7 @@ async function writeVariant(
     .select("id")
     .single();
   if (vErr || !variantRow) {
-    warnings.push(`V3: failed to write variant ${variantType}/${weekday}/${slot}: ${vErr?.message}`);
-    return;
+    throw new Error(`V3: failed to write variant ${variantType}/${weekday}/${slot}: ${vErr?.message ?? "insert returned no row"}`);
   }
 
   for (const [i, item] of items.entries()) {
@@ -337,7 +361,7 @@ async function writeVariant(
       order_index: i + 1,
     });
     if (error) {
-      warnings.push(`V3: failed to write item ${item.food_name} (${weekday}/${slot}): ${error.message}`);
+      throw new Error(`V3: failed to write item ${item.food_name} (${weekday}/${slot}): ${error.message}`);
     }
   }
 }
@@ -350,6 +374,26 @@ function weekdayIndex(w: string): number {
   return i < 0 ? 0 : i;
 }
 
+async function deleteV3WorkoutPlanTree(supabase: SupabaseClient, planId: string) {
+  const { error } = await supabase
+    .from("user_workout_plans")
+    .delete()
+    .eq("id", planId);
+  if (error) {
+    throw new Error(`Failed to discard staged V3 workout plan: ${error.message}`);
+  }
+}
+
+async function deleteV3NutritionPlanTree(supabase: SupabaseClient, planId: string) {
+  const { error } = await supabase
+    .from("user_nutrition_plans")
+    .delete()
+    .eq("id", planId);
+  if (error) {
+    throw new Error(`Failed to discard staged V3 nutrition plan: ${error.message}`);
+  }
+}
+
 async function nextVersion(supabase: SupabaseClient, table: string, userId: string): Promise<number> {
   const { data } = await supabase
     .from(table)
@@ -359,17 +403,6 @@ async function nextVersion(supabase: SupabaseClient, table: string, userId: stri
     .limit(1)
     .maybeSingle();
   return (data?.version ?? 0) + 1;
-}
-
-async function archiveActiveV3Plans(supabase: SupabaseClient, userId: string): Promise<void> {
-  await Promise.all([
-    supabase.from("user_workout_plans")
-      .update({ is_active: false, lifecycle_state: "archived" })
-      .eq("user_id", userId).eq("is_active", true),
-    supabase.from("user_nutrition_plans")
-      .update({ is_active: false, lifecycle_state: "archived" })
-      .eq("user_id", userId).eq("is_active", true),
-  ]);
 }
 
 async function resolveExerciseIds(

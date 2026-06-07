@@ -479,6 +479,10 @@ export type PlanGenerationRun = {
   spec_seed_hex?: string | null;
   generation_version?: number;
   planner_mode?: string | null;
+  ai_response?: any;
+  error_step?: string | null;
+  error_code?: string | null;
+  error_context?: any;
   created_at: string;
   completed_at: string | null;
   validation_errors?: any;
@@ -487,6 +491,10 @@ export type PlanGenerationRun = {
 
 function round1(n: number) {
   return Math.round(n * 10) / 10;
+}
+
+function sleep(ms: number) {
+  return new Promise<void>((resolve) => setTimeout(resolve, ms));
 }
 
 const MEAL_SLOT_SEQUENCE: NutritionMealSlot[] = ['breakfast', 'lunch', 'dinner', 'snack'];
@@ -1915,6 +1923,56 @@ export type UserWorkoutPlan = WorkoutPlan;
 export type UserWorkoutPlanDay = WorkoutPlanDay;
 export type UserNutritionPlan = NutritionPlan;
 
+type TriggerPlanGenerationResult = {
+  runId: string;
+  workoutPlanId?: string;
+  nutritionPlanId?: string;
+  warnings?: string[];
+  status?: string;
+};
+
+async function waitForGenerationRunTerminal(
+  userId: string,
+  runId: string,
+  options: { timeoutMs?: number; intervalMs?: number } = {},
+): Promise<PlanGenerationRun> {
+  const timeoutMs = options.timeoutMs ?? 180000;
+  const intervalMs = options.intervalMs ?? 2500;
+  const startedAt = Date.now();
+
+  while (Date.now() - startedAt < timeoutMs) {
+    const run = await getGenerationRun(userId, runId);
+    const status = run?.orchestration_status || run?.status;
+
+    if (status === 'success') {
+      return run!;
+    }
+
+    if (status === 'failed' || status === 'validation_failed' || status === 'cancelled') {
+      const validationErrors = Array.isArray(run?.validation_errors)
+        ? run?.validation_errors.filter(Boolean).join('\n')
+        : '';
+      const message = validationErrors
+        || run?.error_context?.message
+        || `Plan generation ${status.replace('_', ' ')}.`;
+      const err = new Error(message);
+      (err as any).step = run?.error_step || status;
+      (err as any).requestId = runId;
+      (err as any).errorCode = run?.error_code || status;
+      (err as any).details = run?.error_context || run?.diagnostics_json || null;
+      throw err;
+    }
+
+    await sleep(intervalMs);
+  }
+
+  const err = new Error('Your plan is still being generated. Tap Retry to resume this generation run.');
+  (err as any).step = 'v3_poll_timeout';
+  (err as any).requestId = runId;
+  (err as any).errorCode = 'generation_poll_timeout';
+  throw err;
+}
+
 /**
  * Trigger AI plan generation via Edge Function.
  */
@@ -1922,7 +1980,7 @@ export async function triggerPlanGeneration(
   userId: string,
   planType: 'workout' | 'nutrition' | 'both',
   options: PlanGenerationOptions = {},
-): Promise<{ runId: string; workoutPlanId?: string; nutritionPlanId?: string; warnings?: string[] }> {
+): Promise<TriggerPlanGenerationResult> {
   const shouldBypassRegenerationLimit = options.generation_mode === 'initial';
   const canRegenerate = shouldBypassRegenerationLimit ? true : await canRegeneratePlans(userId);
   if (!canRegenerate) {
@@ -2020,7 +2078,7 @@ export async function triggerPlanGeneration(
         body: {
           user_id: userId,
           plan_type: planType,
-          generation_version: options.generation_version || 'v2',
+          generation_version: options.generation_version || 'v3',
           correlation_id: correlationId,
           ...options,
         },
@@ -2112,15 +2170,34 @@ export async function triggerPlanGeneration(
 
       console.log(`[PlanService] [${correlationId}] Plan generation successful:`, {
         runId: data?.runId || data?.run_id,
+        status: data?.status,
         hasWorkoutPlan: !!data?.workoutPlanId,
         hasNutritionPlan: !!data?.nutritionPlanId,
       });
 
+      const runId = data?.runId || data?.run_id;
+      const responseStatus = data?.status;
+      if (
+        runId
+        && (responseStatus === 'queued' || responseStatus === 'running' || responseStatus === 'pending')
+      ) {
+        const completedRun = await waitForGenerationRunTerminal(userId, runId);
+        const aiResponse = completedRun.ai_response || {};
+        return {
+          runId,
+          workoutPlanId: aiResponse.workout_plan_id,
+          nutritionPlanId: aiResponse.nutrition_plan_id,
+          warnings: completedRun.warnings_json || [],
+          status: completedRun.orchestration_status || completedRun.status,
+        };
+      }
+
       return {
-        runId: data?.runId || data?.run_id,
+        runId,
         workoutPlanId: data?.workoutPlanId || data?.workout_plan_id,
         nutritionPlanId: data?.nutritionPlanId || data?.nutrition_plan_id,
         warnings: data?.warnings || [],
+        status: responseStatus,
       };
     } catch (err: any) {
       // If this is a 4xx or application-level error, don't retry — rethrow immediately.

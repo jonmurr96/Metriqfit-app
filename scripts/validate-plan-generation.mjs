@@ -38,6 +38,17 @@ const checks = [
     ],
   },
   {
+    name: 'V3 staged persistence contract',
+    command: 'deno',
+    args: [
+      'test',
+      'supabase/functions/generate-user-plans/db/v3-writers_test.ts',
+      '--no-check',
+      '--allow-read',
+      '--allow-env',
+    ],
+  },
+  {
     name: 'Edge Function type contract',
     command: 'deno',
     args: ['check', 'supabase/functions/generate-user-plans/index.ts'],

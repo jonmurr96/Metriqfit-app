@@ -501,7 +501,7 @@ export default function PlanGenerationScreen() {
       try {
         const startTime = Date.now();
         const result = await triggerPlanGeneration(user.id, 'both', {
-          generation_version: 'v2',
+          generation_version: 'v3',
           generation_mode: 'initial',
           generation_horizon_days: { workout: 14, nutrition: 7 },
           strict_days_match: true,

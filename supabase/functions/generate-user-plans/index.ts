@@ -143,7 +143,7 @@ import {
   deleteNutritionPlanTree,
   storeNutritionPlan,
 } from "./db/nutrition-writers.ts";
-import { updateGenerationRunFailure } from "./db/generation-runs.ts";
+import { updateGenerationRunFailure, updateGenerationRunStage } from "./db/generation-runs.ts";
 import {
   fetchCurrentNutritionPlanContext,
   fetchCurrentWorkoutPlanContext,
@@ -1188,6 +1188,121 @@ async function seedConsistency(supabase: SupabaseClient, userId: string) {
   return true;
 }
 
+type V3BackgroundRunParams = {
+  supabase: SupabaseClient;
+  userId: string;
+  runId: string;
+  activationMode: ActivationMode;
+  generationMode: GenerationMode;
+  requestId: string;
+  startedAt: number;
+};
+
+function scheduleBackgroundTask(task: Promise<unknown>) {
+  const waitUntil = (globalThis as any).EdgeRuntime?.waitUntil;
+  if (typeof waitUntil === "function") {
+    waitUntil(task);
+    return;
+  }
+  task.catch((error) => {
+    console.error("[generate-user-plans] Background task failed outside EdgeRuntime:", error);
+  });
+}
+
+async function processV3GenerationRun(params: V3BackgroundRunParams) {
+  const { supabase, userId, runId, activationMode, generationMode, requestId, startedAt } = params;
+
+  try {
+    const { data: existingRun } = await supabase
+      .from("plan_generation_runs")
+      .select("status, orchestration_status")
+      .eq("id", runId)
+      .maybeSingle();
+
+    if (
+      existingRun?.status === "success"
+      || existingRun?.orchestration_status === "success"
+      || existingRun?.orchestration_status === "failed"
+      || existingRun?.orchestration_status === "validation_failed"
+      || existingRun?.orchestration_status === "cancelled"
+    ) {
+      console.log(`[generate-user-plans] [${requestId}] V3 run ${runId} is already terminal; skipping background resume.`);
+      return;
+    }
+
+    await updateGenerationRunStage(supabase, runId, {
+      stage: "background_processing",
+      orchestrationStatus: "running",
+      details: { requestId, activation_mode: activationMode, generation_mode: generationMode },
+    });
+
+    const result = await runV3Pipeline(supabase, userId, new Date(), {
+      runId,
+      persist: true,
+      activate: activationMode === "activate",
+    });
+
+    if (!result.validation.passed) {
+      return;
+    }
+
+    const persistence = result.diagnostics.persistence;
+    if (!persistence?.workout_plan_id || !persistence?.nutrition_plan_id) {
+      throw new Error("V3 completed without both workout and nutrition plan ids.");
+    }
+
+    const consistencySeeded = activationMode === "activate"
+      ? await seedConsistency(supabase, userId)
+      : false;
+    const warnings = Array.from(new Set([
+      ...(persistence.warnings || []),
+      ...result.validation.violations
+        .filter((v) => v.severity === "warning")
+        .map((v) => `${v.check}:${v.field}`),
+    ]));
+
+    const { error: updateError } = await supabase
+      .from("plan_generation_runs")
+      .update({
+        duration_ms: Date.now() - startedAt,
+        ai_response: {
+          workout_plan_id: persistence.workout_plan_id,
+          nutrition_plan_id: persistence.nutrition_plan_id,
+          workout_schedule_count: result.plan.workout_days.length,
+          nutrition_variant_count: result.plan.nutrition_days.reduce(
+            (sum, day) => sum + day.meals.reduce((mealSum, meal) => mealSum + meal.variants.length, 0),
+            0,
+          ),
+          consistency_seeded: consistencySeeded,
+          activation_mode: activationMode,
+          generation_mode: generationMode,
+          generation_version: "v3",
+          spec_seed_hex: result.spec.seed,
+        },
+        warnings_json: warnings,
+        error_step: null,
+        error_code: null,
+        error_context: null,
+      })
+      .eq("id", runId);
+
+    if (updateError) {
+      console.error(`[generate-user-plans] [${requestId}] V3 final run metadata update failed after activation:`, updateError.message);
+    }
+  } catch (error) {
+    const err = error as Error;
+    console.error(`[generate-user-plans] [${requestId}] V3 background run failed:`, err);
+    await updateGenerationRunFailure(supabase, runId, {
+      status: "failed",
+      validationErrors: [err.message || "V3 background generation failed"],
+      warnings: [],
+      errorStep: "v3_background_processing",
+      errorCode: "v3_background_failed",
+      errorContext: { requestId, generation_version: "v3" },
+    });
+  }
+}
+
 serve(async (req: Request) => {
   // Generate request ID for correlation across frontend/backend/logs
   const incomingCorrelationId = normalizeCorrelationId(req.headers.get("X-Correlation-Id"));
@@ -1386,134 +1501,27 @@ serve(async (req: Request) => {
     const strictTemplateSource = typedBody.strict_template_source === true;
     const generationMode: GenerationMode = typedBody.generation_mode === "regenerate" ? "regenerate" : "initial";
     const activationMode: ActivationMode = typedBody.activation_mode === "preview" ? "preview" : "activate";
-    const requestedGenerationVersion = typedBody.generation_version || "v2";
-    const enableV3EdgePipeline = (Deno as any).env.get("ENABLE_V3_EDGE_PIPELINE") === "true";
-    // V3 currently performs a full spec-driven generation, validation, DB
-    // persistence, and response serialization inside a single Edge Function
-    // invocation. In production that path can exceed Supabase's compute
-    // limits for real onboarding payloads. Until V3 is split into smaller
-    // jobs, route V3 requests through the stable V2 hybrid generator so
-    // onboarding can complete reliably. This server-side guard also fixes
-    // already-installed clients that still send generation_version: "v3".
-    const generationVersion: "v1" | "v2" | "v3" = requestedGenerationVersion === "v3" && enableV3EdgePipeline
-      ? "v3"
-      : requestedGenerationVersion === "v1"
-        ? "v1"
-        : "v2";
+    const configuredGenerationEngine = String((Deno as any).env.get("PLAN_GENERATION_ENGINE") || "v3").toLowerCase();
+    const requestedGenerationVersion = typedBody.generation_version || (configuredGenerationEngine === "v2" ? "v2" : "v3");
+    const enableV3EdgePipeline = (Deno as any).env.get("ENABLE_V3_EDGE_PIPELINE") !== "false";
+    const generationVersion: "v1" | "v2" | "v3" = requestedGenerationVersion === "v1"
+      ? "v1"
+      : configuredGenerationEngine === "v2" || !enableV3EdgePipeline
+        ? "v2"
+        : requestedGenerationVersion === "v3"
+          ? "v3"
+          : "v2";
 
     // 🔍 BRANCH INTEGRITY: Log resolved generation branch so deployment drift is immediately visible
     console.log('[generate-user-plans] Branch decision:', {
-      requested_generation_version: typedBody.generation_version ?? '(not set - defaulting to v2)',
+      requested_generation_version: typedBody.generation_version ?? '(not set - defaulting by PLAN_GENERATION_ENGINE)',
+      configured_generation_engine: configuredGenerationEngine,
       resolved_generation_version: generationVersion,
       v3_edge_pipeline_enabled: enableV3EdgePipeline,
       v3_request_routed_to_stable_generator: requestedGenerationVersion === "v3" && generationVersion !== "v3",
       resolved_planner_mode: generationVersion === 'v1' ? 'deterministic' : (generationVersion === 'v3' ? 'deterministic_v3' : 'hybrid'),
       resolved_source_model: generationVersion === 'v1' ? 'v1_architect' : (generationVersion === 'v3' ? 'v3_deterministic' : 'v2_template'),
     });
-
-    // -------- V3 branch (Phase 1) --------
-    // Deterministic spec-driven path. Returns spec + plan in the response without
-    // touching V1/V2 DB rows. Existing users keep V1/V2 plans until Phase 5
-    // migration prompt regens them onto V3.
-    if (generationVersion === "v3") {
-      // Create a plan_generation_runs row so the V3 pipeline can persist its
-      // diagnostics + plan trees. Use baseClient (service role) because RLS
-      // would otherwise require auth.uid() to match and our Clerk-mapped JWT
-      // path runs through baseClient already at this point in the function.
-      let v3RunId: string;
-      try {
-        const { data: runRow, error: runErr } = await baseClient
-          .from("plan_generation_runs")
-          .insert({
-            user_id: userId,
-            plan_type: "both",
-            status: "pending",
-            planner_mode: "deterministic_v3",
-            generation_version: 3,
-            orchestration_status: "queued",
-            current_stage: "queued",
-            queued_at: new Date().toISOString(),
-            stage_updated_at: new Date().toISOString(),
-            stage_history_json: [{
-              stage: "queued",
-              orchestration_status: "queued",
-              at: new Date().toISOString(),
-              details: { trigger_source: "v3_pipeline" },
-            }],
-            input_context: {
-              generation_mode: generationMode,
-              activation_mode: activationMode,
-              trigger_source: "v3_pipeline",
-            },
-          })
-          .select("id")
-          .single();
-        if (runErr || !runRow) {
-          throw new Error(`plan_generation_runs insert: ${runErr?.message ?? "no row returned"}`);
-        }
-        v3RunId = runRow.id;
-      } catch (err: any) {
-        console.error(`[generate-user-plans] [${requestId}] V3 run-row create error:`, err);
-        return jsonResponse({
-          success: false,
-          error: 'V3 pipeline failed (run row)',
-          requestId,
-          step: 'v3_pipeline_run_row',
-          details: err?.message || String(err),
-        }, 500);
-      }
-
-      try {
-        const v3Result = await runV3Pipeline(baseClient, userId, new Date(), {
-          runId: v3RunId,
-          persist: true,
-          activate: activationMode === "activate",
-        });
-        if (!v3Result.validation.passed) {
-          return jsonResponse({
-            success: false,
-            status: "validation_failed",
-            requestId,
-            runId: v3RunId,
-            run_id: v3RunId,
-            step: "v3_validation",
-            error: "V3 plan validation failed; plans were not persisted.",
-            diagnostics: v3Result.diagnostics,
-          }, 422);
-        }
-        return jsonResponse({
-          success: true,
-          requestId,
-          runId: v3RunId,
-          step: 'v3_complete',
-          generation_version: 'v3',
-          spec: v3Result.spec,
-          plan: v3Result.plan,
-          diagnostics: v3Result.diagnostics,
-        });
-      } catch (err: any) {
-        console.error(`[generate-user-plans] [${requestId}] V3 pipeline error:`, err);
-        await updateGenerationRunFailure(baseClient, v3RunId, {
-          status: "failed",
-          validationErrors: [err?.message || String(err)],
-          warnings: [],
-          errorStep: "v3_pipeline",
-          errorCode: "v3_pipeline_failed",
-          errorContext: {
-            requestId,
-            generation_version: "v3",
-          },
-        });
-        return jsonResponse({
-          success: false,
-          error: 'V3 pipeline failed',
-          requestId,
-          runId: v3RunId,
-          step: 'v3_pipeline',
-          details: err?.message || String(err),
-        }, 500);
-      }
-    }
 
     const programFamilyPreference = typedBody.program_family_preference || null;
     const trainingStylePreferences = (typedBody.training_style_preferences || []).filter(Boolean);
@@ -1587,7 +1595,7 @@ serve(async (req: Request) => {
     if (!dryRun) {
       const { data: existingRun, error: existingRunError } = await baseClient
         .from("plan_generation_runs")
-        .select("id, status, ai_response, warnings_json, created_at")
+        .select("id, status, orchestration_status, current_stage, ai_response, warnings_json, created_at")
         .eq("user_id", userId)
         .eq("idempotency_key", idempotencyKey)
         .in("status", ["pending", "success"])
@@ -1615,6 +1623,26 @@ serve(async (req: Request) => {
           warnings: existingRun.warnings_json || [],
           idempotent_replay: true,
         });
+      } else if (existingRun?.status === "pending" && generationVersion === "v3") {
+        scheduleBackgroundTask(processV3GenerationRun({
+          supabase: baseClient,
+          userId,
+      runId: existingRun.id,
+      activationMode,
+      generationMode,
+      requestId,
+      startedAt: Date.now(),
+        }));
+        return jsonResponse({
+          success: true,
+          status: existingRun.orchestration_status || "queued",
+          requestId,
+          run_id: existingRun.id,
+          runId: existingRun.id,
+          current_stage: existingRun.current_stage || "queued",
+          generation_version: "v3",
+          idempotent_replay: true,
+        }, 202);
       } else if (existingRun?.status === "pending") {
         return jsonResponse({
           success: false,
@@ -1627,6 +1655,124 @@ serve(async (req: Request) => {
           step: "idempotency",
         }, 409);
       }
+    }
+
+    if (generationVersion === "v3") {
+      if (planType !== "both") {
+        return jsonResponse({
+          success: false,
+          error: "V3 generation currently supports workout + nutrition together only.",
+          error_code: "v3_plan_type_unsupported",
+          requestId,
+          step: "v3_validation",
+          details: { plan_type: planType, supported_plan_type: "both" },
+        }, 400);
+      }
+
+      let v3RunId: string;
+      try {
+        const nowIso = new Date().toISOString();
+        const { data: runRow, error: runErr } = await baseClient
+          .from("plan_generation_runs")
+          .insert({
+            user_id: userId,
+            plan_type: "both",
+            status: "pending",
+            planner_mode: "deterministic_v3",
+            generation_version: 3,
+            idempotency_key: idempotencyKey,
+            correlation_id: requestCorrelationId,
+            orchestration_status: "queued",
+            current_stage: "queued",
+            queued_at: nowIso,
+            stage_updated_at: nowIso,
+            stage_history_json: [{
+              stage: "queued",
+              orchestration_status: "queued",
+              at: nowIso,
+              details: {
+                trigger_source: generationMode === "regenerate" ? "my_plan_regenerate" : "system_generate",
+                activation_mode: activationMode,
+              },
+            }],
+            input_context: {
+              generation_mode: generationMode,
+              activation_mode: activationMode,
+              trigger_source: generationMode === "regenerate" ? "my_plan_regenerate" : "system_generate",
+              workout_horizon_days: workoutHorizon,
+              nutrition_horizon_days: nutritionHorizon,
+              macro_tolerance_percent: macroTolerancePercent,
+              generation_version: "v3",
+            },
+          })
+          .select("id")
+          .single();
+        if (runErr || !runRow) {
+          throw new Error(`plan_generation_runs insert: ${runErr?.message ?? "no row returned"}`);
+        }
+        v3RunId = runRow.id;
+      } catch (err: any) {
+        if ((err as any)?.code === "23505") {
+          const { data: existingRun } = await baseClient
+            .from("plan_generation_runs")
+            .select("id, status, orchestration_status, current_stage")
+            .eq("user_id", userId)
+            .eq("idempotency_key", idempotencyKey)
+            .in("status", ["pending", "success"])
+            .order("created_at", { ascending: false })
+            .limit(1)
+            .maybeSingle();
+          if (existingRun?.id) {
+            scheduleBackgroundTask(processV3GenerationRun({
+              supabase: baseClient,
+              userId,
+              runId: existingRun.id,
+              activationMode,
+              generationMode,
+              requestId,
+              startedAt: Date.now(),
+            }));
+            return jsonResponse({
+              success: true,
+              status: existingRun.orchestration_status || existingRun.status || "queued",
+              requestId,
+              run_id: existingRun.id,
+              runId: existingRun.id,
+              current_stage: existingRun.current_stage || "queued",
+              generation_version: "v3",
+              idempotent_replay: true,
+            }, 202);
+          }
+        }
+        console.error(`[generate-user-plans] [${requestId}] V3 run-row create error:`, err);
+        return jsonResponse({
+          success: false,
+          error: 'V3 pipeline failed (run row)',
+          requestId,
+          step: 'v3_pipeline_run_row',
+          details: err?.message || String(err),
+        }, 500);
+      }
+
+      scheduleBackgroundTask(processV3GenerationRun({
+        supabase: baseClient,
+        userId,
+        runId: v3RunId,
+        activationMode,
+        generationMode,
+        requestId,
+        startedAt: Date.now(),
+      }));
+
+      return jsonResponse({
+        success: true,
+        status: "queued",
+        requestId,
+        run_id: v3RunId,
+        runId: v3RunId,
+        current_stage: "queued",
+        generation_version: "v3",
+      }, 202);
     }
 
     // Wrap Supabase client for dry run if requested
