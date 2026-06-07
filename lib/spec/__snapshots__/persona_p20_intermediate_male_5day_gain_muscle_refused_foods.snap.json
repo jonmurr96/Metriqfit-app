@@ -1482,13 +1482,13 @@
               {
                 "items": [
                   {
-                    "carb_g": 5.6,
-                    "fat_g": 16.1,
-                    "food_id": "f_tofu",
-                    "food_name": "Firm Tofu",
-                    "grams": 185,
-                    "kcal": 266,
-                    "protein_g": 32
+                    "carb_g": 126,
+                    "fat_g": 13.1,
+                    "food_id": "f_oats",
+                    "food_name": "Rolled Oats",
+                    "grams": 190,
+                    "kcal": 739,
+                    "protein_g": 32.1
                   },
                   {
                     "carb_g": 109.4,
@@ -1500,13 +1500,13 @@
                     "protein_g": 27.9
                   },
                   {
-                    "carb_g": 3.9,
+                    "carb_g": 0,
                     "fat_g": 9,
-                    "food_id": "f_almonds",
-                    "food_name": "Almonds",
-                    "grams": 18,
-                    "kcal": 104,
-                    "protein_g": 3.8
+                    "food_id": "f_olive_oil",
+                    "food_name": "Olive Oil",
+                    "grams": 9,
+                    "kcal": 80,
+                    "protein_g": 0
                   },
                   {
                     "carb_g": 7.2,
@@ -1609,46 +1609,6 @@
               {
                 "items": [
                   {
-                    "carb_g": 5.6,
-                    "fat_g": 16.1,
-                    "food_id": "f_tofu",
-                    "food_name": "Firm Tofu",
-                    "grams": 185,
-                    "kcal": 266,
-                    "protein_g": 32
-                  },
-                  {
-                    "carb_g": 99.5,
-                    "fat_g": 10.4,
-                    "food_id": "f_oats",
-                    "food_name": "Rolled Oats",
-                    "grams": 150,
-                    "kcal": 584,
-                    "protein_g": 25.4
-                  },
-                  {
-                    "carb_g": 14.7,
-                    "fat_g": 33.9,
-                    "food_id": "f_almonds",
-                    "food_name": "Almonds",
-                    "grams": 68,
-                    "kcal": 394,
-                    "protein_g": 14.4
-                  },
-                  {
-                    "carb_g": 7.2,
-                    "fat_g": 0.4,
-                    "food_id": "f_broccoli",
-                    "food_name": "Broccoli",
-                    "grams": 100,
-                    "kcal": 35,
-                    "protein_g": 2.4
-                  }
-                ]
-              },
-              {
-                "items": [
-                  {
                     "carb_g": 126,
                     "fat_g": 13.1,
                     "food_id": "f_oats",
@@ -1674,6 +1634,46 @@
                     "grams": 34,
                     "kcal": 301,
                     "protein_g": 0
+                  },
+                  {
+                    "carb_g": 7.2,
+                    "fat_g": 0.4,
+                    "food_id": "f_broccoli",
+                    "food_name": "Broccoli",
+                    "grams": 100,
+                    "kcal": 35,
+                    "protein_g": 2.4
+                  }
+                ]
+              },
+              {
+                "items": [
+                  {
+                    "carb_g": 11.2,
+                    "fat_g": 1.2,
+                    "food_id": "f_yogurt",
+                    "food_name": "Greek Yogurt 0%",
+                    "grams": 310,
+                    "kcal": 183,
+                    "protein_g": 31.9
+                  },
+                  {
+                    "carb_g": 99.5,
+                    "fat_g": 10.4,
+                    "food_id": "f_oats",
+                    "food_name": "Rolled Oats",
+                    "grams": 150,
+                    "kcal": 584,
+                    "protein_g": 25.4
+                  },
+                  {
+                    "carb_g": 14.7,
+                    "fat_g": 33.9,
+                    "food_id": "f_almonds",
+                    "food_name": "Almonds",
+                    "grams": 68,
+                    "kcal": 394,
+                    "protein_g": 14.4
                   },
                   {
                     "carb_g": 7.2,
@@ -1745,46 +1745,6 @@
             "target_kcal": 803,
             "target_protein_g": 40,
             "variants": [
-              {
-                "items": [
-                  {
-                    "carb_g": 6.9,
-                    "fat_g": 20,
-                    "food_id": "f_tofu",
-                    "food_name": "Firm Tofu",
-                    "grams": 230,
-                    "kcal": 331,
-                    "protein_g": 39.8
-                  },
-                  {
-                    "carb_g": 89.5,
-                    "fat_g": 9.3,
-                    "food_id": "f_oats",
-                    "food_name": "Rolled Oats",
-                    "grams": 135,
-                    "kcal": 525,
-                    "protein_g": 22.8
-                  },
-                  {
-                    "carb_g": 13.8,
-                    "fat_g": 31.9,
-                    "food_id": "f_almonds",
-                    "food_name": "Almonds",
-                    "grams": 64,
-                    "kcal": 371,
-                    "protein_g": 13.6
-                  },
-                  {
-                    "carb_g": 7.2,
-                    "fat_g": 0.4,
-                    "food_id": "f_broccoli",
-                    "food_name": "Broccoli",
-                    "grams": 100,
-                    "kcal": 35,
-                    "protein_g": 2.4
-                  }
-                ]
-              },
               {
                 "items": [
                   {
@@ -1864,19 +1824,59 @@
                     "protein_g": 2.4
                   }
                 ]
+              },
+              {
+                "items": [
+                  {
+                    "carb_g": 41,
+                    "fat_g": 94.8,
+                    "food_id": "f_almonds",
+                    "food_name": "Almonds",
+                    "grams": 190,
+                    "kcal": 1100,
+                    "protein_g": 40.3
+                  },
+                  {
+                    "carb_g": 89.5,
+                    "fat_g": 9.3,
+                    "food_id": "f_oats",
+                    "food_name": "Rolled Oats",
+                    "grams": 135,
+                    "kcal": 525,
+                    "protein_g": 22.8
+                  },
+                  {
+                    "carb_g": 6.7,
+                    "fat_g": 31.9,
+                    "food_id": "f_walnuts",
+                    "food_name": "Walnuts",
+                    "grams": 49,
+                    "kcal": 320,
+                    "protein_g": 7.4
+                  },
+                  {
+                    "carb_g": 7.2,
+                    "fat_g": 0.4,
+                    "food_id": "f_broccoli",
+                    "food_name": "Broccoli",
+                    "grams": 100,
+                    "kcal": 35,
+                    "protein_g": 2.4
+                  }
+                ]
               }
             ]
           },
           {
             "items": [
               {
-                "carb_g": 7.5,
-                "fat_g": 21.8,
-                "food_id": "f_tofu",
-                "food_name": "Firm Tofu",
-                "grams": 250,
-                "kcal": 360,
-                "protein_g": 43.3
+                "carb_g": 169.1,
+                "fat_g": 17.6,
+                "food_id": "f_oats",
+                "food_name": "Rolled Oats",
+                "grams": 255,
+                "kcal": 992,
+                "protein_g": 43.1
               },
               {
                 "carb_g": 126,
@@ -1888,13 +1888,13 @@
                 "protein_g": 32.1
               },
               {
-                "carb_g": 14.7,
-                "fat_g": 33.9,
-                "food_id": "f_almonds",
-                "food_name": "Almonds",
-                "grams": 68,
-                "kcal": 394,
-                "protein_g": 14.4
+                "carb_g": 0,
+                "fat_g": 34,
+                "food_id": "f_olive_oil",
+                "food_name": "Olive Oil",
+                "grams": 34,
+                "kcal": 301,
+                "protein_g": 0
               },
               {
                 "carb_g": 7.2,
@@ -1912,46 +1912,6 @@
             "target_kcal": 986,
             "target_protein_g": 43,
             "variants": [
-              {
-                "items": [
-                  {
-                    "carb_g": 169.1,
-                    "fat_g": 17.6,
-                    "food_id": "f_oats",
-                    "food_name": "Rolled Oats",
-                    "grams": 255,
-                    "kcal": 992,
-                    "protein_g": 43.1
-                  },
-                  {
-                    "carb_g": 126,
-                    "fat_g": 13.1,
-                    "food_id": "f_oats",
-                    "food_name": "Rolled Oats",
-                    "grams": 190,
-                    "kcal": 739,
-                    "protein_g": 32.1
-                  },
-                  {
-                    "carb_g": 0,
-                    "fat_g": 34,
-                    "food_id": "f_olive_oil",
-                    "food_name": "Olive Oil",
-                    "grams": 34,
-                    "kcal": 301,
-                    "protein_g": 0
-                  },
-                  {
-                    "carb_g": 7.2,
-                    "fat_g": 0.4,
-                    "food_id": "f_broccoli",
-                    "food_name": "Broccoli",
-                    "grams": 100,
-                    "kcal": 35,
-                    "protein_g": 2.4
-                  }
-                ]
-              },
               {
                 "items": [
                   {
@@ -2031,19 +1991,59 @@
                     "protein_g": 2.4
                   }
                 ]
+              },
+              {
+                "items": [
+                  {
+                    "carb_g": 3.6,
+                    "fat_g": 36.3,
+                    "food_id": "f_eggs",
+                    "food_name": "Eggs",
+                    "grams": 330,
+                    "kcal": 512,
+                    "protein_g": 42.9
+                  },
+                  {
+                    "carb_g": 125.5,
+                    "fat_g": 1.3,
+                    "food_id": "f_rice",
+                    "food_name": "Jasmine Rice",
+                    "grams": 445,
+                    "kcal": 579,
+                    "protein_g": 12
+                  },
+                  {
+                    "carb_g": 7.1,
+                    "fat_g": 33.9,
+                    "food_id": "f_walnuts",
+                    "food_name": "Walnuts",
+                    "grams": 52,
+                    "kcal": 340,
+                    "protein_g": 7.9
+                  },
+                  {
+                    "carb_g": 7.2,
+                    "fat_g": 0.4,
+                    "food_id": "f_broccoli",
+                    "food_name": "Broccoli",
+                    "grams": 100,
+                    "kcal": 35,
+                    "protein_g": 2.4
+                  }
+                ]
               }
             ]
           },
           {
             "items": [
               {
-                "carb_g": 49.7,
-                "fat_g": 5.2,
-                "food_id": "f_oats",
-                "food_name": "Rolled Oats",
-                "grams": 75,
-                "kcal": 292,
-                "protein_g": 12.7
+                "carb_g": 4.5,
+                "fat_g": 0.5,
+                "food_id": "f_yogurt",
+                "food_name": "Greek Yogurt 0%",
+                "grams": 125,
+                "kcal": 74,
+                "protein_g": 12.9
               },
               {
                 "carb_g": 76.2,
@@ -2055,13 +2055,13 @@
                 "protein_g": 19.4
               },
               {
-                "carb_g": 0,
+                "carb_g": 2.2,
                 "fat_g": 5,
-                "food_id": "f_olive_oil",
-                "food_name": "Olive Oil",
-                "grams": 5,
-                "kcal": 44,
-                "protein_g": 0
+                "food_id": "f_almonds",
+                "food_name": "Almonds",
+                "grams": 10,
+                "kcal": 58,
+                "protein_g": 2.1
               },
               {
                 "carb_g": 7.2,
@@ -2079,46 +2079,6 @@
             "target_kcal": 365,
             "target_protein_g": 13,
             "variants": [
-              {
-                "items": [
-                  {
-                    "carb_g": 4.5,
-                    "fat_g": 0.5,
-                    "food_id": "f_yogurt",
-                    "food_name": "Greek Yogurt 0%",
-                    "grams": 125,
-                    "kcal": 74,
-                    "protein_g": 12.9
-                  },
-                  {
-                    "carb_g": 76.2,
-                    "fat_g": 7.9,
-                    "food_id": "f_oats",
-                    "food_name": "Rolled Oats",
-                    "grams": 115,
-                    "kcal": 447,
-                    "protein_g": 19.4
-                  },
-                  {
-                    "carb_g": 2.2,
-                    "fat_g": 5,
-                    "food_id": "f_almonds",
-                    "food_name": "Almonds",
-                    "grams": 10,
-                    "kcal": 58,
-                    "protein_g": 2.1
-                  },
-                  {
-                    "carb_g": 7.2,
-                    "fat_g": 0.4,
-                    "food_id": "f_broccoli",
-                    "food_name": "Broccoli",
-                    "grams": 100,
-                    "kcal": 35,
-                    "protein_g": 2.4
-                  }
-                ]
-              },
               {
                 "items": [
                   {
@@ -2198,19 +2158,59 @@
                     "protein_g": 2.4
                   }
                 ]
+              },
+              {
+                "items": [
+                  {
+                    "carb_g": 13,
+                    "fat_g": 29.9,
+                    "food_id": "f_almonds",
+                    "food_name": "Almonds",
+                    "grams": 60,
+                    "kcal": 347,
+                    "protein_g": 12.7
+                  },
+                  {
+                    "carb_g": 74.7,
+                    "fat_g": 0.8,
+                    "food_id": "f_rice",
+                    "food_name": "Jasmine Rice",
+                    "grams": 265,
+                    "kcal": 345,
+                    "protein_g": 7.2
+                  },
+                  {
+                    "carb_g": 0,
+                    "fat_g": 5,
+                    "food_id": "f_olive_oil",
+                    "food_name": "Olive Oil",
+                    "grams": 5,
+                    "kcal": 44,
+                    "protein_g": 0
+                  },
+                  {
+                    "carb_g": 7.2,
+                    "fat_g": 0.4,
+                    "food_id": "f_broccoli",
+                    "food_name": "Broccoli",
+                    "grams": 100,
+                    "kcal": 35,
+                    "protein_g": 2.4
+                  }
+                ]
               }
             ]
           },
           {
             "items": [
               {
-                "carb_g": 11.2,
-                "fat_g": 1.2,
-                "food_id": "f_yogurt",
-                "food_name": "Greek Yogurt 0%",
-                "grams": 310,
-                "kcal": 183,
-                "protein_g": 31.9
+                "carb_g": 32.4,
+                "fat_g": 74.9,
+                "food_id": "f_almonds",
+                "food_name": "Almonds",
+                "grams": 150,
+                "kcal": 869,
+                "protein_g": 31.8
               },
               {
                 "carb_g": 109.4,
@@ -2222,13 +2222,13 @@
                 "protein_g": 27.9
               },
               {
-                "carb_g": 3.9,
-                "fat_g": 9,
-                "food_id": "f_almonds",
-                "food_name": "Almonds",
-                "grams": 18,
-                "kcal": 104,
-                "protein_g": 3.8
+                "carb_g": 1.9,
+                "fat_g": 9.1,
+                "food_id": "f_walnuts",
+                "food_name": "Walnuts",
+                "grams": 14,
+                "kcal": 92,
+                "protein_g": 2.1
               },
               {
                 "carb_g": 7.2,
@@ -2246,46 +2246,6 @@
             "target_kcal": 584,
             "target_protein_g": 32,
             "variants": [
-              {
-                "items": [
-                  {
-                    "carb_g": 32.4,
-                    "fat_g": 74.9,
-                    "food_id": "f_almonds",
-                    "food_name": "Almonds",
-                    "grams": 150,
-                    "kcal": 869,
-                    "protein_g": 31.8
-                  },
-                  {
-                    "carb_g": 109.4,
-                    "fat_g": 11.4,
-                    "food_id": "f_oats",
-                    "food_name": "Rolled Oats",
-                    "grams": 165,
-                    "kcal": 642,
-                    "protein_g": 27.9
-                  },
-                  {
-                    "carb_g": 1.9,
-                    "fat_g": 9.1,
-                    "food_id": "f_walnuts",
-                    "food_name": "Walnuts",
-                    "grams": 14,
-                    "kcal": 92,
-                    "protein_g": 2.1
-                  },
-                  {
-                    "carb_g": 7.2,
-                    "fat_g": 0.4,
-                    "food_id": "f_broccoli",
-                    "food_name": "Broccoli",
-                    "grams": 100,
-                    "kcal": 35,
-                    "protein_g": 2.4
-                  }
-                ]
-              },
               {
                 "items": [
                   {
@@ -2365,28 +2325,68 @@
                     "protein_g": 2.4
                   }
                 ]
+              },
+              {
+                "items": [
+                  {
+                    "carb_g": 28.8,
+                    "fat_g": 136.9,
+                    "food_id": "f_walnuts",
+                    "food_name": "Walnuts",
+                    "grams": 210,
+                    "kcal": 1373,
+                    "protein_g": 31.9
+                  },
+                  {
+                    "carb_g": 110,
+                    "fat_g": 1.2,
+                    "food_id": "f_rice",
+                    "food_name": "Jasmine Rice",
+                    "grams": 390,
+                    "kcal": 507,
+                    "protein_g": 10.5
+                  },
+                  {
+                    "carb_g": 3.9,
+                    "fat_g": 9,
+                    "food_id": "f_almonds",
+                    "food_name": "Almonds",
+                    "grams": 18,
+                    "kcal": 104,
+                    "protein_g": 3.8
+                  },
+                  {
+                    "carb_g": 7.2,
+                    "fat_g": 0.4,
+                    "food_id": "f_broccoli",
+                    "food_name": "Broccoli",
+                    "grams": 100,
+                    "kcal": 35,
+                    "protein_g": 2.4
+                  }
+                ]
               }
             ]
           },
           {
             "items": [
               {
-                "carb_g": 32.4,
-                "fat_g": 74.9,
-                "food_id": "f_almonds",
-                "food_name": "Almonds",
-                "grams": 150,
-                "kcal": 869,
-                "protein_g": 31.8
+                "carb_g": 2.7,
+                "fat_g": 27,
+                "food_id": "f_eggs",
+                "food_name": "Eggs",
+                "grams": 245,
+                "kcal": 380,
+                "protein_g": 31.9
               },
               {
-                "carb_g": 99.5,
-                "fat_g": 10.4,
-                "food_id": "f_oats",
-                "food_name": "Rolled Oats",
-                "grams": 150,
-                "kcal": 584,
-                "protein_g": 25.4
+                "carb_g": 100.1,
+                "fat_g": 1.1,
+                "food_id": "f_rice",
+                "food_name": "Jasmine Rice",
+                "grams": 355,
+                "kcal": 462,
+                "protein_g": 9.6
               },
               {
                 "carb_g": 7.1,
@@ -2413,46 +2413,6 @@
             "target_kcal": 913,
             "target_protein_g": 32,
             "variants": [
-              {
-                "items": [
-                  {
-                    "carb_g": 2.7,
-                    "fat_g": 27,
-                    "food_id": "f_eggs",
-                    "food_name": "Eggs",
-                    "grams": 245,
-                    "kcal": 380,
-                    "protein_g": 31.9
-                  },
-                  {
-                    "carb_g": 100.1,
-                    "fat_g": 1.1,
-                    "food_id": "f_rice",
-                    "food_name": "Jasmine Rice",
-                    "grams": 355,
-                    "kcal": 462,
-                    "protein_g": 9.6
-                  },
-                  {
-                    "carb_g": 7.1,
-                    "fat_g": 33.9,
-                    "food_id": "f_walnuts",
-                    "food_name": "Walnuts",
-                    "grams": 52,
-                    "kcal": 340,
-                    "protein_g": 7.9
-                  },
-                  {
-                    "carb_g": 7.2,
-                    "fat_g": 0.4,
-                    "food_id": "f_broccoli",
-                    "food_name": "Broccoli",
-                    "grams": 100,
-                    "kcal": 35,
-                    "protein_g": 2.4
-                  }
-                ]
-              },
               {
                 "items": [
                   {
@@ -2532,15 +2492,55 @@
                     "protein_g": 2.4
                   }
                 ]
+              },
+              {
+                "items": [
+                  {
+                    "carb_g": 28.8,
+                    "fat_g": 136.9,
+                    "food_id": "f_walnuts",
+                    "food_name": "Walnuts",
+                    "grams": 210,
+                    "kcal": 1373,
+                    "protein_g": 31.9
+                  },
+                  {
+                    "carb_g": 100.1,
+                    "fat_g": 1.1,
+                    "food_id": "f_rice",
+                    "food_name": "Jasmine Rice",
+                    "grams": 355,
+                    "kcal": 462,
+                    "protein_g": 9.6
+                  },
+                  {
+                    "carb_g": 0,
+                    "fat_g": 34,
+                    "food_id": "f_olive_oil",
+                    "food_name": "Olive Oil",
+                    "grams": 34,
+                    "kcal": 301,
+                    "protein_g": 0
+                  },
+                  {
+                    "carb_g": 7.2,
+                    "fat_g": 0.4,
+                    "food_id": "f_broccoli",
+                    "food_name": "Broccoli",
+                    "grams": 100,
+                    "kcal": 35,
+                    "protein_g": 2.4
+                  }
+                ]
               }
             ]
           }
         ],
         "totals": {
-          "carb_g": 758.8,
-          "fat_g": 272.7,
-          "kcal": 6534,
-          "protein_g": 332.9
+          "carb_g": 852.8000000000002,
+          "fat_g": 280.5,
+          "kcal": 6932,
+          "protein_g": 303.1
         },
         "weekday": "wed"
       },
@@ -3253,12 +3253,12 @@
           {
             "items": [
               {
-                "carb_g": 3.4,
-                "fat_g": 34.1,
-                "food_id": "f_eggs",
-                "food_name": "Eggs",
-                "grams": 310,
-                "kcal": 481,
+                "carb_g": 41,
+                "fat_g": 94.8,
+                "food_id": "f_almonds",
+                "food_name": "Almonds",
+                "grams": 190,
+                "kcal": 1100,
                 "protein_g": 40.3
               },
               {
@@ -3271,13 +3271,13 @@
                 "protein_g": 8.6
               },
               {
-                "carb_g": 6.7,
-                "fat_g": 31.9,
-                "food_id": "f_walnuts",
-                "food_name": "Walnuts",
-                "grams": 49,
-                "kcal": 320,
-                "protein_g": 7.4
+                "carb_g": 0,
+                "fat_g": 32,
+                "food_id": "f_olive_oil",
+                "food_name": "Olive Oil",
+                "grams": 32,
+                "kcal": 283,
+                "protein_g": 0
               },
               {
                 "carb_g": 7.2,
@@ -3295,46 +3295,6 @@
             "target_kcal": 803,
             "target_protein_g": 40,
             "variants": [
-              {
-                "items": [
-                  {
-                    "carb_g": 41,
-                    "fat_g": 94.8,
-                    "food_id": "f_almonds",
-                    "food_name": "Almonds",
-                    "grams": 190,
-                    "kcal": 1100,
-                    "protein_g": 40.3
-                  },
-                  {
-                    "carb_g": 90.2,
-                    "fat_g": 1,
-                    "food_id": "f_rice",
-                    "food_name": "Jasmine Rice",
-                    "grams": 320,
-                    "kcal": 416,
-                    "protein_g": 8.6
-                  },
-                  {
-                    "carb_g": 0,
-                    "fat_g": 32,
-                    "food_id": "f_olive_oil",
-                    "food_name": "Olive Oil",
-                    "grams": 32,
-                    "kcal": 283,
-                    "protein_g": 0
-                  },
-                  {
-                    "carb_g": 7.2,
-                    "fat_g": 0.4,
-                    "food_id": "f_broccoli",
-                    "food_name": "Broccoli",
-                    "grams": 100,
-                    "kcal": 35,
-                    "protein_g": 2.4
-                  }
-                ]
-              },
               {
                 "items": [
                   {
@@ -3414,19 +3374,59 @@
                     "protein_g": 2.4
                   }
                 ]
+              },
+              {
+                "items": [
+                  {
+                    "carb_g": 3.4,
+                    "fat_g": 34.1,
+                    "food_id": "f_eggs",
+                    "food_name": "Eggs",
+                    "grams": 310,
+                    "kcal": 481,
+                    "protein_g": 40.3
+                  },
+                  {
+                    "carb_g": 89.5,
+                    "fat_g": 9.3,
+                    "food_id": "f_oats",
+                    "food_name": "Rolled Oats",
+                    "grams": 135,
+                    "kcal": 525,
+                    "protein_g": 22.8
+                  },
+                  {
+                    "carb_g": 6.7,
+                    "fat_g": 31.9,
+                    "food_id": "f_walnuts",
+                    "food_name": "Walnuts",
+                    "grams": 49,
+                    "kcal": 320,
+                    "protein_g": 7.4
+                  },
+                  {
+                    "carb_g": 7.2,
+                    "fat_g": 0.4,
+                    "food_id": "f_broccoli",
+                    "food_name": "Broccoli",
+                    "grams": 100,
+                    "kcal": 35,
+                    "protein_g": 2.4
+                  }
+                ]
               }
             ]
           },
           {
             "items": [
               {
-                "carb_g": 44.3,
-                "fat_g": 102.3,
-                "food_id": "f_almonds",
-                "food_name": "Almonds",
-                "grams": 205,
-                "kcal": 1187,
-                "protein_g": 43.5
+                "carb_g": 39,
+                "fat_g": 185.8,
+                "food_id": "f_walnuts",
+                "food_name": "Walnuts",
+                "grams": 285,
+                "kcal": 1864,
+                "protein_g": 43.3
               },
               {
                 "carb_g": 125.5,
@@ -3438,13 +3438,13 @@
                 "protein_g": 12
               },
               {
-                "carb_g": 0,
-                "fat_g": 34,
-                "food_id": "f_olive_oil",
-                "food_name": "Olive Oil",
-                "grams": 34,
-                "kcal": 301,
-                "protein_g": 0
+                "carb_g": 14.7,
+                "fat_g": 33.9,
+                "food_id": "f_almonds",
+                "food_name": "Almonds",
+                "grams": 68,
+                "kcal": 394,
+                "protein_g": 14.4
               },
               {
                 "carb_g": 7.2,
@@ -3462,46 +3462,6 @@
             "target_kcal": 986,
             "target_protein_g": 43,
             "variants": [
-              {
-                "items": [
-                  {
-                    "carb_g": 39,
-                    "fat_g": 185.8,
-                    "food_id": "f_walnuts",
-                    "food_name": "Walnuts",
-                    "grams": 285,
-                    "kcal": 1864,
-                    "protein_g": 43.3
-                  },
-                  {
-                    "carb_g": 125.5,
-                    "fat_g": 1.3,
-                    "food_id": "f_rice",
-                    "food_name": "Jasmine Rice",
-                    "grams": 445,
-                    "kcal": 579,
-                    "protein_g": 12
-                  },
-                  {
-                    "carb_g": 14.7,
-                    "fat_g": 33.9,
-                    "food_id": "f_almonds",
-                    "food_name": "Almonds",
-                    "grams": 68,
-                    "kcal": 394,
-                    "protein_g": 14.4
-                  },
-                  {
-                    "carb_g": 7.2,
-                    "fat_g": 0.4,
-                    "food_id": "f_broccoli",
-                    "food_name": "Broccoli",
-                    "grams": 100,
-                    "kcal": 35,
-                    "protein_g": 2.4
-                  }
-                ]
-              },
               {
                 "items": [
                   {
@@ -3581,6 +3541,46 @@
                     "protein_g": 2.4
                   }
                 ]
+              },
+              {
+                "items": [
+                  {
+                    "carb_g": 169.1,
+                    "fat_g": 17.6,
+                    "food_id": "f_oats",
+                    "food_name": "Rolled Oats",
+                    "grams": 255,
+                    "kcal": 992,
+                    "protein_g": 43.1
+                  },
+                  {
+                    "carb_g": 125.5,
+                    "fat_g": 1.3,
+                    "food_id": "f_rice",
+                    "food_name": "Jasmine Rice",
+                    "grams": 445,
+                    "kcal": 579,
+                    "protein_g": 12
+                  },
+                  {
+                    "carb_g": 7.1,
+                    "fat_g": 33.9,
+                    "food_id": "f_walnuts",
+                    "food_name": "Walnuts",
+                    "grams": 52,
+                    "kcal": 340,
+                    "protein_g": 7.9
+                  },
+                  {
+                    "carb_g": 7.2,
+                    "fat_g": 0.4,
+                    "food_id": "f_broccoli",
+                    "food_name": "Broccoli",
+                    "grams": 100,
+                    "kcal": 35,
+                    "protein_g": 2.4
+                  }
+                ]
               }
             ]
           },
@@ -3605,13 +3605,13 @@
                 "protein_g": 7.2
               },
               {
-                "carb_g": 2.2,
+                "carb_g": 0,
                 "fat_g": 5,
-                "food_id": "f_almonds",
-                "food_name": "Almonds",
-                "grams": 10,
-                "kcal": 58,
-                "protein_g": 2.1
+                "food_id": "f_olive_oil",
+                "food_name": "Olive Oil",
+                "grams": 5,
+                "kcal": 44,
+                "protein_g": 0
               },
               {
                 "carb_g": 7.2,
@@ -3629,46 +3629,6 @@
             "target_kcal": 365,
             "target_protein_g": 13,
             "variants": [
-              {
-                "items": [
-                  {
-                    "carb_g": 11.6,
-                    "fat_g": 55.4,
-                    "food_id": "f_walnuts",
-                    "food_name": "Walnuts",
-                    "grams": 85,
-                    "kcal": 556,
-                    "protein_g": 12.9
-                  },
-                  {
-                    "carb_g": 74.7,
-                    "fat_g": 0.8,
-                    "food_id": "f_rice",
-                    "food_name": "Jasmine Rice",
-                    "grams": 265,
-                    "kcal": 345,
-                    "protein_g": 7.2
-                  },
-                  {
-                    "carb_g": 0,
-                    "fat_g": 5,
-                    "food_id": "f_olive_oil",
-                    "food_name": "Olive Oil",
-                    "grams": 5,
-                    "kcal": 44,
-                    "protein_g": 0
-                  },
-                  {
-                    "carb_g": 7.2,
-                    "fat_g": 0.4,
-                    "food_id": "f_broccoli",
-                    "food_name": "Broccoli",
-                    "grams": 100,
-                    "kcal": 35,
-                    "protein_g": 2.4
-                  }
-                ]
-              },
               {
                 "items": [
                   {
@@ -3748,37 +3708,77 @@
                     "protein_g": 2.4
                   }
                 ]
+              },
+              {
+                "items": [
+                  {
+                    "carb_g": 11.6,
+                    "fat_g": 55.4,
+                    "food_id": "f_walnuts",
+                    "food_name": "Walnuts",
+                    "grams": 85,
+                    "kcal": 556,
+                    "protein_g": 12.9
+                  },
+                  {
+                    "carb_g": 76.2,
+                    "fat_g": 7.9,
+                    "food_id": "f_oats",
+                    "food_name": "Rolled Oats",
+                    "grams": 115,
+                    "kcal": 447,
+                    "protein_g": 19.4
+                  },
+                  {
+                    "carb_g": 0,
+                    "fat_g": 5,
+                    "food_id": "f_olive_oil",
+                    "food_name": "Olive Oil",
+                    "grams": 5,
+                    "kcal": 44,
+                    "protein_g": 0
+                  },
+                  {
+                    "carb_g": 7.2,
+                    "fat_g": 0.4,
+                    "food_id": "f_broccoli",
+                    "food_name": "Broccoli",
+                    "grams": 100,
+                    "kcal": 35,
+                    "protein_g": 2.4
+                  }
+                ]
               }
             ]
           },
           {
             "items": [
               {
-                "carb_g": 28.8,
-                "fat_g": 136.9,
-                "food_id": "f_walnuts",
-                "food_name": "Walnuts",
-                "grams": 210,
-                "kcal": 1373,
+                "carb_g": 2.7,
+                "fat_g": 27,
+                "food_id": "f_eggs",
+                "food_name": "Eggs",
+                "grams": 245,
+                "kcal": 380,
                 "protein_g": 31.9
               },
               {
-                "carb_g": 110,
-                "fat_g": 1.2,
-                "food_id": "f_rice",
-                "food_name": "Jasmine Rice",
-                "grams": 390,
-                "kcal": 507,
-                "protein_g": 10.5
+                "carb_g": 109.4,
+                "fat_g": 11.4,
+                "food_id": "f_oats",
+                "food_name": "Rolled Oats",
+                "grams": 165,
+                "kcal": 642,
+                "protein_g": 27.9
               },
               {
-                "carb_g": 0,
-                "fat_g": 9,
-                "food_id": "f_olive_oil",
-                "food_name": "Olive Oil",
-                "grams": 9,
-                "kcal": 80,
-                "protein_g": 0
+                "carb_g": 1.9,
+                "fat_g": 9.1,
+                "food_id": "f_walnuts",
+                "food_name": "Walnuts",
+                "grams": 14,
+                "kcal": 92,
+                "protein_g": 2.1
               },
               {
                 "carb_g": 7.2,
@@ -3796,46 +3796,6 @@
             "target_kcal": 584,
             "target_protein_g": 32,
             "variants": [
-              {
-                "items": [
-                  {
-                    "carb_g": 2.7,
-                    "fat_g": 27,
-                    "food_id": "f_eggs",
-                    "food_name": "Eggs",
-                    "grams": 245,
-                    "kcal": 380,
-                    "protein_g": 31.9
-                  },
-                  {
-                    "carb_g": 109.4,
-                    "fat_g": 11.4,
-                    "food_id": "f_oats",
-                    "food_name": "Rolled Oats",
-                    "grams": 165,
-                    "kcal": 642,
-                    "protein_g": 27.9
-                  },
-                  {
-                    "carb_g": 1.9,
-                    "fat_g": 9.1,
-                    "food_id": "f_walnuts",
-                    "food_name": "Walnuts",
-                    "grams": 14,
-                    "kcal": 92,
-                    "protein_g": 2.1
-                  },
-                  {
-                    "carb_g": 7.2,
-                    "fat_g": 0.4,
-                    "food_id": "f_broccoli",
-                    "food_name": "Broccoli",
-                    "grams": 100,
-                    "kcal": 35,
-                    "protein_g": 2.4
-                  }
-                ]
-              },
               {
                 "items": [
                   {
@@ -3915,28 +3875,68 @@
                     "protein_g": 2.4
                   }
                 ]
+              },
+              {
+                "items": [
+                  {
+                    "carb_g": 0,
+                    "fat_g": 3.8,
+                    "food_id": "f_chicken",
+                    "food_name": "Chicken Breast",
+                    "grams": 105,
+                    "kcal": 173,
+                    "protein_g": 32.6
+                  },
+                  {
+                    "carb_g": 110,
+                    "fat_g": 1.2,
+                    "food_id": "f_rice",
+                    "food_name": "Jasmine Rice",
+                    "grams": 390,
+                    "kcal": 507,
+                    "protein_g": 10.5
+                  },
+                  {
+                    "carb_g": 1.9,
+                    "fat_g": 9.1,
+                    "food_id": "f_walnuts",
+                    "food_name": "Walnuts",
+                    "grams": 14,
+                    "kcal": 92,
+                    "protein_g": 2.1
+                  },
+                  {
+                    "carb_g": 7.2,
+                    "fat_g": 0.4,
+                    "food_id": "f_broccoli",
+                    "food_name": "Broccoli",
+                    "grams": 100,
+                    "kcal": 35,
+                    "protein_g": 2.4
+                  }
+                ]
               }
             ]
           },
           {
             "items": [
               {
-                "carb_g": 2.7,
-                "fat_g": 27,
-                "food_id": "f_eggs",
-                "food_name": "Eggs",
-                "grams": 245,
-                "kcal": 380,
-                "protein_g": 31.9
-              },
-              {
-                "carb_g": 99.5,
-                "fat_g": 10.4,
+                "carb_g": 126,
+                "fat_g": 13.1,
                 "food_id": "f_oats",
                 "food_name": "Rolled Oats",
-                "grams": 150,
-                "kcal": 584,
-                "protein_g": 25.4
+                "grams": 190,
+                "kcal": 739,
+                "protein_g": 32.1
+              },
+              {
+                "carb_g": 100.1,
+                "fat_g": 1.1,
+                "food_id": "f_rice",
+                "food_name": "Jasmine Rice",
+                "grams": 355,
+                "kcal": 462,
+                "protein_g": 9.6
               },
               {
                 "carb_g": 7.1,
@@ -3963,46 +3963,6 @@
             "target_kcal": 913,
             "target_protein_g": 32,
             "variants": [
-              {
-                "items": [
-                  {
-                    "carb_g": 126,
-                    "fat_g": 13.1,
-                    "food_id": "f_oats",
-                    "food_name": "Rolled Oats",
-                    "grams": 190,
-                    "kcal": 739,
-                    "protein_g": 32.1
-                  },
-                  {
-                    "carb_g": 100.1,
-                    "fat_g": 1.1,
-                    "food_id": "f_rice",
-                    "food_name": "Jasmine Rice",
-                    "grams": 355,
-                    "kcal": 462,
-                    "protein_g": 9.6
-                  },
-                  {
-                    "carb_g": 7.1,
-                    "fat_g": 33.9,
-                    "food_id": "f_walnuts",
-                    "food_name": "Walnuts",
-                    "grams": 52,
-                    "kcal": 340,
-                    "protein_g": 7.9
-                  },
-                  {
-                    "carb_g": 7.2,
-                    "fat_g": 0.4,
-                    "food_id": "f_broccoli",
-                    "food_name": "Broccoli",
-                    "grams": 100,
-                    "kcal": 35,
-                    "protein_g": 2.4
-                  }
-                ]
-              },
               {
                 "items": [
                   {
@@ -4082,15 +4042,55 @@
                     "protein_g": 2.4
                   }
                 ]
+              },
+              {
+                "items": [
+                  {
+                    "carb_g": 71,
+                    "fat_g": 1.4,
+                    "food_id": "f_lentils",
+                    "food_name": "Lentils",
+                    "grams": 355,
+                    "kcal": 412,
+                    "protein_g": 32
+                  },
+                  {
+                    "carb_g": 100.1,
+                    "fat_g": 1.1,
+                    "food_id": "f_rice",
+                    "food_name": "Jasmine Rice",
+                    "grams": 355,
+                    "kcal": 462,
+                    "protein_g": 9.6
+                  },
+                  {
+                    "carb_g": 0,
+                    "fat_g": 34,
+                    "food_id": "f_olive_oil",
+                    "food_name": "Olive Oil",
+                    "grams": 34,
+                    "kcal": 301,
+                    "protein_g": 0
+                  },
+                  {
+                    "carb_g": 7.2,
+                    "fat_g": 0.4,
+                    "food_id": "f_broccoli",
+                    "food_name": "Broccoli",
+                    "grams": 100,
+                    "kcal": 35,
+                    "protein_g": 2.4
+                  }
+                ]
               }
             ]
           }
         ],
         "totals": {
-          "carb_g": 642.7000000000002,
-          "fat_g": 486.1999999999999,
-          "kcal": 7682,
-          "protein_g": 253.60000000000002
+          "carb_g": 779.9000000000001,
+          "fat_g": 507.5999999999999,
+          "kcal": 8411,
+          "protein_g": 262.2
         },
         "weekday": "fri"
       },
@@ -4100,31 +4100,31 @@
           {
             "items": [
               {
-                "carb_g": 155.8,
-                "fat_g": 16.2,
-                "food_id": "f_oats",
-                "food_name": "Rolled Oats",
-                "grams": 235,
-                "kcal": 914,
-                "protein_g": 39.7
-              },
-              {
-                "carb_g": 90.2,
-                "fat_g": 1,
-                "food_id": "f_rice",
-                "food_name": "Jasmine Rice",
-                "grams": 320,
-                "kcal": 416,
-                "protein_g": 8.6
-              },
-              {
-                "carb_g": 6.7,
-                "fat_g": 31.9,
+                "carb_g": 36.3,
+                "fat_g": 172.8,
                 "food_id": "f_walnuts",
                 "food_name": "Walnuts",
-                "grams": 49,
-                "kcal": 320,
-                "protein_g": 7.4
+                "grams": 265,
+                "kcal": 1733,
+                "protein_g": 40.3
+              },
+              {
+                "carb_g": 89.5,
+                "fat_g": 9.3,
+                "food_id": "f_oats",
+                "food_name": "Rolled Oats",
+                "grams": 135,
+                "kcal": 525,
+                "protein_g": 22.8
+              },
+              {
+                "carb_g": 0,
+                "fat_g": 32,
+                "food_id": "f_olive_oil",
+                "food_name": "Olive Oil",
+                "grams": 32,
+                "kcal": 283,
+                "protein_g": 0
               },
               {
                 "carb_g": 7.2,
@@ -4142,46 +4142,6 @@
             "target_kcal": 803,
             "target_protein_g": 40,
             "variants": [
-              {
-                "items": [
-                  {
-                    "carb_g": 36.3,
-                    "fat_g": 172.8,
-                    "food_id": "f_walnuts",
-                    "food_name": "Walnuts",
-                    "grams": 265,
-                    "kcal": 1733,
-                    "protein_g": 40.3
-                  },
-                  {
-                    "carb_g": 89.5,
-                    "fat_g": 9.3,
-                    "food_id": "f_oats",
-                    "food_name": "Rolled Oats",
-                    "grams": 135,
-                    "kcal": 525,
-                    "protein_g": 22.8
-                  },
-                  {
-                    "carb_g": 0,
-                    "fat_g": 32,
-                    "food_id": "f_olive_oil",
-                    "food_name": "Olive Oil",
-                    "grams": 32,
-                    "kcal": 283,
-                    "protein_g": 0
-                  },
-                  {
-                    "carb_g": 7.2,
-                    "fat_g": 0.4,
-                    "food_id": "f_broccoli",
-                    "food_name": "Broccoli",
-                    "grams": 100,
-                    "kcal": 35,
-                    "protein_g": 2.4
-                  }
-                ]
-              },
               {
                 "items": [
                   {
@@ -4261,37 +4221,77 @@
                     "protein_g": 2.4
                   }
                 ]
+              },
+              {
+                "items": [
+                  {
+                    "carb_g": 89,
+                    "fat_g": 1.8,
+                    "food_id": "f_lentils",
+                    "food_name": "Lentils",
+                    "grams": 445,
+                    "kcal": 516,
+                    "protein_g": 40.1
+                  },
+                  {
+                    "carb_g": 89.5,
+                    "fat_g": 9.3,
+                    "food_id": "f_oats",
+                    "food_name": "Rolled Oats",
+                    "grams": 135,
+                    "kcal": 525,
+                    "protein_g": 22.8
+                  },
+                  {
+                    "carb_g": 0,
+                    "fat_g": 32,
+                    "food_id": "f_olive_oil",
+                    "food_name": "Olive Oil",
+                    "grams": 32,
+                    "kcal": 283,
+                    "protein_g": 0
+                  },
+                  {
+                    "carb_g": 7.2,
+                    "fat_g": 0.4,
+                    "food_id": "f_broccoli",
+                    "food_name": "Broccoli",
+                    "grams": 100,
+                    "kcal": 35,
+                    "protein_g": 2.4
+                  }
+                ]
               }
             ]
           },
           {
             "items": [
               {
-                "carb_g": 39,
-                "fat_g": 185.8,
+                "carb_g": 0,
+                "fat_g": 5,
+                "food_id": "f_chicken",
+                "food_name": "Chicken Breast",
+                "grams": 140,
+                "kcal": 231,
+                "protein_g": 43.4
+              },
+              {
+                "carb_g": 125.5,
+                "fat_g": 1.3,
+                "food_id": "f_rice",
+                "food_name": "Jasmine Rice",
+                "grams": 445,
+                "kcal": 579,
+                "protein_g": 12
+              },
+              {
+                "carb_g": 7.1,
+                "fat_g": 33.9,
                 "food_id": "f_walnuts",
                 "food_name": "Walnuts",
-                "grams": 285,
-                "kcal": 1864,
-                "protein_g": 43.3
-              },
-              {
-                "carb_g": 126,
-                "fat_g": 13.1,
-                "food_id": "f_oats",
-                "food_name": "Rolled Oats",
-                "grams": 190,
-                "kcal": 739,
-                "protein_g": 32.1
-              },
-              {
-                "carb_g": 0,
-                "fat_g": 34,
-                "food_id": "f_olive_oil",
-                "food_name": "Olive Oil",
-                "grams": 34,
-                "kcal": 301,
-                "protein_g": 0
+                "grams": 52,
+                "kcal": 340,
+                "protein_g": 7.9
               },
               {
                 "carb_g": 7.2,
@@ -4309,46 +4309,6 @@
             "target_kcal": 986,
             "target_protein_g": 43,
             "variants": [
-              {
-                "items": [
-                  {
-                    "carb_g": 0,
-                    "fat_g": 5,
-                    "food_id": "f_chicken",
-                    "food_name": "Chicken Breast",
-                    "grams": 140,
-                    "kcal": 231,
-                    "protein_g": 43.4
-                  },
-                  {
-                    "carb_g": 125.5,
-                    "fat_g": 1.3,
-                    "food_id": "f_rice",
-                    "food_name": "Jasmine Rice",
-                    "grams": 445,
-                    "kcal": 579,
-                    "protein_g": 12
-                  },
-                  {
-                    "carb_g": 7.1,
-                    "fat_g": 33.9,
-                    "food_id": "f_walnuts",
-                    "food_name": "Walnuts",
-                    "grams": 52,
-                    "kcal": 340,
-                    "protein_g": 7.9
-                  },
-                  {
-                    "carb_g": 7.2,
-                    "fat_g": 0.4,
-                    "food_id": "f_broccoli",
-                    "food_name": "Broccoli",
-                    "grams": 100,
-                    "kcal": 35,
-                    "protein_g": 2.4
-                  }
-                ]
-              },
               {
                 "items": [
                   {
@@ -4428,19 +4388,59 @@
                     "protein_g": 2.4
                   }
                 ]
+              },
+              {
+                "items": [
+                  {
+                    "carb_g": 39,
+                    "fat_g": 185.8,
+                    "food_id": "f_walnuts",
+                    "food_name": "Walnuts",
+                    "grams": 285,
+                    "kcal": 1864,
+                    "protein_g": 43.3
+                  },
+                  {
+                    "carb_g": 126,
+                    "fat_g": 13.1,
+                    "food_id": "f_oats",
+                    "food_name": "Rolled Oats",
+                    "grams": 190,
+                    "kcal": 739,
+                    "protein_g": 32.1
+                  },
+                  {
+                    "carb_g": 7.1,
+                    "fat_g": 33.9,
+                    "food_id": "f_walnuts",
+                    "food_name": "Walnuts",
+                    "grams": 52,
+                    "kcal": 340,
+                    "protein_g": 7.9
+                  },
+                  {
+                    "carb_g": 7.2,
+                    "fat_g": 0.4,
+                    "food_id": "f_broccoli",
+                    "food_name": "Broccoli",
+                    "grams": 100,
+                    "kcal": 35,
+                    "protein_g": 2.4
+                  }
+                ]
               }
             ]
           },
           {
             "items": [
               {
-                "carb_g": 0,
-                "fat_g": 1.4,
-                "food_id": "f_chicken",
-                "food_name": "Chicken Breast",
-                "grams": 40,
-                "kcal": 66,
-                "protein_g": 12.4
+                "carb_g": 29,
+                "fat_g": 0.6,
+                "food_id": "f_lentils",
+                "food_name": "Lentils",
+                "grams": 145,
+                "kcal": 168,
+                "protein_g": 13.1
               },
               {
                 "carb_g": 74.7,
@@ -4452,13 +4452,13 @@
                 "protein_g": 7.2
               },
               {
-                "carb_g": 1.1,
-                "fat_g": 5.2,
-                "food_id": "f_walnuts",
-                "food_name": "Walnuts",
-                "grams": 8,
-                "kcal": 52,
-                "protein_g": 1.2
+                "carb_g": 0,
+                "fat_g": 5,
+                "food_id": "f_olive_oil",
+                "food_name": "Olive Oil",
+                "grams": 5,
+                "kcal": 44,
+                "protein_g": 0
               },
               {
                 "carb_g": 7.2,
@@ -4476,46 +4476,6 @@
             "target_kcal": 365,
             "target_protein_g": 13,
             "variants": [
-              {
-                "items": [
-                  {
-                    "carb_g": 29,
-                    "fat_g": 0.6,
-                    "food_id": "f_lentils",
-                    "food_name": "Lentils",
-                    "grams": 145,
-                    "kcal": 168,
-                    "protein_g": 13.1
-                  },
-                  {
-                    "carb_g": 74.7,
-                    "fat_g": 0.8,
-                    "food_id": "f_rice",
-                    "food_name": "Jasmine Rice",
-                    "grams": 265,
-                    "kcal": 345,
-                    "protein_g": 7.2
-                  },
-                  {
-                    "carb_g": 0,
-                    "fat_g": 5,
-                    "food_id": "f_olive_oil",
-                    "food_name": "Olive Oil",
-                    "grams": 5,
-                    "kcal": 44,
-                    "protein_g": 0
-                  },
-                  {
-                    "carb_g": 7.2,
-                    "fat_g": 0.4,
-                    "food_id": "f_broccoli",
-                    "food_name": "Broccoli",
-                    "grams": 100,
-                    "kcal": 35,
-                    "protein_g": 2.4
-                  }
-                ]
-              },
               {
                 "items": [
                   {
@@ -4595,6 +4555,46 @@
                     "protein_g": 2.4
                   }
                 ]
+              },
+              {
+                "items": [
+                  {
+                    "carb_g": 49.7,
+                    "fat_g": 5.2,
+                    "food_id": "f_oats",
+                    "food_name": "Rolled Oats",
+                    "grams": 75,
+                    "kcal": 292,
+                    "protein_g": 12.7
+                  },
+                  {
+                    "carb_g": 76.2,
+                    "fat_g": 7.9,
+                    "food_id": "f_oats",
+                    "food_name": "Rolled Oats",
+                    "grams": 115,
+                    "kcal": 447,
+                    "protein_g": 19.4
+                  },
+                  {
+                    "carb_g": 2.2,
+                    "fat_g": 5,
+                    "food_id": "f_almonds",
+                    "food_name": "Almonds",
+                    "grams": 10,
+                    "kcal": 58,
+                    "protein_g": 2.1
+                  },
+                  {
+                    "carb_g": 7.2,
+                    "fat_g": 0.4,
+                    "food_id": "f_broccoli",
+                    "food_name": "Broccoli",
+                    "grams": 100,
+                    "kcal": 35,
+                    "protein_g": 2.4
+                  }
+                ]
               }
             ]
           },
@@ -4610,13 +4610,13 @@
                 "protein_g": 32
               },
               {
-                "carb_g": 110,
-                "fat_g": 1.2,
-                "food_id": "f_rice",
-                "food_name": "Jasmine Rice",
-                "grams": 390,
-                "kcal": 507,
-                "protein_g": 10.5
+                "carb_g": 109.4,
+                "fat_g": 11.4,
+                "food_id": "f_oats",
+                "food_name": "Rolled Oats",
+                "grams": 165,
+                "kcal": 642,
+                "protein_g": 27.9
               },
               {
                 "carb_g": 0,
@@ -4643,46 +4643,6 @@
             "target_kcal": 584,
             "target_protein_g": 32,
             "variants": [
-              {
-                "items": [
-                  {
-                    "carb_g": 71,
-                    "fat_g": 1.4,
-                    "food_id": "f_lentils",
-                    "food_name": "Lentils",
-                    "grams": 355,
-                    "kcal": 412,
-                    "protein_g": 32
-                  },
-                  {
-                    "carb_g": 109.4,
-                    "fat_g": 11.4,
-                    "food_id": "f_oats",
-                    "food_name": "Rolled Oats",
-                    "grams": 165,
-                    "kcal": 642,
-                    "protein_g": 27.9
-                  },
-                  {
-                    "carb_g": 0,
-                    "fat_g": 9,
-                    "food_id": "f_olive_oil",
-                    "food_name": "Olive Oil",
-                    "grams": 9,
-                    "kcal": 80,
-                    "protein_g": 0
-                  },
-                  {
-                    "carb_g": 7.2,
-                    "fat_g": 0.4,
-                    "food_id": "f_broccoli",
-                    "food_name": "Broccoli",
-                    "grams": 100,
-                    "kcal": 35,
-                    "protein_g": 2.4
-                  }
-                ]
-              },
               {
                 "items": [
                   {
@@ -4762,19 +4722,59 @@
                     "protein_g": 2.4
                   }
                 ]
+              },
+              {
+                "items": [
+                  {
+                    "carb_g": 0,
+                    "fat_g": 3.8,
+                    "food_id": "f_chicken",
+                    "food_name": "Chicken Breast",
+                    "grams": 105,
+                    "kcal": 173,
+                    "protein_g": 32.6
+                  },
+                  {
+                    "carb_g": 109.4,
+                    "fat_g": 11.4,
+                    "food_id": "f_oats",
+                    "food_name": "Rolled Oats",
+                    "grams": 165,
+                    "kcal": 642,
+                    "protein_g": 27.9
+                  },
+                  {
+                    "carb_g": 3.9,
+                    "fat_g": 9,
+                    "food_id": "f_almonds",
+                    "food_name": "Almonds",
+                    "grams": 18,
+                    "kcal": 104,
+                    "protein_g": 3.8
+                  },
+                  {
+                    "carb_g": 7.2,
+                    "fat_g": 0.4,
+                    "food_id": "f_broccoli",
+                    "food_name": "Broccoli",
+                    "grams": 100,
+                    "kcal": 35,
+                    "protein_g": 2.4
+                  }
+                ]
               }
             ]
           },
           {
             "items": [
               {
-                "carb_g": 71,
-                "fat_g": 1.4,
-                "food_id": "f_lentils",
-                "food_name": "Lentils",
-                "grams": 355,
-                "kcal": 412,
-                "protein_g": 32
+                "carb_g": 28.8,
+                "fat_g": 136.9,
+                "food_id": "f_walnuts",
+                "food_name": "Walnuts",
+                "grams": 210,
+                "kcal": 1373,
+                "protein_g": 31.9
               },
               {
                 "carb_g": 99.5,
@@ -4786,13 +4786,13 @@
                 "protein_g": 25.4
               },
               {
-                "carb_g": 0,
-                "fat_g": 34,
-                "food_id": "f_olive_oil",
-                "food_name": "Olive Oil",
-                "grams": 34,
-                "kcal": 301,
-                "protein_g": 0
+                "carb_g": 7.1,
+                "fat_g": 33.9,
+                "food_id": "f_walnuts",
+                "food_name": "Walnuts",
+                "grams": 52,
+                "kcal": 340,
+                "protein_g": 7.9
               },
               {
                 "carb_g": 7.2,
@@ -4810,46 +4810,6 @@
             "target_kcal": 913,
             "target_protein_g": 32,
             "variants": [
-              {
-                "items": [
-                  {
-                    "carb_g": 28.8,
-                    "fat_g": 136.9,
-                    "food_id": "f_walnuts",
-                    "food_name": "Walnuts",
-                    "grams": 210,
-                    "kcal": 1373,
-                    "protein_g": 31.9
-                  },
-                  {
-                    "carb_g": 99.5,
-                    "fat_g": 10.4,
-                    "food_id": "f_oats",
-                    "food_name": "Rolled Oats",
-                    "grams": 150,
-                    "kcal": 584,
-                    "protein_g": 25.4
-                  },
-                  {
-                    "carb_g": 7.1,
-                    "fat_g": 33.9,
-                    "food_id": "f_walnuts",
-                    "food_name": "Walnuts",
-                    "grams": 52,
-                    "kcal": 340,
-                    "protein_g": 7.9
-                  },
-                  {
-                    "carb_g": 7.2,
-                    "fat_g": 0.4,
-                    "food_id": "f_broccoli",
-                    "food_name": "Broccoli",
-                    "grams": 100,
-                    "kcal": 35,
-                    "protein_g": 2.4
-                  }
-                ]
-              },
               {
                 "items": [
                   {
@@ -4929,15 +4889,55 @@
                     "protein_g": 2.4
                   }
                 ]
+              },
+              {
+                "items": [
+                  {
+                    "carb_g": 0,
+                    "fat_g": 20.8,
+                    "food_id": "f_salmon",
+                    "food_name": "Salmon",
+                    "grams": 160,
+                    "kcal": 333,
+                    "protein_g": 32
+                  },
+                  {
+                    "carb_g": 99.5,
+                    "fat_g": 10.4,
+                    "food_id": "f_oats",
+                    "food_name": "Rolled Oats",
+                    "grams": 150,
+                    "kcal": 584,
+                    "protein_g": 25.4
+                  },
+                  {
+                    "carb_g": 7.1,
+                    "fat_g": 33.9,
+                    "food_id": "f_walnuts",
+                    "food_name": "Walnuts",
+                    "grams": 52,
+                    "kcal": 340,
+                    "protein_g": 7.9
+                  },
+                  {
+                    "carb_g": 7.2,
+                    "fat_g": 0.4,
+                    "food_id": "f_broccoli",
+                    "food_name": "Broccoli",
+                    "grams": 100,
+                    "kcal": 35,
+                    "protein_g": 2.4
+                  }
+                ]
               }
             ]
           }
         ],
         "totals": {
-          "carb_g": 881.0000000000001,
-          "fat_g": 348.7999999999998,
-          "kcal": 7488,
-          "protein_g": 263.79999999999995
+          "carb_g": 713.9000000000001,
+          "fat_g": 465.69999999999993,
+          "kcal": 7854,
+          "protein_g": 283.79999999999995
         },
         "weekday": "sat"
       },

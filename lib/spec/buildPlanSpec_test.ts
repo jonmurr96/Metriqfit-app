@@ -113,6 +113,19 @@ Deno.test("alignment: required movement patterns include squat + hinge for non-b
   }
 });
 
+Deno.test("alignment: hard-excluded movement patterns are not also required", () => {
+  for (const { persona, spec } of allSpecs()) {
+    const required = new Set(spec.workout.required_movement_patterns.map((m) => m.pattern));
+    for (const excluded of spec.workout.exclude_movement_patterns) {
+      assertEquals(
+        required.has(excluded),
+        false,
+        `${persona.name}: ${excluded} is both excluded and required`,
+      );
+    }
+  }
+});
+
 Deno.test("alignment: protein_g uses science table g/kg × bodyweight", () => {
   for (const { persona, state, spec } of allSpecs()) {
     // Protein must be at least 1.4 g/kg (lowest entry in any row).

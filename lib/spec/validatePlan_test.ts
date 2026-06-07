@@ -177,6 +177,26 @@ Deno.test("manual injection: a corrupted plan with prescription_unit=garbage fai
   assertExists(result.violations.find((v) => v.check === "invalid_prescription_unit"));
 });
 
+Deno.test("manual injection: normalized hard-excluded food names and ids fail validation", () => {
+  const persona = CANONICAL_PERSONAS.find(
+    (p) => p.name === "p20_intermediate_male_5day_gain_muscle_refused_foods",
+  );
+  assertExists(persona);
+  const state = buildUserState(persona, FIXED_NOW);
+  const spec = buildPlanSpec({ state, now: FIXED_NOW });
+  const plan = fillContent({ spec, exercises: EXERCISES, foods: FOODS });
+
+  const corruptedPlan: Plan = JSON.parse(JSON.stringify(plan));
+  const item = corruptedPlan.nutrition_days[0]?.meals[0]?.items[0];
+  assertExists(item);
+  (item as any).food_id = "f_cottage_cheese";
+  (item as any).food_name = "Cottage Cheese";
+
+  const result = validatePlan(corruptedPlan, spec);
+  assertEquals(result.passed, false);
+  assertExists(result.violations.find((v) => v.check === "hard_excluded_food_present"));
+});
+
 Deno.test("diagnostics report deload week index and cardio session count", () => {
   for (const { state, result } of allValidations()) {
     if (state.experience_level !== "beginner") {

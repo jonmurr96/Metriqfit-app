@@ -8490,6 +8490,15 @@
         "value": "ppl_upper_lower:push,pull,legs,upper,lower"
       },
       {
+        "field": "workout.required_movement_patterns",
+        "inputs": [
+          "injuries"
+        ],
+        "rationale": "removed movement patterns that are hard-excluded for the reported injury profile",
+        "source": "injury_safety@1",
+        "value": "horizontal_press,horizontal_pull,vertical_pull,squat,hinge,core_anti_extension,core_anti_rotation,carry,lunge"
+      },
+      {
         "field": "nutrition.protein_g",
         "inputs": [
           "goal_type",
@@ -8946,10 +8955,6 @@
         {
           "min_per_week": 1,
           "pattern": "horizontal_pull"
-        },
-        {
-          "min_per_week": 1,
-          "pattern": "vertical_press"
         },
         {
           "min_per_week": 1,

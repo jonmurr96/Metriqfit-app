@@ -360,15 +360,51 @@ function checkVariety(
 
 // ---------- check: hard exclude tags absent ----------
 
+function normalizeFoodToken(value: string): string {
+  return value
+    .toLowerCase()
+    .replace(/[_-]+/g, " ")
+    .replace(/[^a-z0-9 ]+/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+function expandHardExcludeToken(token: string): ReadonlyArray<string> {
+  switch (token) {
+    case "tree nuts":
+    case "tree nut":
+    case "nuts":
+      return [token, "nut"];
+    default:
+      return [token];
+  }
+}
+
+function planItemMatchesExcludedFood(
+  item: { readonly food_id: string; readonly food_name: string },
+  excludedTag: string,
+): boolean {
+  const excluded = normalizeFoodToken(excludedTag);
+  if (!excluded || excluded === "none") return false;
+  const excludedTokens = expandHardExcludeToken(excluded);
+
+  const values = [item.food_id, item.food_name]
+    .map(normalizeFoodToken)
+    .filter(Boolean);
+
+  return excludedTokens.some((token) =>
+    values.some((value) => value === token || value.includes(token))
+  );
+}
+
 function checkExcludes(spec: PlanSpec, plan: Plan, violations: ValidationViolation[]) {
   const excluded = new Set(spec.nutrition.hard_exclude_tags);
   if (excluded.size === 0) return;
   for (const day of plan.nutrition_days) {
     for (const meal of day.meals) {
       for (const item of meal.items) {
-        const nameLower = item.food_name.toLowerCase();
         for (const tag of excluded) {
-          if (nameLower.includes(tag)) {
+          if (planItemMatchesExcludedFood(item, tag)) {
             violations.push({
               severity: "error",
               check: "hard_excluded_food_present",

@@ -159,6 +159,36 @@ const ALL_MUSCLES: ReadonlyArray<MusclePattern> = [
 
 // ---------- workout filling ----------
 
+function normalizeExerciseToken(value: string): string {
+  return value
+    .toLowerCase()
+    .replace(/[_-]+/g, " ")
+    .replace(/[^a-z0-9 ]+/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+function exerciseMatchesExcludedTag(ex: ExerciseRow, tag: string): boolean {
+  const normalizedTag = normalizeExerciseToken(tag);
+  if (!normalizedTag) return false;
+  if ((ex.equipment_tags as string[]).some((t) => normalizeExerciseToken(t) === normalizedTag)) return true;
+
+  const name = normalizeExerciseToken(`${ex.id} ${ex.name}`);
+  switch (normalizedTag) {
+    case "contraindicated for lower back":
+    case "contraindicated for back":
+      return [
+        "barbell row",
+        "bent over",
+        "deadlift",
+        "good morning",
+        "back extension",
+      ].some((keyword) => name.includes(keyword));
+    default:
+      return false;
+  }
+}
+
 function isExerciseAllowed(
   ex: ExerciseRow,
   excludedPatterns: ReadonlyArray<MovementPattern>,
@@ -166,7 +196,7 @@ function isExerciseAllowed(
 ): boolean {
   if ((excludedPatterns as MovementPattern[]).includes(ex.movement_pattern)) return false;
   for (const t of excludedTags) {
-    if ((ex.equipment_tags as string[]).includes(t)) return false;
+    if (exerciseMatchesExcludedTag(ex, t)) return false;
   }
   return true;
 }
@@ -755,6 +785,44 @@ function countAppearancesByTag(
   return n;
 }
 
+function normalizeFoodToken(value: string): string {
+  return value
+    .toLowerCase()
+    .replace(/[_-]+/g, " ")
+    .replace(/[^a-z0-9 ]+/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+function expandHardExcludeToken(token: string): ReadonlyArray<string> {
+  switch (token) {
+    case "tree nuts":
+    case "tree nut":
+    case "nuts":
+      return [token, "nut"];
+    default:
+      return [token];
+  }
+}
+
+function foodMatchesHardExclude(food: FoodRow, excludedTag: string): boolean {
+  const excluded = normalizeFoodToken(excludedTag);
+  if (!excluded || excluded === "none") return false;
+  const excludedTokens = expandHardExcludeToken(excluded);
+
+  const values = [food.id, food.name, ...food.tags]
+    .map(normalizeFoodToken)
+    .filter(Boolean);
+
+  return excludedTokens.some((token) =>
+    values.some((value) => value === token || value.includes(token))
+  );
+}
+
+function isFoodAllowed(food: FoodRow, hardExcludeTags: ReadonlyArray<string>): boolean {
+  return !hardExcludeTags.some((tag) => foodMatchesHardExclude(food, tag));
+}
+
 function generateMealCandidates(
   shape: SlotShape,
   foods: ReadonlyArray<FoodRow>,
@@ -764,9 +832,7 @@ function generateMealCandidates(
   state: NutritionWeekState,
   seed: number,
 ): MealCandidate[] {
-  const allowed = foods.filter((f) =>
-    !f.tags.some((t) => (spec.nutrition.hard_exclude_tags as string[]).includes(t))
-  );
+  const allowed = foods.filter((f) => isFoodAllowed(f, spec.nutrition.hard_exclude_tags));
   if (allowed.length === 0) return [];
 
   const proteinPool = allowed.filter((f) => f.category === "protein" || f.protein_g_per_g >= 0.15);

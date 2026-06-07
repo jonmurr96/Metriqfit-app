@@ -173,6 +173,19 @@ Deno.test("plank (and other time-based work) uses prescription_unit=time_seconds
   }
 });
 
+Deno.test("workout: lower-back injury avoids hinge and high-risk unsupported row defaults", () => {
+  for (const { persona, state, plan } of allPlans()) {
+    if (!state.injuries.some((injury) => injury === "back" || injury === "lower_back")) continue;
+    for (const day of plan.workout_days) {
+      for (const ex of day.exercises) {
+        const name = ex.exercise_name.toLowerCase();
+        assertEquals(ex.movement_pattern !== "hinge", true, `${persona.name}: hinge generated as ${ex.exercise_name}`);
+        assertEquals(!name.includes("barbell row"), true, `${persona.name}: lower-back plan generated ${ex.exercise_name}`);
+      }
+    }
+  }
+});
+
 // Session-time test removed in Phase 2: it was sensitive to the small Phase 1
 // catalog. The Phase 2 suite (fillContent_phase2_test.ts) uses a richer
 // catalog and asserts the volume budget hits MEV/MAV directly, which is the
@@ -204,6 +217,50 @@ Deno.test("nutrition: vegan diet has no animal foods in any meal", () => {
           const animal = ["Chicken Breast", "Turkey Breast", "Lean Beef", "Salmon", "Eggs", "Greek Yogurt 0%"];
           if (animal.includes(item.food_name)) {
             throw new Error(`${persona.name}: vegan plan contains ${item.food_name}`);
+          }
+        }
+      }
+    }
+  }
+});
+
+function normalizedFoodToken(value: string): string {
+  return value
+    .toLowerCase()
+    .replace(/[_-]+/g, " ")
+    .replace(/[^a-z0-9 ]+/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+function expandedRefusedTokens(value: string): ReadonlyArray<string> {
+  const token = normalizedFoodToken(value);
+  switch (token) {
+    case "tree nuts":
+    case "tree nut":
+    case "nuts":
+      return [token, "nut"];
+    default:
+      return [token];
+  }
+}
+
+Deno.test("nutrition: refused foods are excluded by normalized id and name, not only tags", () => {
+  for (const { persona, state, plan } of allPlans()) {
+    if (state.refused_foods.length === 0) continue;
+
+    const refused = state.refused_foods.flatMap(expandedRefusedTokens);
+    for (const day of plan.nutrition_days) {
+      for (const meal of day.meals) {
+        for (const item of meal.items) {
+          const values = [item.food_id, item.food_name].map(normalizedFoodToken);
+          const offending = refused.find((tag) =>
+            values.some((value) => value === tag || value.includes(tag))
+          );
+          if (offending) {
+            throw new Error(
+              `${persona.name}: refused food "${offending}" generated as ${item.food_name} (${item.food_id})`,
+            );
           }
         }
       }

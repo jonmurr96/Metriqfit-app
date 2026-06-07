@@ -4551,7 +4551,7 @@
     "spec_seed": "91c86c32dc2ec900",
     "workout_days": [
       {
-        "estimated_minutes": 65,
+        "estimated_minutes": 59,
         "exercises": [
           {
             "category": "primary",
@@ -4572,21 +4572,21 @@
             "tempo": null
           },
           {
-            "category": "primary",
-            "exercise_id": "ex_row",
-            "exercise_name": "Barbell Row",
+            "category": "secondary",
+            "exercise_id": "ex_db_row",
+            "exercise_name": "Dumbbell Row",
             "movement_pattern": "horizontal_pull",
             "order": 1,
             "prescription_unit": "reps",
             "primary_muscles": [
               "back_upper"
             ],
-            "reps_max": 8,
-            "reps_min": 5,
-            "rest_seconds": 180,
+            "reps_max": 12,
+            "reps_min": 8,
+            "rest_seconds": 120,
             "rir_max": 2,
             "rir_min": 1,
-            "sets": 4,
+            "sets": 3,
             "tempo": null
           },
           {
@@ -4861,13 +4861,13 @@
           },
           {
             "category": "secondary",
-            "exercise_id": "ex_db_bench",
-            "exercise_name": "Dumbbell Bench Press",
-            "movement_pattern": "horizontal_press",
+            "exercise_id": "ex_db_row",
+            "exercise_name": "Dumbbell Row",
+            "movement_pattern": "horizontal_pull",
             "order": 2,
             "prescription_unit": "reps",
             "primary_muscles": [
-              "chest"
+              "back_upper"
             ],
             "reps_max": 12,
             "reps_min": 8,
@@ -4879,13 +4879,13 @@
           },
           {
             "category": "secondary",
-            "exercise_id": "ex_db_row",
-            "exercise_name": "Dumbbell Row",
-            "movement_pattern": "horizontal_pull",
+            "exercise_id": "ex_db_bench",
+            "exercise_name": "Dumbbell Bench Press",
+            "movement_pattern": "horizontal_press",
             "order": 3,
             "prescription_unit": "reps",
             "primary_muscles": [
-              "back_upper"
+              "chest"
             ],
             "reps_max": 12,
             "reps_min": 8,
@@ -4983,7 +4983,7 @@
         "week_index": 1,
         "weekly_volume_actual": {
           "back_lats": 4,
-          "back_upper": 7,
+          "back_upper": 6,
           "biceps": 3,
           "calves": 6,
           "chest": 7,
@@ -4997,7 +4997,7 @@
         },
         "workout_days": [
           {
-            "estimated_minutes": 65,
+            "estimated_minutes": 59,
             "exercises": [
               {
                 "category": "primary",
@@ -5018,21 +5018,21 @@
                 "tempo": null
               },
               {
-                "category": "primary",
-                "exercise_id": "ex_row",
-                "exercise_name": "Barbell Row",
+                "category": "secondary",
+                "exercise_id": "ex_db_row",
+                "exercise_name": "Dumbbell Row",
                 "movement_pattern": "horizontal_pull",
                 "order": 1,
                 "prescription_unit": "reps",
                 "primary_muscles": [
                   "back_upper"
                 ],
-                "reps_max": 8,
-                "reps_min": 5,
-                "rest_seconds": 180,
+                "reps_max": 12,
+                "reps_min": 8,
+                "rest_seconds": 120,
                 "rir_max": 2,
                 "rir_min": 1,
-                "sets": 4,
+                "sets": 3,
                 "tempo": null
               },
               {
@@ -5307,13 +5307,13 @@
               },
               {
                 "category": "secondary",
-                "exercise_id": "ex_db_bench",
-                "exercise_name": "Dumbbell Bench Press",
-                "movement_pattern": "horizontal_press",
+                "exercise_id": "ex_db_row",
+                "exercise_name": "Dumbbell Row",
+                "movement_pattern": "horizontal_pull",
                 "order": 2,
                 "prescription_unit": "reps",
                 "primary_muscles": [
-                  "chest"
+                  "back_upper"
                 ],
                 "reps_max": 12,
                 "reps_min": 8,
@@ -5325,13 +5325,13 @@
               },
               {
                 "category": "secondary",
-                "exercise_id": "ex_db_row",
-                "exercise_name": "Dumbbell Row",
-                "movement_pattern": "horizontal_pull",
+                "exercise_id": "ex_db_bench",
+                "exercise_name": "Dumbbell Bench Press",
+                "movement_pattern": "horizontal_press",
                 "order": 3,
                 "prescription_unit": "reps",
                 "primary_muscles": [
-                  "back_upper"
+                  "chest"
                 ],
                 "reps_max": 12,
                 "reps_min": 8,
@@ -5429,7 +5429,7 @@
         "week_index": 2,
         "weekly_volume_actual": {
           "back_lats": 4,
-          "back_upper": 7,
+          "back_upper": 6,
           "biceps": 3,
           "calves": 6,
           "chest": 7,
@@ -5443,7 +5443,7 @@
         },
         "workout_days": [
           {
-            "estimated_minutes": 65,
+            "estimated_minutes": 59,
             "exercises": [
               {
                 "category": "primary",
@@ -5464,21 +5464,21 @@
                 "tempo": null
               },
               {
-                "category": "primary",
-                "exercise_id": "ex_row",
-                "exercise_name": "Barbell Row",
+                "category": "secondary",
+                "exercise_id": "ex_db_row",
+                "exercise_name": "Dumbbell Row",
                 "movement_pattern": "horizontal_pull",
                 "order": 1,
                 "prescription_unit": "reps",
                 "primary_muscles": [
                   "back_upper"
                 ],
-                "reps_max": 8,
-                "reps_min": 5,
-                "rest_seconds": 180,
+                "reps_max": 12,
+                "reps_min": 8,
+                "rest_seconds": 120,
                 "rir_max": 2,
                 "rir_min": 1,
-                "sets": 4,
+                "sets": 3,
                 "tempo": null
               },
               {
@@ -5753,13 +5753,13 @@
               },
               {
                 "category": "secondary",
-                "exercise_id": "ex_db_bench",
-                "exercise_name": "Dumbbell Bench Press",
-                "movement_pattern": "horizontal_press",
+                "exercise_id": "ex_db_row",
+                "exercise_name": "Dumbbell Row",
+                "movement_pattern": "horizontal_pull",
                 "order": 2,
                 "prescription_unit": "reps",
                 "primary_muscles": [
-                  "chest"
+                  "back_upper"
                 ],
                 "reps_max": 12,
                 "reps_min": 8,
@@ -5771,13 +5771,13 @@
               },
               {
                 "category": "secondary",
-                "exercise_id": "ex_db_row",
-                "exercise_name": "Dumbbell Row",
-                "movement_pattern": "horizontal_pull",
+                "exercise_id": "ex_db_bench",
+                "exercise_name": "Dumbbell Bench Press",
+                "movement_pattern": "horizontal_press",
                 "order": 3,
                 "prescription_unit": "reps",
                 "primary_muscles": [
-                  "back_upper"
+                  "chest"
                 ],
                 "reps_max": 12,
                 "reps_min": 8,
@@ -5875,7 +5875,7 @@
         "week_index": 3,
         "weekly_volume_actual": {
           "back_lats": 4,
-          "back_upper": 7,
+          "back_upper": 6,
           "biceps": 3,
           "calves": 6,
           "chest": 7,
@@ -5889,7 +5889,7 @@
         },
         "workout_days": [
           {
-            "estimated_minutes": 65,
+            "estimated_minutes": 59,
             "exercises": [
               {
                 "category": "primary",
@@ -5910,21 +5910,21 @@
                 "tempo": null
               },
               {
-                "category": "primary",
-                "exercise_id": "ex_row",
-                "exercise_name": "Barbell Row",
+                "category": "secondary",
+                "exercise_id": "ex_db_row",
+                "exercise_name": "Dumbbell Row",
                 "movement_pattern": "horizontal_pull",
                 "order": 1,
                 "prescription_unit": "reps",
                 "primary_muscles": [
                   "back_upper"
                 ],
-                "reps_max": 8,
-                "reps_min": 5,
-                "rest_seconds": 180,
+                "reps_max": 12,
+                "reps_min": 8,
+                "rest_seconds": 120,
                 "rir_max": 2,
                 "rir_min": 1,
-                "sets": 4,
+                "sets": 3,
                 "tempo": null
               },
               {
@@ -6199,13 +6199,13 @@
               },
               {
                 "category": "secondary",
-                "exercise_id": "ex_db_bench",
-                "exercise_name": "Dumbbell Bench Press",
-                "movement_pattern": "horizontal_press",
+                "exercise_id": "ex_db_row",
+                "exercise_name": "Dumbbell Row",
+                "movement_pattern": "horizontal_pull",
                 "order": 2,
                 "prescription_unit": "reps",
                 "primary_muscles": [
-                  "chest"
+                  "back_upper"
                 ],
                 "reps_max": 12,
                 "reps_min": 8,
@@ -6217,13 +6217,13 @@
               },
               {
                 "category": "secondary",
-                "exercise_id": "ex_db_row",
-                "exercise_name": "Dumbbell Row",
-                "movement_pattern": "horizontal_pull",
+                "exercise_id": "ex_db_bench",
+                "exercise_name": "Dumbbell Bench Press",
+                "movement_pattern": "horizontal_press",
                 "order": 3,
                 "prescription_unit": "reps",
                 "primary_muscles": [
-                  "back_upper"
+                  "chest"
                 ],
                 "reps_max": 12,
                 "reps_min": 8,
@@ -6335,7 +6335,7 @@
         },
         "workout_days": [
           {
-            "estimated_minutes": 39,
+            "estimated_minutes": 37,
             "exercises": [
               {
                 "category": "primary",
@@ -6356,18 +6356,18 @@
                 "tempo": null
               },
               {
-                "category": "primary",
-                "exercise_id": "ex_row",
-                "exercise_name": "Barbell Row",
+                "category": "secondary",
+                "exercise_id": "ex_db_row",
+                "exercise_name": "Dumbbell Row",
                 "movement_pattern": "horizontal_pull",
                 "order": 1,
                 "prescription_unit": "reps",
                 "primary_muscles": [
                   "back_upper"
                 ],
-                "reps_max": 8,
-                "reps_min": 5,
-                "rest_seconds": 180,
+                "reps_max": 12,
+                "reps_min": 8,
+                "rest_seconds": 120,
                 "rir_max": 2,
                 "rir_min": 1,
                 "sets": 2,
@@ -7025,6 +7025,15 @@
         "value": "upper_lower:upper,lower,upper,lower"
       },
       {
+        "field": "workout.required_movement_patterns",
+        "inputs": [
+          "injuries"
+        ],
+        "rationale": "removed movement patterns that are hard-excluded for the reported injury profile",
+        "source": "injury_safety@1",
+        "value": "horizontal_press,horizontal_pull,vertical_press,vertical_pull,squat,core_anti_extension,core_anti_rotation"
+      },
+      {
         "field": "nutrition.protein_g",
         "inputs": [
           "goal_type",
@@ -7460,10 +7469,6 @@
         {
           "min_per_week": 1,
           "pattern": "squat"
-        },
-        {
-          "min_per_week": 1,
-          "pattern": "hinge"
         },
         {
           "min_per_week": 1,

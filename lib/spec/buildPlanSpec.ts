@@ -356,6 +356,19 @@ function buildWorkoutSpec(
   });
 
   const { split_template, split_family } = deriveSplitTemplate(state, decisions);
+  const exclude_movement_patterns = deriveExcludedPatterns(state);
+  const required_movement_patterns = deriveMovementRequirements(state).filter(
+    (req) => !exclude_movement_patterns.includes(req.pattern),
+  );
+  if (exclude_movement_patterns.length > 0) {
+    decisions.push({
+      field: "workout.required_movement_patterns",
+      value: required_movement_patterns.map((r) => r.pattern).join(","),
+      inputs: ["injuries"],
+      source: "injury_safety@1",
+      rationale: "removed movement patterns that are hard-excluded for the reported injury profile",
+    });
+  }
 
   return {
     horizon_weeks,
@@ -365,13 +378,13 @@ function buildWorkoutSpec(
     calendar,
     volume_targets,
     intensity_by_category,
-    required_movement_patterns: deriveMovementRequirements(state),
+    required_movement_patterns,
     split_template,
     split_family,
     warmup: STANDARD_WARMUP,
     deload: deriveDeload(state, horizon_weeks),
     cardio: deriveCardio(state),
-    exclude_movement_patterns: deriveExcludedPatterns(state),
+    exclude_movement_patterns,
     exclude_exercise_tags: deriveExcludedTags(state),
   };
 }
