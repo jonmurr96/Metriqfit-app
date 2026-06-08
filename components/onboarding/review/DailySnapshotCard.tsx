@@ -192,11 +192,12 @@ function InlineTargetsRow({ calories, waterLiters, steps }: InlineTargetsRowProp
 
 interface AcceptEditInlineProps {
   accepted: boolean;
+  disabled?: boolean;
   onAccept: () => void;
   onEdit: () => void;
 }
 
-function AcceptEditInline({ accepted, onAccept, onEdit }: AcceptEditInlineProps) {
+function AcceptEditInline({ accepted, disabled = false, onAccept, onEdit }: AcceptEditInlineProps) {
   const { c, ty, r } = useTokens();
 
   return (
@@ -208,9 +209,11 @@ function AcceptEditInline({ accepted, onAccept, onEdit }: AcceptEditInlineProps)
             backgroundColor: accepted ? c.primary : 'transparent',
             borderColor: accepted ? c.primary : `${c.primary}60`,
             borderRadius: r.pill,
+            opacity: disabled ? 0.55 : 1,
           },
         ]}
         onPress={onAccept}
+        disabled={disabled}
       >
         <Text
           style={[
@@ -225,7 +228,7 @@ function AcceptEditInline({ accepted, onAccept, onEdit }: AcceptEditInlineProps)
         </Text>
       </Pressable>
 
-      <Pressable onPress={onEdit}>
+      <Pressable onPress={onEdit} disabled={disabled} style={{ opacity: disabled ? 0.55 : 1 }}>
         <Text style={[styles.editLabel, { color: c.textMuted, fontFamily: ty.body.familySemibold }]}>
           Edit
         </Text>
@@ -244,6 +247,7 @@ interface DailySnapshotCardProps {
   waterLiters: string;
   steps: string;
   accepted: boolean;
+  disabled?: boolean;
   onAccept: () => void;
   onEdit: () => void;
 }
@@ -256,6 +260,7 @@ export function DailySnapshotCard({
   waterLiters,
   steps,
   accepted,
+  disabled = false,
   onAccept,
   onEdit,
 }: DailySnapshotCardProps) {
@@ -326,7 +331,7 @@ export function DailySnapshotCard({
         <View style={[styles.dividerLine, { backgroundColor: c.border }]} />
       </View>
 
-      <AcceptEditInline accepted={accepted} onAccept={onAccept} onEdit={onEdit} />
+      <AcceptEditInline accepted={accepted} disabled={disabled} onAccept={onAccept} onEdit={onEdit} />
     </View>
   );
 }

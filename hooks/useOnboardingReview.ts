@@ -8,6 +8,7 @@ import {
   getReviewState,
   removeManualWorkoutPlanDay,
   setSectionAccepted,
+  setSectionsAccepted,
   setPricingDecision,
   upsertReviewState,
   updateManualDailyTargets,
@@ -55,6 +56,19 @@ export function useSetReviewSectionAccepted() {
   return useMutation({
     mutationFn: ({ runId, section, accepted }: { runId: string; section: ReviewSection; accepted: boolean }) =>
       setSectionAccepted(user!.id, runId, section, accepted),
+    onSuccess: (data) => {
+      queryClient.setQueryData(onboardingReviewKeys.byRun(user!.id, data.generation_run_id), data);
+    },
+  });
+}
+
+export function useSetReviewSectionsAccepted() {
+  const { user } = useAuth();
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: ({ runId, sections, accepted }: { runId: string; sections: ReviewSection[]; accepted: boolean }) =>
+      setSectionsAccepted(user!.id, runId, sections, accepted),
     onSuccess: (data) => {
       queryClient.setQueryData(onboardingReviewKeys.byRun(user!.id, data.generation_run_id), data);
     },

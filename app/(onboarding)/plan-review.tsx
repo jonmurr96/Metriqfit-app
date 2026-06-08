@@ -32,7 +32,7 @@ import {
   useWorkoutPlanPreview,
 } from '../../hooks/usePlan';
 import { useOnboardingAnswers, useProfile, useUserTargets } from '../../hooks/useUser';
-import { useOnboardingReviewState, useSetReviewSectionAccepted } from '../../hooks/useOnboardingReview';
+import { useOnboardingReviewState, useSetReviewSectionAccepted, useSetReviewSectionsAccepted } from '../../hooks/useOnboardingReview';
 import { trackEvent } from '../../lib/analytics';
 import {
   formatMealFrequencyLabel,
@@ -157,6 +157,7 @@ export default function PlanReviewScreen() {
 
   const reviewStateQuery = useOnboardingReviewState(resolvedRunId);
   const setSectionAccepted = useSetReviewSectionAccepted();
+  const setSectionsAccepted = useSetReviewSectionsAccepted();
   const [infoSheet, setInfoSheet] = useState<{ title: string; body: string } | null>(null);
   const [expandedPlan, setExpandedPlan] = useState<'workout' | 'nutrition' | null>(null);
 
@@ -228,6 +229,26 @@ export default function PlanReviewScreen() {
     }
   };
 
+  const handleDailySnapshotAccept = async () => {
+    if (!resolvedRunId) return;
+    const nextValue = !(reviewState?.macros_accepted && reviewState?.daily_targets_accepted);
+
+    try {
+      await setSectionsAccepted.mutateAsync({
+        runId: resolvedRunId,
+        sections: ['macros', 'daily_targets'],
+        accepted: nextValue,
+      });
+      trackEvent('plan_review_section_accepted', {
+        generation_run_id: resolvedRunId,
+        section: 'daily_snapshot',
+        accepted: nextValue,
+      });
+    } catch (error: any) {
+      Alert.alert('Unable to update daily targets', error?.message || 'Please try again.');
+    }
+  };
+
   const goToEdit = (screen: 'edit-macros' | 'edit-daily-targets' | 'edit-workout-plan' | 'edit-nutrition-plan') => {
     if (!resolvedRunId) return;
     trackEvent('plan_review_section_edited', {
@@ -257,7 +278,7 @@ export default function PlanReviewScreen() {
   };
 
   const handleClose = () => {
-    router.replace('/(onboarding)/nutrition');
+    router.replace('/sign-out');
   };
 
   const handleRedoOnboarding = () => {
@@ -395,10 +416,8 @@ export default function PlanReviewScreen() {
           waterLiters={`${(targets.water_ml / 1000).toFixed(1)}L`}
           steps={stepsValue}
           accepted={Boolean(reviewState?.macros_accepted && reviewState?.daily_targets_accepted)}
-          onAccept={() => {
-            handleAcceptToggle('macros', !reviewState?.macros_accepted);
-            handleAcceptToggle('daily_targets', !reviewState?.daily_targets_accepted);
-          }}
+          disabled={setSectionsAccepted.isPending}
+          onAccept={handleDailySnapshotAccept}
           onEdit={() => {
             Alert.alert('Edit', 'What would you like to edit?', [
               { text: 'Macros', onPress: () => goToEdit('edit-macros') },

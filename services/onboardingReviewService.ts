@@ -28,6 +28,12 @@ export interface OnboardingReviewState {
   updated_at: string;
 }
 
+type ReviewAcceptedColumn =
+  | 'macros_accepted'
+  | 'daily_targets_accepted'
+  | 'workout_plan_accepted'
+  | 'nutrition_plan_accepted';
+
 interface OnboardingAnswersRow {
   id: string;
   user_id: string;
@@ -66,7 +72,7 @@ interface WorkoutPlanDayRow {
   focus: string | null;
 }
 
-const SECTION_TO_COLUMN: Record<ReviewSection, keyof OnboardingReviewState> = {
+const SECTION_TO_COLUMN: Record<ReviewSection, ReviewAcceptedColumn> = {
   macros: 'macros_accepted',
   daily_targets: 'daily_targets_accepted',
   workout_plan: 'workout_plan_accepted',
@@ -105,6 +111,16 @@ function normalizeReviewState(row: any): OnboardingReviewState {
 
 function computeAllAccepted(row: Pick<OnboardingReviewState, 'macros_accepted' | 'daily_targets_accepted' | 'workout_plan_accepted' | 'nutrition_plan_accepted'>) {
   return row.macros_accepted && row.daily_targets_accepted && row.workout_plan_accepted && row.nutrition_plan_accepted;
+}
+
+function buildAcceptedUpdates(sections: ReviewSection[], accepted: boolean) {
+  const updates: Partial<Record<ReviewAcceptedColumn, boolean>> = {};
+
+  for (const section of sections) {
+    updates[SECTION_TO_COLUMN[section]] = accepted;
+  }
+
+  return updates;
 }
 
 function dayKeyFromDate(dateText: string): NormalizedWeekday {
@@ -595,11 +611,7 @@ export async function setSectionAccepted(
   section: ReviewSection,
   accepted: boolean,
 ): Promise<OnboardingReviewState> {
-  const column = SECTION_TO_COLUMN[section] as string;
-
-  const row = await upsertReviewState(userId, generationRunId, {
-    [column]: accepted,
-  } as any);
+  const row = await upsertReviewState(userId, generationRunId, buildAcceptedUpdates([section], accepted));
 
   const allAccepted = computeAllAccepted(row);
   const withAllAccepted = await upsertReviewState(userId, generationRunId, {
@@ -607,6 +619,20 @@ export async function setSectionAccepted(
   });
 
   return withAllAccepted;
+}
+
+export async function setSectionsAccepted(
+  userId: string,
+  generationRunId: string,
+  sections: ReviewSection[],
+  accepted: boolean,
+): Promise<OnboardingReviewState> {
+  const row = await upsertReviewState(userId, generationRunId, buildAcceptedUpdates(sections, accepted));
+  const allAccepted = computeAllAccepted(row);
+
+  return upsertReviewState(userId, generationRunId, {
+    all_accepted_at: allAccepted ? new Date().toISOString() : null,
+  });
 }
 
 export async function setPricingDecision(
